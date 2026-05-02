@@ -72,7 +72,8 @@ function resolveAttack(
     entity,
     aimDirection,
     state.entities,
-    entity.weapon
+    entity.weapon,
+    state.grid
   );
 
   const entities = new Map(state.entities);

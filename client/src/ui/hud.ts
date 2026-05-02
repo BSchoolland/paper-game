@@ -75,7 +75,7 @@ export class Hud {
 
     if (selected) {
       html += `<div style="margin-top:6px;font-size:12px;">`;
-      html += `<b>${selected.name}</b> | `;
+      html += `<b>${selected.name}</b> (${selected.weapon.name}) | `;
       html += `HP: ${selected.hp}/${selected.maxHp} | `;
       html += `Move: ${Math.round(selected.movementRemaining)} | `;
       html += `Actions: ${selected.actionsRemaining}`;

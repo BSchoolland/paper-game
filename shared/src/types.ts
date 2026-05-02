@@ -64,10 +64,54 @@ export const SHORT_SWORD: WeaponDefinition = {
   actionCost: 1,
 };
 
-export const ENTITY_DEFAULTS = {
-  collisionRadius: 16,
-  hp: 100,
-  movementBudget: 150,
-  actionsPerTurn: 1,
-  canMoveAfterAttack: true,
-} as const;
+export const SPEAR: WeaponDefinition = {
+  id: "spear",
+  name: "Spear",
+  shape: { kind: "rectangle", length: 110, width: 20 },
+  damage: 30,
+  actionCost: 1,
+};
+
+export const BOW: WeaponDefinition = {
+  id: "bow",
+  name: "Bow",
+  shape: { kind: "point", range: 300 },
+  damage: 20,
+  actionCost: 1,
+};
+
+export interface UnitTemplate {
+  readonly weapon: WeaponDefinition;
+  readonly hp: number;
+  readonly movementBudget: number;
+  readonly collisionRadius: number;
+  readonly canMoveAfterAttack: boolean;
+  readonly className: string;
+}
+
+export const UNIT_TEMPLATES = {
+  warrior: {
+    weapon: SHORT_SWORD,
+    hp: 120,
+    movementBudget: 130,
+    collisionRadius: 16,
+    canMoveAfterAttack: true,
+    className: "Warrior",
+  },
+  spearman: {
+    weapon: SPEAR,
+    hp: 100,
+    movementBudget: 140,
+    collisionRadius: 16,
+    canMoveAfterAttack: false,
+    className: "Spearman",
+  },
+  archer: {
+    weapon: BOW,
+    hp: 70,
+    movementBudget: 160,
+    collisionRadius: 14,
+    canMoveAfterAttack: true,
+    className: "Archer",
+  },
+} as const satisfies Record<string, UnitTemplate>;

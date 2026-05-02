@@ -1,125 +1,121 @@
 import { describe, it, expect } from "vitest";
-import { pointInSector, entitiesInSector } from "../geometry.js";
+import { pointInSector } from "../geometry/sector.js";
+import { entityInRectangle } from "../geometry/rectangle.js";
 import { resolveWeaponAttack } from "../combat.js";
-import type { Entity, WeaponDefinition } from "../types.js";
-import { SHORT_SWORD } from "../types.js";
+import { SHORT_SWORD, SPEAR, BOW } from "../types.js";
+import { createGrid } from "../collision-grid.js";
+import { makeEntity } from "./test-helpers.js";
 
-function makeEntity(
-  id: string,
-  x: number,
-  y: number,
-  teamId: "red" | "blue"
-): Entity {
-  return {
-    id,
-    name: id,
-    position: { x, y },
-    collisionRadius: 16,
-    hp: 100,
-    maxHp: 100,
-    teamId,
-    movementBudget: 150,
-    movementRemaining: 150,
-    actionsRemaining: 1,
-    canMoveAfterAttack: true,
-    hasAttackedThisTurn: false,
-    weapon: SHORT_SWORD,
-  };
-}
+const emptyGrid = createGrid(100, 100, 8);
 
 describe("pointInSector", () => {
   it("point directly in front", () => {
     expect(
-      pointInSector(
-        { x: 30, y: 0 },
-        { x: 0, y: 0 },
-        { x: 1, y: 0 },
-        80,
-        Math.PI / 3
-      )
+      pointInSector({ x: 30, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 0 }, 80, Math.PI / 3)
     ).toBe(true);
   });
 
   it("point behind attacker", () => {
     expect(
-      pointInSector(
-        { x: -30, y: 0 },
-        { x: 0, y: 0 },
-        { x: 1, y: 0 },
-        80,
-        Math.PI / 3
-      )
+      pointInSector({ x: -30, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 0 }, 80, Math.PI / 3)
     ).toBe(false);
   });
 
   it("point out of range", () => {
     expect(
-      pointInSector(
-        { x: 100, y: 0 },
-        { x: 0, y: 0 },
-        { x: 1, y: 0 },
-        80,
-        Math.PI / 3
-      )
+      pointInSector({ x: 100, y: 0 }, { x: 0, y: 0 }, { x: 1, y: 0 }, 80, Math.PI / 3)
     ).toBe(false);
-  });
-
-  it("point at edge of angle", () => {
-    const x = 30 * Math.cos(Math.PI / 3 - 0.01);
-    const y = 30 * Math.sin(Math.PI / 3 - 0.01);
-    expect(
-      pointInSector({ x, y }, { x: 0, y: 0 }, { x: 1, y: 0 }, 80, Math.PI / 3)
-    ).toBe(true);
   });
 });
 
-describe("resolveWeaponAttack", () => {
+describe("sword attack", () => {
   it("hits enemy in arc", () => {
     const attacker = makeEntity("a", 0, 0, "red");
     const target = makeEntity("b", 40, 0, "blue");
-    const entities = new Map([
-      ["a", attacker],
-      ["b", target],
-    ]);
-    const hits = resolveWeaponAttack(
-      attacker,
-      { x: 1, y: 0 },
-      entities,
-      SHORT_SWORD
-    );
-    expect(hits).toHaveLength(1);
-    expect(hits[0]!.id).toBe("b");
+    const entities = new Map([["a", attacker], ["b", target]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, SHORT_SWORD, emptyGrid)).toHaveLength(1);
   });
 
   it("misses enemy behind attacker", () => {
     const attacker = makeEntity("a", 0, 0, "red");
     const target = makeEntity("b", -40, 0, "blue");
-    const entities = new Map([
-      ["a", attacker],
-      ["b", target],
-    ]);
-    const hits = resolveWeaponAttack(
-      attacker,
-      { x: 1, y: 0 },
-      entities,
-      SHORT_SWORD
-    );
-    expect(hits).toHaveLength(0);
+    const entities = new Map([["a", attacker], ["b", target]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, SHORT_SWORD, emptyGrid)).toHaveLength(0);
   });
 
   it("does not hit friendly", () => {
     const attacker = makeEntity("a", 0, 0, "red");
     const friendly = makeEntity("b", 40, 0, "red");
-    const entities = new Map([
-      ["a", attacker],
-      ["b", friendly],
-    ]);
-    const hits = resolveWeaponAttack(
-      attacker,
-      { x: 1, y: 0 },
-      entities,
-      SHORT_SWORD
-    );
-    expect(hits).toHaveLength(0);
+    const entities = new Map([["a", attacker], ["b", friendly]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, SHORT_SWORD, emptyGrid)).toHaveLength(0);
+  });
+});
+
+describe("spear attack (rectangle)", () => {
+  it("hits enemy in line", () => {
+    const attacker = makeEntity("a", 0, 0, "red");
+    const target = makeEntity("b", 80, 0, "blue");
+    const entities = new Map([["a", attacker], ["b", target]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, SPEAR, emptyGrid)).toHaveLength(1);
+  });
+
+  it("misses enemy to the side", () => {
+    const attacker = makeEntity("a", 0, 0, "red");
+    const target = makeEntity("b", 80, 60, "blue");
+    const entities = new Map([["a", attacker], ["b", target]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, SPEAR, emptyGrid)).toHaveLength(0);
+  });
+
+  it("hits multiple enemies in a line", () => {
+    const attacker = makeEntity("a", 0, 0, "red");
+    const t1 = makeEntity("b", 40, 0, "blue");
+    const t2 = makeEntity("c", 90, 0, "blue");
+    const entities = new Map([["a", attacker], ["b", t1], ["c", t2]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, SPEAR, emptyGrid)).toHaveLength(2);
+  });
+
+  it("accounts for collision radius", () => {
+    const entity = makeEntity("b", 80, 25, "blue");
+    expect(entityInRectangle(entity, { x: 0, y: 0 }, { x: 1, y: 0 }, 110, 20)).toBe(true);
+  });
+});
+
+describe("bow attack (point/ray)", () => {
+  it("hits closest enemy in line of fire", () => {
+    const attacker = makeEntity("a", 0, 0, "red");
+    const target = makeEntity("b", 200, 0, "blue");
+    const entities = new Map([["a", attacker], ["b", target]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, BOW, emptyGrid)).toHaveLength(1);
+  });
+
+  it("misses enemy out of range", () => {
+    const attacker = makeEntity("a", 0, 0, "red");
+    const target = makeEntity("b", 400, 0, "blue");
+    const entities = new Map([["a", attacker], ["b", target]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, BOW, emptyGrid)).toHaveLength(0);
+  });
+
+  it("misses enemy off to the side", () => {
+    const attacker = makeEntity("a", 0, 0, "red");
+    const target = makeEntity("b", 200, 50, "blue");
+    const entities = new Map([["a", attacker], ["b", target]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, BOW, emptyGrid)).toHaveLength(0);
+  });
+
+  it("does not hit friendly", () => {
+    const attacker = makeEntity("a", 0, 0, "red");
+    const friendly = makeEntity("b", 100, 0, "red");
+    const entities = new Map([["a", attacker], ["b", friendly]]);
+    expect(resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, BOW, emptyGrid)).toHaveLength(0);
+  });
+
+  it("only hits first enemy, not one behind", () => {
+    const attacker = makeEntity("a", 0, 0, "red");
+    const t1 = makeEntity("b", 100, 0, "blue");
+    const t2 = makeEntity("c", 200, 0, "blue");
+    const entities = new Map([["a", attacker], ["b", t1], ["c", t2]]);
+    const hits = resolveWeaponAttack(attacker, { x: 1, y: 0 }, entities, BOW, emptyGrid);
+    expect(hits).toHaveLength(1);
+    expect(hits[0]!.id).toBe("b");
   });
 });

@@ -3,7 +3,7 @@ import type { Vec2 } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import { createGridGraphics } from "./grid-renderer.js";
 import { createEntityGraphics } from "./entity-renderer.js";
-import { createTargetingArc } from "./targeting-renderer.js";
+import { createTargetingPreview } from "./targeting-renderer.js";
 import { createMovePreview } from "./move-preview-renderer.js";
 
 export class GameRenderer {
@@ -60,8 +60,8 @@ export class GameRenderer {
       this.clientState.inputMode === "attack" &&
       entity.actionsRemaining > 0
     ) {
-      const arc = createTargetingArc(entity, mouseWorld);
-      if (arc) this.overlayLayer.addChild(arc);
+      const preview = createTargetingPreview(entity, mouseWorld, state);
+      if (preview) this.overlayLayer.addChild(preview);
     } else if (
       this.clientState.inputMode === "select" &&
       entity.movementRemaining > 1

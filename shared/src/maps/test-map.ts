@@ -1,5 +1,5 @@
-import type { Entity, GameState } from "../types.js";
-import { SHORT_SWORD, ENTITY_DEFAULTS } from "../types.js";
+import type { Entity, GameState, TeamId, UnitTemplate } from "../types.js";
+import { UNIT_TEMPLATES } from "../types.js";
 import { createGrid, rasterizeRect } from "../collision-grid.js";
 
 function makeEntity(
@@ -7,22 +7,23 @@ function makeEntity(
   name: string,
   x: number,
   y: number,
-  teamId: "red" | "blue"
+  teamId: TeamId,
+  template: UnitTemplate
 ): Entity {
   return {
     id,
     name,
     position: { x, y },
-    collisionRadius: ENTITY_DEFAULTS.collisionRadius,
-    hp: ENTITY_DEFAULTS.hp,
-    maxHp: ENTITY_DEFAULTS.hp,
+    collisionRadius: template.collisionRadius,
+    hp: template.hp,
+    maxHp: template.hp,
     teamId,
-    movementBudget: ENTITY_DEFAULTS.movementBudget,
-    movementRemaining: ENTITY_DEFAULTS.movementBudget,
-    actionsRemaining: ENTITY_DEFAULTS.actionsPerTurn,
-    canMoveAfterAttack: ENTITY_DEFAULTS.canMoveAfterAttack,
+    movementBudget: template.movementBudget,
+    movementRemaining: template.movementBudget,
+    actionsRemaining: 1,
+    canMoveAfterAttack: template.canMoveAfterAttack,
     hasAttackedThisTurn: false,
-    weapon: SHORT_SWORD,
+    weapon: template.weapon,
   };
 }
 
@@ -49,14 +50,15 @@ export function createTestMap() {
 export function createInitialGameState(): GameState {
   const grid = createTestMap();
   const entities = new Map<string, Entity>();
+  const { warrior, spearman, archer } = UNIT_TEMPLATES;
 
-  entities.set("red1", makeEntity("red1", "Red Delver I", 120, 200, "red"));
-  entities.set("red2", makeEntity("red2", "Red Delver II", 120, 300, "red"));
-  entities.set("red3", makeEntity("red3", "Red Delver III", 120, 400, "red"));
+  entities.set("red1", makeEntity("red1", "Red Warrior", 120, 200, "red", warrior));
+  entities.set("red2", makeEntity("red2", "Red Spearman", 120, 300, "red", spearman));
+  entities.set("red3", makeEntity("red3", "Red Archer", 100, 400, "red", archer));
 
-  entities.set("blue1", makeEntity("blue1", "Blue Delver I", 680, 200, "blue"));
-  entities.set("blue2", makeEntity("blue2", "Blue Delver II", 680, 300, "blue"));
-  entities.set("blue3", makeEntity("blue3", "Blue Delver III", 680, 400, "blue"));
+  entities.set("blue1", makeEntity("blue1", "Blue Warrior", 680, 200, "blue", warrior));
+  entities.set("blue2", makeEntity("blue2", "Blue Spearman", 680, 300, "blue", spearman));
+  entities.set("blue3", makeEntity("blue3", "Blue Archer", 700, 400, "blue", archer));
 
   return {
     entities,
