@@ -2,6 +2,13 @@ import { Graphics } from "pixi.js";
 import type { Entity, GameState, Vec2 } from "shared";
 import { normalize, sub, length, raycast } from "shared";
 
+const SWORD_COLOR = 0xf1c40f;
+const SPEAR_COLOR = 0xe67e22;
+const BOW_COLOR = 0x5dade2;
+const HIT_ENEMY = 0xe74c3c;
+const HIT_WALL = 0x7a6f60;
+const HIT_FRIENDLY = 0x5dade2;
+
 export function createTargetingPreview(
   entity: Entity,
   mouseWorld: Vec2,
@@ -26,15 +33,14 @@ export function createTargetingPreview(
         baseAngle + shape.halfAngle
       );
       g.lineTo(entity.position.x, entity.position.y);
-      g.fill({ color: 0xffcc00, alpha: 0.15 });
-      g.stroke({ color: 0xffcc00, alpha: 0.4, width: 1 });
+      g.fill({ color: SWORD_COLOR, alpha: 0.12 });
+      g.stroke({ color: SWORD_COLOR, alpha: 0.35, width: 1.5 });
       break;
     }
     case "rectangle": {
       const perpX = -norm.y;
       const perpY = norm.x;
       const hw = shape.width / 2;
-
       const x0 = entity.position.x;
       const y0 = entity.position.y;
 
@@ -50,8 +56,8 @@ export function createTargetingPreview(
       g.lineTo(corners[2]!.x, corners[2]!.y);
       g.lineTo(corners[3]!.x, corners[3]!.y);
       g.closePath();
-      g.fill({ color: 0xff8844, alpha: 0.15 });
-      g.stroke({ color: 0xff8844, alpha: 0.4, width: 1 });
+      g.fill({ color: SPEAR_COLOR, alpha: 0.12 });
+      g.stroke({ color: SPEAR_COLOR, alpha: 0.35, width: 1.5 });
       break;
     }
     case "point": {
@@ -69,23 +75,25 @@ export function createTargetingPreview(
 
       g.moveTo(entity.position.x, entity.position.y);
       g.lineTo(endX, endY);
-      g.stroke({ color: 0x44ccff, alpha: 0.5, width: 2 });
+      g.stroke({ color: BOW_COLOR, alpha: 0.45, width: 2 });
 
       if (result.hit && result.hit.entityId !== entity.id) {
         const hitEntity = state.entities.get(result.hit.entityId);
         if (hitEntity && hitEntity.teamId !== entity.teamId) {
-          g.circle(endX, endY, 6);
-          g.fill({ color: 0xff4444, alpha: 0.6 });
+          g.circle(endX, endY, 7);
+          g.fill({ color: HIT_ENEMY, alpha: 0.55 });
+          g.circle(endX, endY, 7);
+          g.stroke({ color: HIT_ENEMY, alpha: 0.3, width: 1 });
         } else {
-          g.circle(endX, endY, 4);
-          g.fill({ color: 0x44ccff, alpha: 0.3 });
+          g.circle(endX, endY, 5);
+          g.fill({ color: HIT_FRIENDLY, alpha: 0.25 });
         }
       } else if (result.wallDistance !== null) {
         g.circle(endX, endY, 4);
-        g.fill({ color: 0x888888, alpha: 0.5 });
+        g.fill({ color: HIT_WALL, alpha: 0.5 });
       } else {
-        g.circle(endX, endY, 4);
-        g.fill({ color: 0x44ccff, alpha: 0.4 });
+        g.circle(endX, endY, 3);
+        g.fill({ color: BOW_COLOR, alpha: 0.35 });
       }
       break;
     }

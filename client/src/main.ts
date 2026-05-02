@@ -8,7 +8,7 @@ import { Hud } from "./ui/hud.js";
 async function init() {
   const app = new Application();
   await app.init({
-    background: "#2a2a3e",
+    background: "#1a140e",
     resizeTo: window,
     antialias: true,
   });
@@ -19,7 +19,7 @@ async function init() {
   const clientState = new ClientState(createInitialGameState());
   const renderer = new GameRenderer(app, clientState);
   const hud = new Hud(container, clientState);
-  const input = new InputManager(app.canvas, clientState, () => {
+  const input = new InputManager(app.canvas, clientState, renderer, () => {
     renderer.renderOverlay(input.mouseWorld);
     hud.update();
   });

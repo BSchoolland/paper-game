@@ -1,6 +1,7 @@
 import type { Vec2 } from "shared";
 import { distance, sub, normalize, clampToMovementRange } from "shared";
 import type { ClientState } from "../state/client-state.js";
+import type { GameRenderer } from "../renderer/game-renderer.js";
 
 export class InputManager {
   mouseWorld: Vec2 = { x: 0, y: 0 };
@@ -9,22 +10,29 @@ export class InputManager {
   constructor(
     private canvas: HTMLCanvasElement,
     private clientState: ClientState,
+    private renderer: GameRenderer,
     onMouseMove: () => void
   ) {
     this.onMouseMove = onMouseMove;
     this.bind();
   }
 
+  private screenToWorld(e: MouseEvent): Vec2 {
+    const rect = this.canvas.getBoundingClientRect();
+    return this.renderer.screenToWorld({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+  }
+
   private bind() {
     this.canvas.addEventListener("mousemove", (e) => {
-      const rect = this.canvas.getBoundingClientRect();
-      this.mouseWorld = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      this.mouseWorld = this.screenToWorld(e);
       this.onMouseMove();
     });
 
     this.canvas.addEventListener("click", (e) => {
-      const rect = this.canvas.getBoundingClientRect();
-      const pos: Vec2 = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const pos = this.screenToWorld(e);
       const state = this.clientState.getState();
 
       if (state.winner) return;
@@ -52,8 +60,7 @@ export class InputManager {
       const entity = state.entities.get(this.clientState.selectedEntityId);
       if (!entity) return;
 
-      const rect = this.canvas.getBoundingClientRect();
-      const pos: Vec2 = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+      const pos = this.screenToWorld(e);
       const clamped = clampToMovementRange(entity, pos);
 
       this.clientState.dispatch({
