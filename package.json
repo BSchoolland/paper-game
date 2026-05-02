@@ -1,0 +1,5 @@
+{
+  "name": "turn-based-game",
+  "private": true,
+  "workspaces": ["shared", "client"]
+}
