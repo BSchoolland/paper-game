@@ -4,3 +4,5 @@ export * from "./collision-grid.js";
 export * from "./geometry.js";
 export * from "./combat.js";
 export * from "./turn-resolver.js";
+export * from "./movement.js";
+export * from "./maps/test-map.js";

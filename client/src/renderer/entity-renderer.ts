@@ -25,8 +25,8 @@ export function createEntityGraphics(
   const canAct =
     entity.actionsRemaining > 0 || entity.movementRemaining > 1;
   const bodyColor = canAct
-    ? TEAM_COLORS[entity.team]
-    : TEAM_COLORS_DIM[entity.team];
+    ? TEAM_COLORS[entity.teamId]
+    : TEAM_COLORS_DIM[entity.teamId];
 
   const body = new Graphics();
   body.circle(0, 0, entity.collisionRadius);
@@ -51,7 +51,8 @@ export function createEntityGraphics(
 
   const hpFill = new Graphics();
   const hpRatio = entity.hp / entity.maxHp;
-  const hpColor = hpRatio > 0.5 ? 0x44bb44 : hpRatio > 0.25 ? 0xccaa22 : 0xcc3333;
+  const hpColor =
+    hpRatio > 0.5 ? 0x44bb44 : hpRatio > 0.25 ? 0xccaa22 : 0xcc3333;
   hpFill.rect(
     -HEALTH_BAR_WIDTH / 2,
     HEALTH_BAR_OFFSET,
@@ -62,7 +63,7 @@ export function createEntityGraphics(
   container.addChild(hpFill);
 
   const label = new Text({
-    text: entity.id,
+    text: entity.name,
     style: { fontSize: 10, fill: 0xcccccc },
   });
   label.anchor.set(0.5);

@@ -3,6 +3,9 @@ export interface Vec2 {
   readonly y: number;
 }
 
+export type TeamId = "red" | "blue";
+export type EntityId = string;
+
 export interface GridState {
   readonly width: number;
   readonly height: number;
@@ -10,43 +13,55 @@ export interface GridState {
   readonly walls: Uint8Array;
 }
 
-export interface Entity {
+export type CombatShapeDefinition =
+  | { kind: "sector"; radius: number; halfAngle: number }
+  | { kind: "rectangle"; length: number; width: number }
+  | { kind: "circle"; radius: number; range: number }
+  | { kind: "point"; range: number };
+
+export interface WeaponDefinition {
   readonly id: string;
+  readonly name: string;
+  readonly shape: CombatShapeDefinition;
+  readonly damage: number;
+  readonly actionCost: number;
+}
+
+export interface Entity {
+  readonly id: EntityId;
+  readonly name: string;
   readonly position: Vec2;
   readonly collisionRadius: number;
   readonly hp: number;
   readonly maxHp: number;
-  readonly team: "red" | "blue";
+  readonly teamId: TeamId;
   readonly movementBudget: number;
   readonly movementRemaining: number;
   readonly actionsRemaining: number;
   readonly canMoveAfterAttack: boolean;
   readonly hasAttackedThisTurn: boolean;
+  readonly weapon: WeaponDefinition;
 }
 
 export interface GameState {
-  readonly entities: ReadonlyMap<string, Entity>;
+  readonly entities: ReadonlyMap<EntityId, Entity>;
   readonly grid: GridState;
-  readonly activeTeam: "red" | "blue";
+  readonly activeTeam: TeamId;
   readonly turnNumber: number;
-  readonly winner: "red" | "blue" | null;
+  readonly winner: TeamId | null;
 }
 
 export type PlayerAction =
-  | { type: "move"; entityId: string; destination: Vec2 }
-  | { type: "attack"; entityId: string; aimDirection: Vec2 }
+  | { type: "move"; entityId: EntityId; destination: Vec2 }
+  | { type: "attack"; entityId: EntityId; aimDirection: Vec2 }
   | { type: "endTurn" };
 
-export interface SwordStats {
-  readonly radius: number;
-  readonly halfAngle: number;
-  readonly damage: number;
-}
-
-export const DEFAULT_SWORD: SwordStats = {
-  radius: 60,
-  halfAngle: Math.PI / 4,
+export const SHORT_SWORD: WeaponDefinition = {
+  id: "short-sword",
+  name: "Short Sword",
+  shape: { kind: "sector", radius: 80, halfAngle: Math.PI / 3 },
   damage: 25,
+  actionCost: 1,
 };
 
 export const ENTITY_DEFAULTS = {
@@ -54,5 +69,5 @@ export const ENTITY_DEFAULTS = {
   hp: 100,
   movementBudget: 150,
   actionsPerTurn: 1,
-  canMoveAfterAttack: false,
+  canMoveAfterAttack: true,
 } as const;

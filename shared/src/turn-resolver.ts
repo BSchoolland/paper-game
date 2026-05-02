@@ -1,15 +1,14 @@
-import type { Entity, GameState, PlayerAction } from "./types.js";
-import { DEFAULT_SWORD } from "./types.js";
+import type { Entity, GameState, PlayerAction, TeamId } from "./types.js";
 import { distance } from "./vec2.js";
 import { isPositionWalkable, isWithinBounds } from "./collision-grid.js";
-import { resolveSwordAttack, applyDamage } from "./combat.js";
+import { resolveWeaponAttack, applyDamage } from "./combat.js";
 
-function checkWinner(state: GameState): "red" | "blue" | null {
+function checkWinner(state: GameState): TeamId | null {
   let hasRed = false;
   let hasBlue = false;
   for (const entity of state.entities.values()) {
-    if (entity.team === "red") hasRed = true;
-    if (entity.team === "blue") hasBlue = true;
+    if (entity.teamId === "red") hasRed = true;
+    if (entity.teamId === "blue") hasBlue = true;
     if (hasRed && hasBlue) return null;
   }
   if (!hasRed) return "blue";
@@ -38,7 +37,7 @@ function resolveMove(
 ): GameState {
   const entity = state.entities.get(entityId);
   if (!entity) return state;
-  if (entity.team !== state.activeTeam) return state;
+  if (entity.teamId !== state.activeTeam) return state;
   if (entity.hasAttackedThisTurn && !entity.canMoveAfterAttack) return state;
 
   const dist = distance(entity.position, destination);
@@ -66,20 +65,20 @@ function resolveAttack(
 ): GameState {
   const entity = state.entities.get(entityId);
   if (!entity) return state;
-  if (entity.team !== state.activeTeam) return state;
-  if (entity.actionsRemaining <= 0) return state;
+  if (entity.teamId !== state.activeTeam) return state;
+  if (entity.actionsRemaining < entity.weapon.actionCost) return state;
 
-  const targets = resolveSwordAttack(
+  const targets = resolveWeaponAttack(
     entity,
     aimDirection,
     state.entities,
-    DEFAULT_SWORD
+    entity.weapon
   );
 
   const entities = new Map(state.entities);
   entities.set(entityId, {
     ...entity,
-    actionsRemaining: entity.actionsRemaining - 1,
+    actionsRemaining: entity.actionsRemaining - entity.weapon.actionCost,
     hasAttackedThisTurn: true,
     movementRemaining: entity.canMoveAfterAttack
       ? entity.movementRemaining
@@ -88,17 +87,17 @@ function resolveAttack(
   let newState: GameState = { ...state, entities };
 
   if (targets.length > 0) {
-    newState = applyDamage(newState, targets, DEFAULT_SWORD.damage);
+    newState = applyDamage(newState, targets, entity.weapon.damage);
   }
 
   return { ...newState, winner: checkWinner(newState) };
 }
 
 function resolveEndTurn(state: GameState): GameState {
-  const nextTeam = state.activeTeam === "red" ? "blue" : "red";
+  const nextTeam: TeamId = state.activeTeam === "red" ? "blue" : "red";
   const entities = new Map<string, Entity>();
   for (const [id, entity] of state.entities) {
-    if (entity.team === nextTeam) {
+    if (entity.teamId === nextTeam) {
       entities.set(id, {
         ...entity,
         movementRemaining: entity.movementBudget,

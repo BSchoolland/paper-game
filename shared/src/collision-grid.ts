@@ -90,35 +90,3 @@ export function rasterizeRect(
   return { ...grid, walls };
 }
 
-export function createTestMap(): GridState {
-  const cellSize = 8;
-  const width = 150;
-  const height = 100;
-  let grid = createGrid(width, height, cellSize);
-
-  // Border walls
-  grid = rasterizeRect(grid, 0, 0, width, 2);
-  grid = rasterizeRect(grid, 0, height - 2, width, 2);
-  grid = rasterizeRect(grid, 0, 0, 2, height);
-  grid = rasterizeRect(grid, width - 2, 0, 2, height);
-
-  // Center vertical wall with gap
-  grid = rasterizeRect(grid, 73, 20, 4, 25);
-  grid = rasterizeRect(grid, 73, 55, 4, 25);
-
-  // Top-left pillar
-  grid = rasterizeRect(grid, 30, 30, 6, 6);
-
-  // Bottom-right pillar
-  grid = rasterizeRect(grid, 114, 64, 6, 6);
-
-  // Small L-shaped wall top-right
-  grid = rasterizeRect(grid, 105, 25, 3, 12);
-  grid = rasterizeRect(grid, 105, 25, 12, 3);
-
-  // Small L-shaped wall bottom-left
-  grid = rasterizeRect(grid, 30, 63, 3, 12);
-  grid = rasterizeRect(grid, 30, 72, 12, 3);
-
-  return grid;
-}

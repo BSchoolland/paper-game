@@ -1,22 +1,29 @@
-import type { Entity, GameState, SwordStats, Vec2 } from "./types.js";
-import { DEFAULT_SWORD } from "./types.js";
+import type { Entity, GameState, WeaponDefinition, Vec2 } from "./types.js";
 import { entitiesInSector } from "./geometry.js";
 
-export function resolveSwordAttack(
+export function resolveWeaponAttack(
   attacker: Entity,
   aimDirection: Vec2,
   entities: ReadonlyMap<string, Entity>,
-  sword: SwordStats = DEFAULT_SWORD
+  weapon: WeaponDefinition
 ): Entity[] {
-  const hits = entitiesInSector(
-    attacker.position,
-    aimDirection,
-    sword.radius,
-    sword.halfAngle,
-    entities,
-    attacker.id
-  );
-  return hits.filter((e) => e.team !== attacker.team);
+  const shape = weapon.shape;
+
+  switch (shape.kind) {
+    case "sector": {
+      const hits = entitiesInSector(
+        attacker.position,
+        aimDirection,
+        shape.radius,
+        shape.halfAngle,
+        entities,
+        attacker.id
+      );
+      return hits.filter((e) => e.teamId !== attacker.teamId);
+    }
+    default:
+      return [];
+  }
 }
 
 export function applyDamage(
