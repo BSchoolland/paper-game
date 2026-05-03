@@ -33,7 +33,7 @@ export function raycast(
 
     const toEntity = sub(entity.position, origin);
     const projDist = dot(toEntity, dirNorm);
-    if (projDist < 0 || projDist > range) continue;
+    if (projDist < -entity.collisionRadius || projDist > range + entity.collisionRadius) continue;
 
     const closest = add(origin, scale(dirNorm, projDist));
     const perpDist = length(sub(entity.position, closest));
@@ -42,7 +42,7 @@ export function raycast(
     const hitDist = projDist - Math.sqrt(
       entity.collisionRadius * entity.collisionRadius - perpDist * perpDist
     );
-    if (hitDist < 0) continue;
+    if (hitDist < 0 || hitDist > range) continue;
 
     if (!closestHit || hitDist < closestHit.distance) {
       closestHit = {
