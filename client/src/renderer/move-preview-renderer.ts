@@ -6,17 +6,12 @@ import {
   isWithinBounds,
   distance,
 } from "shared";
-
-const PENCIL = 0x4a3728;
-const PENCIL_INVALID = 0x8b3a3a;
-
-function seededRand(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) & 0xffffffff;
-    return ((s >>> 0) / 0xffffffff - 0.5) * 2;
-  };
-}
+import {
+  PENCIL,
+  PENCIL_HIT,
+  seededRand,
+  drawRoughCircle,
+} from "./sketch-utils.js";
 
 function isDestinationValid(
   entity: Entity,
@@ -38,26 +33,6 @@ function isDestinationValid(
   return true;
 }
 
-function drawRoughCircle(
-  g: Graphics,
-  cx: number,
-  cy: number,
-  radius: number,
-  wobble: number,
-  segments: number,
-  seed: number
-) {
-  const rand = seededRand(seed);
-  for (let i = 0; i <= segments; i++) {
-    const angle = (i / segments) * Math.PI * 2;
-    const r = radius + rand() * wobble;
-    const x = cx + Math.cos(angle) * r;
-    const y = cy + Math.sin(angle) * r;
-    if (i === 0) g.moveTo(x, y);
-    else g.lineTo(x, y);
-  }
-}
-
 export function createMovePreview(
   entity: Entity,
   mouseWorld: Vec2,
@@ -66,7 +41,7 @@ export function createMovePreview(
   const g = new Graphics();
   const clamped = clampToMovementRange(entity, mouseWorld);
   const valid = isDestinationValid(entity, clamped, state);
-  const color = valid ? PENCIL : PENCIL_INVALID;
+  const color = valid ? PENCIL : PENCIL_HIT;
 
   drawRoughCircle(
     g,

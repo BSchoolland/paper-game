@@ -5,6 +5,7 @@ import {
   getSpriteTexture,
   weaponToUnitType,
 } from "./sprite-assets.js";
+import { drawRoughEllipse } from "./sketch-utils.js";
 
 const HP_BAR_W = 40;
 const HP_BAR_H = 5;
@@ -201,30 +202,6 @@ function setAnimState(visual: EntityVisual, state: AnimState): void {
   visual.sprites[visual.animState].visible = false;
   visual.sprites[state].visible = true;
   visual.animState = state;
-}
-
-function drawRoughEllipse(
-  g: Graphics,
-  cx: number,
-  cy: number,
-  rx: number,
-  ry: number,
-  wobble: number,
-  segments: number,
-  seed: number
-) {
-  let s = seed * 1664525 + 1013904223;
-  const rand = () => {
-    s = (s * 1664525 + 1013904223) & 0xffffffff;
-    return ((s >>> 0) / 0xffffffff - 0.5) * 2;
-  };
-  for (let i = 0; i <= segments; i++) {
-    const angle = (i / segments) * Math.PI * 2;
-    const x = cx + Math.cos(angle) * (rx + rand() * wobble);
-    const y = cy + Math.sin(angle) * (ry + rand() * wobble);
-    if (i === 0) g.moveTo(x, y);
-    else g.lineTo(x, y);
-  }
 }
 
 function drawHpBar(bg: Graphics, bar: Graphics, entity: Entity): void {
