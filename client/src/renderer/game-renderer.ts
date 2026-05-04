@@ -1,5 +1,6 @@
-import { Application, Container, Sprite } from "pixi.js";
-import type { Entity, Vec2 } from "shared";
+import { Application, Container, Graphics, Sprite } from "pixi.js";
+import type { Entity, GridState, Vec2 } from "shared";
+import { CELL_WALL, CELL_COVER } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
   createBackground,
@@ -30,6 +31,8 @@ export class GameRenderer {
   private entityVisuals = new Map<string, EntityVisual>();
   private previousEntities = new Map<string, Entity>();
   private mapObjectSprites: Sprite[] = [];
+  private debugLayer = new Container();
+  private debugVisible = false;
 
   constructor(
     private app: Application,
@@ -81,7 +84,8 @@ export class GameRenderer {
 
   rebuildGrid() {
     this.worldContainer.removeChildren();
-    const grid = this.clientState.getState().grid;
+    const state = this.clientState.getState();
+    const grid = state.grid;
 
     this.backgroundLayer = new Container();
     this.backgroundLayer.addChild(createBackground(grid));
@@ -89,7 +93,7 @@ export class GameRenderer {
 
     this.sortableLayer = new Container();
     this.sortableLayer.sortableChildren = true;
-    this.mapObjectSprites = createMapObjects(grid);
+    this.mapObjectSprites = createMapObjects(state.mapDefinition.objects, grid);
     for (const sprite of this.mapObjectSprites) {
       sprite.zIndex = getBottomY(sprite);
       this.sortableLayer.addChild(sprite);
@@ -98,11 +102,17 @@ export class GameRenderer {
 
     this.overlayLayer = new Container();
     this.worldContainer.addChild(this.overlayLayer);
+
+    this.debugLayer = new Container();
+    this.debugLayer.visible = this.debugVisible;
+    this.buildDebugWalls(grid);
+    this.worldContainer.addChild(this.debugLayer);
   }
 
   render() {
     this.syncEntities();
     this.renderOverlay({ x: 0, y: 0 });
+    this.debugLayer.visible = this.clientState.showDebugWalls;
   }
 
   private syncEntities() {
@@ -218,5 +228,25 @@ export class GameRenderer {
       const preview = createMovePreview(entity, mouseWorld, state);
       this.overlayLayer.addChild(preview);
     }
+  }
+
+  private buildDebugWalls(grid: GridState) {
+    const wallGfx = new Graphics();
+    const coverGfx = new Graphics();
+    const cs = grid.cellSize;
+    for (let cy = 0; cy < grid.height; cy++) {
+      for (let cx = 0; cx < grid.width; cx++) {
+        const v = grid.walls[cy * grid.width + cx];
+        if (v === CELL_WALL) {
+          wallGfx.rect(cx * cs, cy * cs, cs, cs);
+        } else if (v === CELL_COVER) {
+          coverGfx.rect(cx * cs, cy * cs, cs, cs);
+        }
+      }
+    }
+    wallGfx.fill({ color: 0xff0000, alpha: 0.45 });
+    coverGfx.fill({ color: 0xffaa00, alpha: 0.35 });
+    this.debugLayer.addChild(wallGfx);
+    this.debugLayer.addChild(coverGfx);
   }
 }

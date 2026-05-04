@@ -1,6 +1,6 @@
 import type { Entity, GridState, Vec2 } from "../types.js";
 import { sub, length, normalize, dot, add, scale } from "../vec2.js";
-import { isBlocked } from "../collision-grid.js";
+import { blocksProjectile } from "../collision-grid.js";
 
 export interface RayHit {
   readonly entityId: string;
@@ -61,7 +61,7 @@ export function raycast(
     const pos = add(origin, scale(dirNorm, dist));
     const cx = Math.floor(pos.x / grid.cellSize);
     const cy = Math.floor(pos.y / grid.cellSize);
-    if (isBlocked(grid, cx, cy)) {
+    if (blocksProjectile(grid, cx, cy)) {
       wallDistance = dist;
       break;
     }

@@ -5,4 +5,5 @@ export * from "./geometry/index.js";
 export * from "./combat.js";
 export * from "./turn-resolver.js";
 export * from "./movement.js";
+export * from "./map-definition.js";
 export * from "./maps/test-map.js";

@@ -36,6 +36,7 @@ export function makeState(
   return {
     entities: map,
     grid: createGrid(100, 100, 8),
+    mapDefinition: { seed: 0, objects: [] },
     activeTeam: "red",
     turnNumber: 1,
     winner: null,

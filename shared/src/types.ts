@@ -46,6 +46,7 @@ export interface Entity {
 export interface GameState {
   readonly entities: ReadonlyMap<EntityId, Entity>;
   readonly grid: GridState;
+  readonly mapDefinition: import("./map-definition.js").MapDefinition;
   readonly activeTeam: TeamId;
   readonly turnNumber: number;
   readonly winner: TeamId | null;

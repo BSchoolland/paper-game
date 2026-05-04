@@ -1,6 +1,7 @@
 import type { Entity, GameState, TeamId, UnitTemplate } from "../types.js";
 import { UNIT_TEMPLATES } from "../types.js";
 import { createGrid } from "../collision-grid.js";
+import { generateMapObjects } from "../map-definition.js";
 
 function makeEntity(
   id: string,
@@ -28,15 +29,18 @@ function makeEntity(
 }
 
 export function createTestMap() {
-  const cellSize = 8;
-  const width = 100;
-  const height = 75;
+  const cellSize = 2;
+  const width = 400;
+  const height = 300;
   const grid = createGrid(width, height, cellSize);
   return grid;
 }
 
 export function createInitialGameState(): GameState {
   const grid = createTestMap();
+  const worldW = grid.width * grid.cellSize;
+  const worldH = grid.height * grid.cellSize;
+  const mapDefinition = generateMapObjects(worldW, worldH, 42);
   const entities = new Map<string, Entity>();
   const { warrior, spearman, archer } = UNIT_TEMPLATES;
 
@@ -51,6 +55,7 @@ export function createInitialGameState(): GameState {
   return {
     entities,
     grid,
+    mapDefinition,
     activeTeam: "red",
     turnNumber: 1,
     winner: null,

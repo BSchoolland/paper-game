@@ -1,5 +1,9 @@
 import type { GridState, Vec2 } from "./types.js";
 
+export const CELL_EMPTY = 0;
+export const CELL_WALL = 1;
+export const CELL_COVER = 2;
+
 export function createGrid(
   width: number,
   height: number,
@@ -25,7 +29,13 @@ export function worldToCell(
 
 export function isBlocked(grid: GridState, cx: number, cy: number): boolean {
   if (cx < 0 || cy < 0 || cx >= grid.width || cy >= grid.height) return true;
-  return grid.walls[cy * grid.width + cx] === 1;
+  return grid.walls[cy * grid.width + cx] === CELL_WALL;
+}
+
+export function blocksProjectile(grid: GridState, cx: number, cy: number): boolean {
+  if (cx < 0 || cy < 0 || cx >= grid.width || cy >= grid.height) return true;
+  const v = grid.walls[cy * grid.width + cx];
+  return v === CELL_WALL || v === CELL_COVER;
 }
 
 export function setBlocked(

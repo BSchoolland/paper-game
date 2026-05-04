@@ -1,7 +1,12 @@
-import { Assets, Container, Sprite, Texture } from "pixi.js";
-import type { GridState } from "shared";
+import { Assets, Sprite, Texture } from "pixi.js";
+import type { GridState, MapObjectPlacement } from "shared";
+import { CELL_WALL, CELL_COVER } from "shared";
 
-const DECORATION_OBJECTS = [
+const CHARACTER_DIAMETER = 32;
+const CHARACTER_HEIGHT = 10;
+const ALPHA_THRESHOLD = 30;
+
+const ALL_OBJECT_NAMES = [
   "tree-oak-small",
   "tree-oak-medium",
   "tree-oak-large",
@@ -17,9 +22,6 @@ const DECORATION_OBJECTS = [
   "rock-large",
   "rock-pile",
   "ruins-rubble",
-];
-
-const WALL_OBJECTS = [
   "stone-block",
   "stone-brick",
   "stone-pillar",
@@ -32,42 +34,6 @@ const WALL_OBJECTS = [
   "wall-u-shape",
 ];
 
-const OBJECT_SCALES: Record<string, number> = {
-  "tree-oak-small": 0.35,
-  "tree-oak-medium": 0.4,
-  "tree-oak-large": 0.45,
-  "tree-pine": 0.45,
-  "bush-small": 0.3,
-  "bush-medium": 0.35,
-  "bush-large": 0.35,
-  "grass-small": 0.25,
-  "grass-medium": 0.25,
-  "grass-large": 0.3,
-  "rock-small": 0.25,
-  "rock-medium": 0.3,
-  "rock-large": 0.35,
-  "rock-pile": 0.3,
-  "ruins-rubble": 0.35,
-  "stone-block": 0.25,
-  "stone-brick": 0.25,
-  "stone-pillar": 0.3,
-  "wall-corner": 0.3,
-  "wall-enclosure": 0.35,
-  "wall-long": 0.3,
-  "wall-medium": 0.3,
-  "wall-short": 0.25,
-  "wall-t-junction": 0.3,
-  "wall-u-shape": 0.3,
-};
-
-function seededRandom(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) & 0xffffffff;
-    return (s >>> 0) / 0xffffffff;
-  };
-}
-
 function objectFolder(name: string): string {
   if (name.startsWith("tree-") || name.startsWith("bush-") || name.startsWith("grass-"))
     return "plants";
@@ -77,10 +43,9 @@ function objectFolder(name: string): string {
 }
 
 export async function loadMapAssets(): Promise<void> {
-  const allObjects = [...DECORATION_OBJECTS, ...WALL_OBJECTS];
   const entries = [
     { alias: "map-background", src: "sprites/map-objects/backgrounds/background-grass.png" },
-    ...allObjects.map((name) => {
+    ...ALL_OBJECT_NAMES.map((name) => {
       const folder = objectFolder(name);
       const subpath = folder ? `${folder}/` : "";
       return {
@@ -107,53 +72,114 @@ export function getBottomY(sprite: Sprite): number {
   return sprite.position.y + tex.height * sprite.scale.y * (1 - sprite.anchor.y);
 }
 
-export function createMapObjects(grid: GridState): Sprite[] {
-  const worldW = grid.width * grid.cellSize;
-  const worldH = grid.height * grid.cellSize;
-  const rand = seededRandom(42);
-  const margin = 40;
-  const wallCount = 18;
-  const decoCount = 12;
-  const placed: { x: number; y: number; r: number }[] = [];
+function getTextureAlpha(tex: Texture): Uint8Array | null {
+  const source = tex.source.resource;
+  if (!(source instanceof HTMLImageElement || source instanceof ImageBitmap))
+    return null;
+  const w = tex.width;
+  const h = tex.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(source as CanvasImageSource, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  const alpha = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    alpha[i] = data[i * 4 + 3]!;
+  }
+  return alpha;
+}
+
+function stampWallCollision(
+  walls: Uint8Array,
+  grid: GridState,
+  sprite: Sprite,
+  tex: Texture
+): void {
+  const alpha = getTextureAlpha(tex);
+  if (!alpha) return;
+  const scale = sprite.scale.x;
+  const anchorX = sprite.anchor.x;
+  const anchorY = sprite.anchor.y;
+  const texW = tex.width;
+  const texH = tex.height;
+  const worldX = sprite.position.x - texW * scale * anchorX;
+  const worldY = sprite.position.y - texH * scale * anchorY;
+  const skipPixels = Math.ceil(CHARACTER_HEIGHT / scale);
+
+  for (let px = 0; px < texW; px++) {
+    let opaqueHit = 0;
+    for (let py = 0; py < texH; py++) {
+      if ((alpha[py * texW + px] ?? 0) < ALPHA_THRESHOLD) continue;
+      opaqueHit++;
+      const wx = worldX + px * scale;
+      const wy = worldY + py * scale;
+      const cx = Math.floor(wx / grid.cellSize);
+      const cy = Math.floor(wy / grid.cellSize);
+      if (cx >= 0 && cy >= 0 && cx < grid.width && cy < grid.height) {
+        walls[cy * grid.width + cx] = opaqueHit <= skipPixels ? CELL_COVER : CELL_WALL;
+      }
+    }
+  }
+}
+
+function stampDecorationCollision(
+  walls: Uint8Array,
+  grid: GridState,
+  sprite: Sprite,
+  tex: Texture
+): void {
+  const scale = sprite.scale.x;
+  const renderedW = tex.width * scale;
+  const renderedH = tex.height * scale;
+  if (renderedW < CHARACTER_DIAMETER && renderedH < CHARACTER_DIAMETER) return;
+
+  const alpha = getTextureAlpha(tex);
+  if (!alpha) return;
+  const anchorX = sprite.anchor.x;
+  const anchorY = sprite.anchor.y;
+  const texW = tex.width;
+  const texH = tex.height;
+  const wallStart = Math.floor(texH * 2 / 3);
+  const worldX = sprite.position.x - texW * scale * anchorX;
+  const worldY = sprite.position.y - texH * scale * anchorY;
+
+  for (let py = 0; py < texH; py++) {
+    for (let px = 0; px < texW; px++) {
+      if ((alpha[py * texW + px] ?? 0) < ALPHA_THRESHOLD) continue;
+      const wx = worldX + px * scale;
+      const wy = worldY + py * scale;
+      const cx = Math.floor(wx / grid.cellSize);
+      const cy = Math.floor(wy / grid.cellSize);
+      if (cx >= 0 && cy >= 0 && cx < grid.width && cy < grid.height) {
+        walls[cy * grid.width + cx] = py < wallStart ? CELL_COVER : CELL_WALL;
+      }
+    }
+  }
+}
+
+export function createMapObjects(
+  placements: readonly MapObjectPlacement[],
+  grid: GridState
+): Sprite[] {
+  const walls = grid.walls as Uint8Array;
   const sprites: Sprite[] = [];
 
-  function placeObject(name: string) {
-    const tex: Texture = Assets.get(`map-${name}`);
-    const scale = OBJECT_SCALES[name] ?? 0.3;
-
-    let x: number, y: number;
-    let attempts = 0;
-    const minDist = 50;
-
-    do {
-      x = margin + rand() * (worldW - margin * 2);
-      y = margin + rand() * (worldH - margin * 2);
-      attempts++;
-    } while (
-      attempts < 30 &&
-      placed.some(
-        (p) => (p.x - x) ** 2 + (p.y - y) ** 2 < (minDist + p.r) ** 2
-      )
-    );
-
+  for (const obj of placements) {
+    const tex: Texture = Assets.get(`map-${obj.name}`);
     const sprite = new Sprite(tex);
     sprite.anchor.set(0.5, 0.9);
-    sprite.scale.set(scale);
-    sprite.position.set(x, y);
+    sprite.scale.set(obj.scale);
+    sprite.position.set(obj.position.x, obj.position.y);
     sprites.push(sprite);
 
-    placed.push({ x, y, r: Math.max(tex.width, tex.height) * scale * 0.3 });
-  }
-
-  for (let i = 0; i < wallCount; i++) {
-    const name = WALL_OBJECTS[Math.floor(rand() * WALL_OBJECTS.length)]!;
-    placeObject(name);
-  }
-
-  for (let i = 0; i < decoCount; i++) {
-    const name =
-      DECORATION_OBJECTS[Math.floor(rand() * DECORATION_OBJECTS.length)]!;
-    placeObject(name);
+    if (obj.category === "wall") {
+      stampWallCollision(walls, grid, sprite, tex);
+    } else {
+      stampDecorationCollision(walls, grid, sprite, tex);
+    }
   }
 
   return sprites;
