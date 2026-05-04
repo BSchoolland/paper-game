@@ -1,5 +1,8 @@
 {
   "name": "turn-based-game",
   "private": true,
-  "workspaces": ["shared", "client"]
+  "workspaces": ["shared", "client"],
+  "scripts": {
+    "dev": "bun --filter client dev"
+  }
 }

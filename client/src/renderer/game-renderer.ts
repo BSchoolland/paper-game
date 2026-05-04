@@ -1,7 +1,11 @@
-import { Application, Container } from "pixi.js";
+import { Application, Container, Sprite } from "pixi.js";
 import type { Entity, Vec2 } from "shared";
 import type { ClientState } from "../state/client-state.js";
-import { createGridGraphics } from "./grid-renderer.js";
+import {
+  createBackground,
+  createMapObjects,
+  getBottomY,
+} from "./grid-renderer.js";
 import {
   type EntityVisual,
   createEntityVisual,
@@ -17,13 +21,15 @@ const PADDING = 60;
 
 export class GameRenderer {
   private worldContainer = new Container();
-  private entityLayer = new Container();
+  private backgroundLayer = new Container();
+  private sortableLayer = new Container();
   private overlayLayer = new Container();
   private scale = 1;
   private offsetX = 0;
   private offsetY = 0;
   private entityVisuals = new Map<string, EntityVisual>();
   private previousEntities = new Map<string, Entity>();
+  private mapObjectSprites: Sprite[] = [];
 
   constructor(
     private app: Application,
@@ -33,14 +39,13 @@ export class GameRenderer {
   init() {
     this.app.stage.addChild(this.worldContainer);
     this.rebuildGrid();
-    this.worldContainer.addChild(this.entityLayer);
-    this.worldContainer.addChild(this.overlayLayer);
     this.layout();
     this.syncEntities();
 
     this.app.ticker.add((ticker) => {
       const dt = ticker.deltaTime / 60;
       this.updateAnimations(dt);
+      this.depthSort();
     });
 
     window.addEventListener("resize", () => {
@@ -76,11 +81,22 @@ export class GameRenderer {
 
   rebuildGrid() {
     this.worldContainer.removeChildren();
-    const gridGraphics = createGridGraphics(this.clientState.getState().grid);
-    this.worldContainer.addChild(gridGraphics);
-    this.entityLayer = new Container();
+    const grid = this.clientState.getState().grid;
+
+    this.backgroundLayer = new Container();
+    this.backgroundLayer.addChild(createBackground(grid));
+    this.worldContainer.addChild(this.backgroundLayer);
+
+    this.sortableLayer = new Container();
+    this.sortableLayer.sortableChildren = true;
+    this.mapObjectSprites = createMapObjects(grid);
+    for (const sprite of this.mapObjectSprites) {
+      sprite.zIndex = getBottomY(sprite);
+      this.sortableLayer.addChild(sprite);
+    }
+    this.worldContainer.addChild(this.sortableLayer);
+
     this.overlayLayer = new Container();
-    this.worldContainer.addChild(this.entityLayer);
     this.worldContainer.addChild(this.overlayLayer);
   }
 
@@ -95,7 +111,7 @@ export class GameRenderer {
 
     for (const [id, visual] of this.entityVisuals) {
       if (!currentEntities.has(id)) {
-        this.entityLayer.removeChild(visual.container);
+        this.sortableLayer.removeChild(visual.container);
         visual.container.destroy({ children: true });
         this.entityVisuals.delete(id);
       }
@@ -107,7 +123,7 @@ export class GameRenderer {
       if (!visual) {
         visual = createEntityVisual(entity);
         this.entityVisuals.set(id, visual);
-        this.entityLayer.addChild(visual.container);
+        this.sortableLayer.addChild(visual.container);
       }
 
       const prev = this.previousEntities.get(id);
@@ -142,6 +158,13 @@ export class GameRenderer {
     }
 
     this.previousEntities = new Map(currentEntities);
+  }
+
+  private depthSort() {
+    const footOffset = 272 * 0.2 * (1 - 0.75);
+    for (const visual of this.entityVisuals.values()) {
+      visual.container.zIndex = visual.container.position.y + footOffset;
+    }
   }
 
   private findAttackTarget(

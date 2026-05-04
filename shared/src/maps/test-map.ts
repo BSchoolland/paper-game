@@ -1,6 +1,6 @@
 import type { Entity, GameState, TeamId, UnitTemplate } from "../types.js";
 import { UNIT_TEMPLATES } from "../types.js";
-import { createGrid, rasterizeRect } from "../collision-grid.js";
+import { createGrid } from "../collision-grid.js";
 
 function makeEntity(
   id: string,
@@ -31,19 +31,7 @@ export function createTestMap() {
   const cellSize = 8;
   const width = 100;
   const height = 75;
-  let grid = createGrid(width, height, cellSize);
-
-  grid = rasterizeRect(grid, 0, 0, width, 2);
-  grid = rasterizeRect(grid, 0, height - 2, width, 2);
-  grid = rasterizeRect(grid, 0, 0, 2, height);
-  grid = rasterizeRect(grid, width - 2, 0, 2, height);
-
-  grid = rasterizeRect(grid, 48, 15, 4, 18);
-  grid = rasterizeRect(grid, 48, 42, 4, 18);
-
-  grid = rasterizeRect(grid, 22, 22, 5, 5);
-  grid = rasterizeRect(grid, 73, 48, 5, 5);
-
+  const grid = createGrid(width, height, cellSize);
   return grid;
 }
 

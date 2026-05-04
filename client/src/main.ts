@@ -5,6 +5,7 @@ import { GameRenderer } from "./renderer/game-renderer.js";
 import { InputManager } from "./input/input-manager.js";
 import { Hud } from "./ui/hud.js";
 import { loadSpriteAssets } from "./renderer/sprite-assets.js";
+import { loadMapAssets } from "./renderer/grid-renderer.js";
 
 async function init() {
   const app = new Application();
@@ -17,7 +18,7 @@ async function init() {
   const container = document.getElementById("game-container")!;
   container.appendChild(app.canvas);
 
-  await loadSpriteAssets();
+  await Promise.all([loadSpriteAssets(), loadMapAssets()]);
 
   const clientState = new ClientState(createInitialGameState());
   const renderer = new GameRenderer(app, clientState);
