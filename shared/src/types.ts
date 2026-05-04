@@ -42,6 +42,7 @@ export interface Entity {
   readonly canMoveAfterAttack: boolean;
   readonly hasAttackedThisTurn: boolean;
   readonly weapon: WeaponDefinition;
+  readonly spriteType?: string;
 }
 
 export interface GameState {
@@ -113,6 +114,7 @@ export interface UnitTemplate {
   readonly collisionRadius: number;
   readonly canMoveAfterAttack: boolean;
   readonly className: string;
+  readonly spriteType?: string;
 }
 
 export const UNIT_TEMPLATES = {
@@ -139,5 +141,110 @@ export const UNIT_TEMPLATES = {
     collisionRadius: 14,
     canMoveAfterAttack: true,
     className: "Archer",
+  },
+} as const satisfies Record<string, UnitTemplate>;
+
+export const GOBLIN_SPEAR: WeaponDefinition = {
+  id: "goblin-spear",
+  name: "Goblin Spear",
+  shape: { kind: "rectangle", length: 100, width: 18 },
+  damage: 25,
+  actionCost: 1,
+};
+
+export const GOBLIN_BOW: WeaponDefinition = {
+  id: "goblin-bow",
+  name: "Goblin Bow",
+  shape: { kind: "point", range: 260 },
+  damage: 15,
+  actionCost: 1,
+};
+
+export const SHIELD_BASH: WeaponDefinition = {
+  id: "shield-bash",
+  name: "Shield Bash",
+  shape: { kind: "sector", radius: 60, halfAngle: Math.PI / 4 },
+  damage: 15,
+  actionCost: 1,
+};
+
+export const BRUTE_SLAM: WeaponDefinition = {
+  id: "brute-slam",
+  name: "Brute Slam",
+  shape: { kind: "sector", radius: 90, halfAngle: Math.PI / 2 },
+  damage: 40,
+  actionCost: 1,
+};
+
+export const GOLEM_SMASH: WeaponDefinition = {
+  id: "golem-smash",
+  name: "Golem Smash",
+  shape: { kind: "circle", radius: 70, range: 60 },
+  damage: 50,
+  actionCost: 1,
+};
+
+export const SLIME_SPIT: WeaponDefinition = {
+  id: "slime-spit",
+  name: "Slime Spit",
+  shape: { kind: "point", range: 180 },
+  damage: 12,
+  actionCost: 1,
+};
+
+export const ENEMY_TEMPLATES = {
+  "goblin-spear": {
+    weapon: GOBLIN_SPEAR,
+    hp: 80,
+    movementBudget: 150,
+    collisionRadius: 14,
+    canMoveAfterAttack: false,
+    className: "Goblin Spearman",
+    spriteType: "goblin-spear",
+  },
+  "goblin-archer": {
+    weapon: GOBLIN_BOW,
+    hp: 55,
+    movementBudget: 140,
+    collisionRadius: 12,
+    canMoveAfterAttack: true,
+    className: "Goblin Archer",
+    spriteType: "goblin-archer",
+  },
+  "goblin-shield": {
+    weapon: SHIELD_BASH,
+    hp: 110,
+    movementBudget: 110,
+    collisionRadius: 16,
+    canMoveAfterAttack: true,
+    className: "Goblin Shield",
+    spriteType: "goblin-shield",
+  },
+  "goblin-brute": {
+    weapon: BRUTE_SLAM,
+    hp: 160,
+    movementBudget: 90,
+    collisionRadius: 20,
+    canMoveAfterAttack: false,
+    className: "Goblin Brute",
+    spriteType: "goblin-brute",
+  },
+  "stone-golem": {
+    weapon: GOLEM_SMASH,
+    hp: 250,
+    movementBudget: 70,
+    collisionRadius: 22,
+    canMoveAfterAttack: false,
+    className: "Stone Golem",
+    spriteType: "stone-golem",
+  },
+  "slime": {
+    weapon: SLIME_SPIT,
+    hp: 40,
+    movementBudget: 120,
+    collisionRadius: 12,
+    canMoveAfterAttack: true,
+    className: "Slime",
+    spriteType: "slime",
   },
 } as const satisfies Record<string, UnitTemplate>;

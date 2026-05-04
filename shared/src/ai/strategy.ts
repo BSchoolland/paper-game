@@ -172,18 +172,15 @@ export class ThreatStrategy implements AiStrategy {
   }
 }
 
-const SPRITE_STRATEGY: Record<string, AiStrategy | "threat"> = {
-  "goblin-spear": rushStrategy,
-  "goblin-archer": kiteStrategy,
-  "goblin-shield": rushStrategy,
-  "goblin-brute": rushStrategy,
-  "stone-golem": "threat",
-  "slime": kiteStrategy,
-};
-
 export function strategyForEntity(entity: Entity): AiStrategy {
-  const entry = entity.spriteType ? SPRITE_STRATEGY[entity.spriteType] : undefined;
-  if (entry === "threat") return new ThreatStrategy();
-  if (entry) return entry;
-  return rushStrategy;
+  switch (entity.spriteType) {
+    case "goblin-archer":
+    case "slime":
+      return kiteStrategy;
+    case "stone-golem":
+      return new ThreatStrategy();
+    default:
+      if (entity.weapon.shape.kind === "point") return kiteStrategy;
+      return rushStrategy;
+  }
 }

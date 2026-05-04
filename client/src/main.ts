@@ -20,7 +20,10 @@ async function init() {
 
   await Promise.all([loadSpriteAssets(), loadMapAssets()]);
 
-  const gameStore = new RemoteGameStore(`ws://${window.location.hostname}:3001/ws`);
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get("mode") === "pvp" ? "pvp" : "pve";
+
+  const gameStore = new RemoteGameStore(`ws://${window.location.hostname}:3001/ws?mode=${mode}`);
   await gameStore.ready();
 
   const clientState = new ClientState(gameStore);

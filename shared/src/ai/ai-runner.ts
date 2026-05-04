@@ -2,7 +2,7 @@ import type { Entity, EntityId, GameState, PlayerAction } from "../types.js";
 import { distance } from "../vec2.js";
 import { resolveAction } from "../turn-resolver.js";
 import type { AiStrategy } from "./strategy.js";
-import { strategyForEntity, ThreatStrategy } from "./strategy.js";
+import { strategyForEntity } from "./strategy.js";
 
 function closestEnemyDist(entity: Entity, state: GameState): number {
   let best = Infinity;
@@ -18,8 +18,6 @@ export class AiController {
   private strategies = new Map<EntityId, AiStrategy>();
 
   computeActions(state: GameState, aiTeam: "red" | "blue"): PlayerAction[] {
-    this.processEvents(state, aiTeam);
-
     const actions: PlayerAction[] = [];
     let simState = state;
 
@@ -32,17 +30,10 @@ export class AiController {
       const planned = strategy.planActions(entity, simState);
 
       for (const action of planned) {
-        const next = resolveAction(simState, action);
-        if (next !== simState) {
+        const result = resolveAction(simState, action);
+        if (result.state !== simState) {
           actions.push(action);
-          simState = next;
-          if (action.type === "attack") {
-            simState = resolveAction(simState, {
-              type: "applyDamage",
-              entityId: action.entityId,
-              aimDirection: action.aimDirection,
-            });
-          }
+          simState = result.state;
         }
       }
     }
@@ -59,28 +50,4 @@ export class AiController {
     }
     return strategy;
   }
-
-  private processEvents(state: GameState, aiTeam: "red" | "blue") {
-    for (const event of state.events) {
-      if (event.type === "damage") {
-        const target = state.entities.get(event.targetId);
-        if (!target || target.teamId !== aiTeam) continue;
-
-        const strategy = this.getStrategy(target);
-        if (strategy instanceof ThreatStrategy) {
-          strategy.notifyDamaged(event.attackerId);
-        }
-      }
-    }
-  }
-}
-
-/** Stateless convenience wrapper for backwards compat */
-export function computeAiActions(
-  state: GameState,
-  aiTeam: "red" | "blue",
-  _strategyMap?: Map<string, AiStrategy>
-): PlayerAction[] {
-  const controller = new AiController();
-  return controller.computeActions(state, aiTeam);
 }

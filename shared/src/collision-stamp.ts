@@ -1,4 +1,5 @@
-import type { GridState, MapObjectPlacement } from "./types.js";
+import type { GridState } from "./types.js";
+import type { MapObjectPlacement } from "./map-definition.js";
 import { CELL_WALL, CELL_COVER } from "./collision-grid.js";
 
 const CHARACTER_HEIGHT = 10;

@@ -7,11 +7,19 @@ export type TeamColor = "red" | "blue";
 const UNIT_TYPES: UnitType[] = ["warrior", "spearman", "archer"];
 const ANIM_STATES: AnimState[] = ["idle", "attack", "hit", "move"];
 const TEAMS: TeamColor[] = ["red", "blue"];
+const ENEMY_SPRITE_TYPES = [
+  "goblin-spear", "goblin-archer", "goblin-shield", "goblin-brute",
+  "stone-golem", "slime",
+];
 
 const textures = new Map<string, Texture>();
 
 function key(team: TeamColor, unit: UnitType, state: AnimState): string {
   return `${team}-${unit}-${state}`;
+}
+
+function enemyKey(spriteType: string, state: AnimState): string {
+  return `${spriteType}-${state}`;
 }
 
 export async function loadSpriteAssets(): Promise<void> {
@@ -22,6 +30,12 @@ export async function loadSpriteAssets(): Promise<void> {
         const k = key(team, unit, state);
         entries.push({ alias: k, src: `sprites/${unit}/${k}.webp` });
       }
+    }
+  }
+  for (const spriteType of ENEMY_SPRITE_TYPES) {
+    for (const state of ANIM_STATES) {
+      const k = enemyKey(spriteType, state);
+      entries.push({ alias: k, src: `sprites/${spriteType}/${k}.webp` });
     }
   }
 
@@ -37,6 +51,13 @@ export function getSpriteTexture(
   state: AnimState
 ): Texture {
   return textures.get(key(team, unit, state))!;
+}
+
+export function getEnemySpriteTexture(
+  spriteType: string,
+  state: AnimState
+): Texture | null {
+  return textures.get(enemyKey(spriteType, state)) ?? null;
 }
 
 const WEAPON_TO_UNIT: Record<string, UnitType> = {
