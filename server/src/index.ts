@@ -228,6 +228,12 @@ Bun.serve({
         }
       }
 
+      if (msg.type === "debugWin" && ws.data.phase === "combat") {
+        state = { ...state, winner: "red" };
+        broadcastState([]);
+        checkCombatEnd(ws);
+      }
+
       if (msg.type === "reset") {
         if (gameMode === "pve" && ws.data.phase === "combat") {
           ws.data.phase = "map";
