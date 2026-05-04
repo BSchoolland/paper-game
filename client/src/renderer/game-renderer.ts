@@ -1,8 +1,15 @@
 import { Application, Container } from "pixi.js";
-import type { Vec2 } from "shared";
+import type { Entity, Vec2 } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import { createGridGraphics } from "./grid-renderer.js";
-import { createEntityGraphics } from "./entity-renderer.js";
+import {
+  type EntityVisual,
+  createEntityVisual,
+  updateEntityVisual,
+  triggerMove,
+  triggerAttack,
+  triggerHit,
+} from "./entity-renderer.js";
 import { createTargetingPreview } from "./targeting-renderer.js";
 import { createMovePreview } from "./move-preview-renderer.js";
 
@@ -15,6 +22,8 @@ export class GameRenderer {
   private scale = 1;
   private offsetX = 0;
   private offsetY = 0;
+  private entityVisuals = new Map<string, EntityVisual>();
+  private previousEntities = new Map<string, Entity>();
 
   constructor(
     private app: Application,
@@ -27,11 +36,16 @@ export class GameRenderer {
     this.worldContainer.addChild(this.entityLayer);
     this.worldContainer.addChild(this.overlayLayer);
     this.layout();
-    this.render();
+    this.syncEntities();
+
+    this.app.ticker.add((ticker) => {
+      const dt = ticker.deltaTime / 60;
+      this.updateAnimations(dt);
+    });
 
     window.addEventListener("resize", () => {
       this.layout();
-      this.render();
+      this.renderOverlay({ x: 0, y: 0 });
     });
   }
 
@@ -71,16 +85,92 @@ export class GameRenderer {
   }
 
   render() {
-    this.entityLayer.removeChildren();
-    const state = this.clientState.getState();
+    this.syncEntities();
+    this.renderOverlay({ x: 0, y: 0 });
+  }
 
-    for (const entity of state.entities.values()) {
-      const isSelected = entity.id === this.clientState.selectedEntityId;
-      const gfx = createEntityGraphics(entity, isSelected);
-      this.entityLayer.addChild(gfx);
+  private syncEntities() {
+    const state = this.clientState.getState();
+    const currentEntities = state.entities;
+
+    for (const [id, visual] of this.entityVisuals) {
+      if (!currentEntities.has(id)) {
+        this.entityLayer.removeChild(visual.container);
+        visual.container.destroy({ children: true });
+        this.entityVisuals.delete(id);
+      }
     }
 
-    this.renderOverlay({ x: 0, y: 0 });
+    for (const [id, entity] of currentEntities) {
+      let visual = this.entityVisuals.get(id);
+
+      if (!visual) {
+        visual = createEntityVisual(entity);
+        this.entityVisuals.set(id, visual);
+        this.entityLayer.addChild(visual.container);
+      }
+
+      const prev = this.previousEntities.get(id);
+      if (prev) {
+        const dx = entity.position.x - prev.position.x;
+        const dy = entity.position.y - prev.position.y;
+        if (dx * dx + dy * dy > 1) {
+          triggerMove(
+            visual,
+            prev.position.x,
+            prev.position.y,
+            entity.position.x,
+            entity.position.y
+          );
+        }
+
+        if (entity.hp < prev.hp) {
+          triggerHit(visual);
+        }
+
+        if (
+          entity.actionsRemaining < prev.actionsRemaining &&
+          prev.actionsRemaining > 0
+        ) {
+          const aimX = this.findAttackTarget(entity, currentEntities);
+          triggerAttack(visual, aimX);
+        }
+      }
+
+      const isSelected = entity.id === this.clientState.selectedEntityId;
+      updateEntityVisual(visual, entity, isSelected, 0);
+    }
+
+    this.previousEntities = new Map(currentEntities);
+  }
+
+  private findAttackTarget(
+    attacker: Entity,
+    entities: ReadonlyMap<string, Entity>
+  ): number {
+    let closestDist = Infinity;
+    let closestX = attacker.position.x + 100;
+    for (const e of entities.values()) {
+      if (e.teamId === attacker.teamId || e.id === attacker.id) continue;
+      const dx = e.position.x - attacker.position.x;
+      const dy = e.position.y - attacker.position.y;
+      const dist = dx * dx + dy * dy;
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestX = e.position.x;
+      }
+    }
+    return closestX;
+  }
+
+  private updateAnimations(dt: number) {
+    const state = this.clientState.getState();
+    for (const [id, visual] of this.entityVisuals) {
+      const entity = state.entities.get(id);
+      if (!entity) continue;
+      const isSelected = id === this.clientState.selectedEntityId;
+      updateEntityVisual(visual, entity, isSelected, dt);
+    }
   }
 
   renderOverlay(mouseWorld: Vec2) {
