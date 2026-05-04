@@ -58,6 +58,22 @@ export type PlayerAction =
   | { type: "attack"; entityId: EntityId; aimDirection: Vec2 }
   | { type: "endTurn" };
 
+export type GameEvent =
+  | { type: "move"; entityId: EntityId; from: Vec2; to: Vec2 }
+  | { type: "attack"; attackerId: EntityId; hits: readonly AttackHit[] }
+  | { type: "endTurn"; nextTeam: TeamId };
+
+export interface AttackHit {
+  readonly targetId: EntityId;
+  readonly damage: number;
+  readonly killed: boolean;
+}
+
+export interface ActionResult {
+  readonly state: GameState;
+  readonly events: readonly GameEvent[];
+}
+
 export const SHORT_SWORD: WeaponDefinition = {
   id: "short-sword",
   name: "Short Sword",

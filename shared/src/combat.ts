@@ -1,5 +1,10 @@
-import type { Entity, GameState, GridState, WeaponDefinition, Vec2 } from "./types.js";
+import type { AttackHit, Entity, GameState, GridState, WeaponDefinition, Vec2 } from "./types.js";
 import { entitiesInSector, entitiesInRectangle, raycastToEntity } from "./geometry/index.js";
+
+export interface DamageResult {
+  readonly state: GameState;
+  readonly hits: readonly AttackHit[];
+}
 
 export function resolveWeaponAttack(
   attacker: Entity,
@@ -57,15 +62,18 @@ export function applyDamage(
   state: GameState,
   targets: Entity[],
   damage: number
-): GameState {
+): DamageResult {
   const entities = new Map(state.entities);
+  const hits: AttackHit[] = [];
   for (const target of targets) {
     const newHp = target.hp - damage;
-    if (newHp <= 0) {
+    const killed = newHp <= 0;
+    hits.push({ targetId: target.id, damage, killed });
+    if (killed) {
       entities.delete(target.id);
     } else {
       entities.set(target.id, { ...target, hp: newHp });
     }
   }
-  return { ...state, entities };
+  return { state: { ...state, entities }, hits };
 }

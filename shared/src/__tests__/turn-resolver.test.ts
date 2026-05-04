@@ -5,25 +5,25 @@ import { makeEntity, makeState } from "./test-helpers.js";
 describe("turn-resolver", () => {
   it("move updates position", () => {
     const state = makeState([makeEntity("r1", 100, 100, "red")]);
-    const next = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 150, y: 100 } });
+    const { state: next } = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 150, y: 100 } });
     expect(next.entities.get("r1")!.position.x).toBeCloseTo(150);
   });
 
   it("move deducts movement", () => {
     const state = makeState([makeEntity("r1", 100, 100, "red")]);
-    const next = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 150, y: 100 } });
+    const { state: next } = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 150, y: 100 } });
     expect(next.entities.get("r1")!.movementRemaining).toBeCloseTo(100);
   });
 
   it("rejects move beyond remaining movement", () => {
     const state = makeState([makeEntity("r1", 100, 100, "red")]);
-    const next = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 400, y: 100 } });
+    const { state: next } = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 400, y: 100 } });
     expect(next).toBe(state);
   });
 
   it("rejects wrong team action", () => {
     const state = makeState([makeEntity("b1", 100, 100, "blue")]);
-    const next = resolveAction(state, { type: "move", entityId: "b1", destination: { x: 150, y: 100 } });
+    const { state: next } = resolveAction(state, { type: "move", entityId: "b1", destination: { x: 150, y: 100 } });
     expect(next).toBe(state);
   });
 
@@ -32,7 +32,7 @@ describe("turn-resolver", () => {
       makeEntity("r1", 100, 100, "red"),
       makeEntity("b1", 140, 100, "blue"),
     ]);
-    const next = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
+    const { state: next } = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
     expect(next.entities.get("b1")!.hp).toBe(75);
   });
 
@@ -41,7 +41,7 @@ describe("turn-resolver", () => {
       makeEntity("r1", 100, 100, "red"),
       makeEntity("b1", 140, 100, "blue", { hp: 20 }),
     ]);
-    const next = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
+    const { state: next } = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
     expect(next.entities.has("b1")).toBe(false);
   });
 
@@ -50,8 +50,8 @@ describe("turn-resolver", () => {
       makeEntity("r1", 100, 100, "red"),
       makeEntity("b1", 500, 100, "blue"),
     ]);
-    const moved = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 150, y: 100 } });
-    const next = resolveAction(moved, { type: "endTurn" });
+    const { state: moved } = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 150, y: 100 } });
+    const { state: next } = resolveAction(moved, { type: "endTurn" });
     expect(next.activeTeam).toBe("blue");
     expect(next.entities.get("b1")!.movementRemaining).toBe(150);
     expect(next.entities.get("b1")!.actionsRemaining).toBe(1);
@@ -63,7 +63,7 @@ describe("turn-resolver", () => {
       makeEntity("r1", 100, 100, "red"),
       makeEntity("b1", 140, 100, "blue", { hp: 20 }),
     ]);
-    const next = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
+    const { state: next } = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
     expect(next.winner).toBe("red");
   });
 
@@ -72,8 +72,8 @@ describe("turn-resolver", () => {
       makeEntity("r1", 100, 100, "red"),
       makeEntity("b1", 140, 100, "blue"),
     ]);
-    const attacked = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
-    const moved = resolveAction(attacked, { type: "move", entityId: "r1", destination: { x: 80, y: 100 } });
+    const { state: attacked } = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
+    const { state: moved } = resolveAction(attacked, { type: "move", entityId: "r1", destination: { x: 80, y: 100 } });
     expect(moved.entities.get("r1")!.position.x).toBeCloseTo(80);
   });
 
@@ -82,8 +82,8 @@ describe("turn-resolver", () => {
       makeEntity("r1", 100, 100, "red", { canMoveAfterAttack: false }),
       makeEntity("b1", 500, 100, "blue"),
     ]);
-    const attacked = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
-    const moved = resolveAction(attacked, { type: "move", entityId: "r1", destination: { x: 120, y: 100 } });
+    const { state: attacked } = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
+    const { state: moved } = resolveAction(attacked, { type: "move", entityId: "r1", destination: { x: 120, y: 100 } });
     expect(moved).toBe(attacked);
   });
 
@@ -92,7 +92,39 @@ describe("turn-resolver", () => {
       makeEntity("r1", 100, 100, "red"),
       makeEntity("r2", 130, 100, "red"),
     ]);
-    const next = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 125, y: 100 } });
+    const { state: next } = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 125, y: 100 } });
     expect(next).toBe(state);
+  });
+
+  it("move emits move event with from/to", () => {
+    const state = makeState([makeEntity("r1", 100, 100, "red")]);
+    const { events } = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 150, y: 100 } });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "move", entityId: "r1", from: { x: 100, y: 100 }, to: { x: 150, y: 100 } });
+  });
+
+  it("attack emits attack event with hits", () => {
+    const state = makeState([
+      makeEntity("r1", 100, 100, "red"),
+      makeEntity("b1", 140, 100, "blue"),
+    ]);
+    const { events } = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "attack", attackerId: "r1", hits: [{ targetId: "b1", damage: 25, killed: false }] });
+  });
+
+  it("attack event marks killed targets", () => {
+    const state = makeState([
+      makeEntity("r1", 100, 100, "red"),
+      makeEntity("b1", 140, 100, "blue", { hp: 20 }),
+    ]);
+    const { events } = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
+    expect(events[0]).toMatchObject({ type: "attack", hits: [{ targetId: "b1", killed: true }] });
+  });
+
+  it("rejected action emits no events", () => {
+    const state = makeState([makeEntity("r1", 100, 100, "red")]);
+    const { events } = resolveAction(state, { type: "move", entityId: "r1", destination: { x: 400, y: 100 } });
+    expect(events).toHaveLength(0);
   });
 });

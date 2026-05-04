@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from "bun";
-import type { GameState, PlayerAction, TeamId } from "shared";
+import type { GameEvent, GameState, PlayerAction, TeamId } from "shared";
 import { createInitialGameState, resolveAction, serializeGameState } from "shared";
 
 interface SocketData {
@@ -16,8 +16,8 @@ function broadcast(msg: object) {
   }
 }
 
-function broadcastState() {
-  broadcast({ type: "state", state: serializeGameState(state) });
+function broadcastState(events: readonly GameEvent[]) {
+  broadcast({ type: "state", state: serializeGameState(state), events });
 }
 
 const PORT = Number(process.env.PORT) || 3001;
@@ -53,7 +53,7 @@ Bun.serve({
       ws.data.team = team;
       players.set(team, ws);
       ws.send(JSON.stringify({ type: "team", team }));
-      ws.send(JSON.stringify({ type: "state", state: serializeGameState(state) }));
+      ws.send(JSON.stringify({ type: "state", state: serializeGameState(state), events: [] }));
       console.log(`${team} connected`);
     },
 
@@ -69,16 +69,16 @@ Bun.serve({
       }
 
       if (msg.type === "action") {
-        const next = resolveAction(state, msg.action);
-        if (next !== state) {
-          state = next;
-          broadcastState();
+        const result = resolveAction(state, msg.action);
+        if (result.state !== state) {
+          state = result.state;
+          broadcastState(result.events);
         }
       }
 
       if (msg.type === "reset") {
         state = createInitialGameState();
-        broadcastState();
+        broadcastState([]);
       }
     },
 

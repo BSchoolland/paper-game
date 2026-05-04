@@ -31,6 +31,10 @@ async function init() {
     hud.update();
   });
 
+  gameStore.subscribeEvents((events) => {
+    renderer.pushEvents(events);
+  });
+
   renderer.init();
   hud.update();
 

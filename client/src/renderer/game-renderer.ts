@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite } from "pixi.js";
-import type { GridState, Vec2 } from "shared";
+import type { GameEvent, GridState, Vec2 } from "shared";
 import { CELL_WALL, CELL_COVER } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
@@ -118,6 +118,10 @@ export class GameRenderer {
     this.debugLayer.visible = this.debugVisible;
     this.buildDebugWalls(grid);
     this.worldContainer.addChild(this.debugLayer);
+  }
+
+  pushEvents(events: readonly GameEvent[]) {
+    this.entities.pushEvents(events);
   }
 
   render() {

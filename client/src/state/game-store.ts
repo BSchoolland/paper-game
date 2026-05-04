@@ -25,9 +25,9 @@ export class LocalGameStore implements GameStore {
   }
 
   dispatch(action: PlayerAction) {
-    const next = resolveAction(this.state, action);
-    if (next !== this.state) {
-      this.state = next;
+    const result = resolveAction(this.state, action);
+    if (result.state !== this.state) {
+      this.state = result.state;
       this.notify();
     }
   }

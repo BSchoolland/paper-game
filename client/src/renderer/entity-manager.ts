@@ -1,12 +1,12 @@
 import { Container } from "pixi.js";
-import type { Entity, GameState } from "shared";
+import type { Entity, GameEvent, GameState } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 
 const FOOT_OFFSET = 272 * 0.2 * (1 - 0.75);
 
 export class EntityManager {
   private visuals = new Map<string, EntityVisual>();
-  private previousEntities = new Map<string, Entity>();
+  private pendingEvents: GameEvent[] = [];
 
   constructor(private layer: Container) {}
 
@@ -16,6 +16,10 @@ export class EntityManager {
       layer.addChild(visual.container);
     }
     this.layer = layer;
+  }
+
+  pushEvents(events: readonly GameEvent[]) {
+    this.pendingEvents.push(...events);
   }
 
   sync(state: GameState, selectedEntityId: string | null) {
@@ -38,15 +42,13 @@ export class EntityManager {
         this.layer.addChild(visual.container);
       }
 
-      const prev = this.previousEntities.get(id);
-      if (prev) {
-        this.triggerAnimations(visual, prev, entity, currentEntities);
-      }
-
       visual.update(entity, entity.id === selectedEntityId, 0);
     }
 
-    this.previousEntities = new Map(currentEntities);
+    for (const event of this.pendingEvents) {
+      this.applyEvent(event, state);
+    }
+    this.pendingEvents.length = 0;
   }
 
   tick(state: GameState, selectedEntityId: string | null, dt: number) {
@@ -63,52 +65,34 @@ export class EntityManager {
     }
   }
 
-  private triggerAnimations(
-    visual: EntityVisual,
-    prev: Entity,
-    entity: Entity,
-    entities: ReadonlyMap<string, Entity>
-  ) {
-    const dx = entity.position.x - prev.position.x;
-    const dy = entity.position.y - prev.position.y;
-    if (dx * dx + dy * dy > 1) {
-      visual.triggerMove(
-        prev.position.x,
-        prev.position.y,
-        entity.position.x,
-        entity.position.y
-      );
-    }
+  private applyEvent(event: GameEvent, state: GameState) {
+    switch (event.type) {
+      case "move": {
+        const visual = this.visuals.get(event.entityId);
+        if (visual) {
+          visual.triggerMove(event.from.x, event.from.y, event.to.x, event.to.y);
+        }
+        break;
+      }
+      case "attack": {
+        const visual = this.visuals.get(event.attackerId);
+        if (visual) {
+          const firstHit = event.hits[0];
+          const targetEntity = firstHit ? state.entities.get(firstHit.targetId) : null;
+          const aimX = targetEntity
+            ? targetEntity.position.x
+            : visual.container.position.x + 100;
+          visual.triggerAttack(aimX);
+        }
 
-    if (entity.hp < prev.hp) {
-      visual.triggerHit();
-    }
-
-    if (
-      entity.actionsRemaining < prev.actionsRemaining &&
-      prev.actionsRemaining > 0
-    ) {
-      const aimX = this.findAttackTarget(entity, entities);
-      visual.triggerAttack(aimX);
-    }
-  }
-
-  private findAttackTarget(
-    attacker: Entity,
-    entities: ReadonlyMap<string, Entity>
-  ): number {
-    let closestDist = Infinity;
-    let closestX = attacker.position.x + 100;
-    for (const e of entities.values()) {
-      if (e.teamId === attacker.teamId || e.id === attacker.id) continue;
-      const dx = e.position.x - attacker.position.x;
-      const dy = e.position.y - attacker.position.y;
-      const dist = dx * dx + dy * dy;
-      if (dist < closestDist) {
-        closestDist = dist;
-        closestX = e.position.x;
+        for (const hit of event.hits) {
+          const targetVisual = this.visuals.get(hit.targetId);
+          if (targetVisual) {
+            targetVisual.triggerHit();
+          }
+        }
+        break;
       }
     }
-    return closestX;
   }
 }

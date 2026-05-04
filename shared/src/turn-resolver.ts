@@ -1,4 +1,4 @@
-import type { Entity, GameState, PlayerAction, TeamId } from "./types.js";
+import type { ActionResult, AttackHit, Entity, GameEvent, GameState, PlayerAction, TeamId } from "./types.js";
 import { distance } from "./vec2.js";
 import { isPositionWalkable, isWithinBounds } from "./collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
@@ -30,43 +30,49 @@ function entitiesOverlap(
   return false;
 }
 
+const NO_CHANGE = (state: GameState): ActionResult => ({ state, events: [] });
+
 function resolveMove(
   state: GameState,
   entityId: string,
   destination: { x: number; y: number }
-): GameState {
+): ActionResult {
   const entity = state.entities.get(entityId);
-  if (!entity) return state;
-  if (entity.teamId !== state.activeTeam) return state;
-  if (entity.hasAttackedThisTurn && !entity.canMoveAfterAttack) return state;
+  if (!entity) return NO_CHANGE(state);
+  if (entity.teamId !== state.activeTeam) return NO_CHANGE(state);
+  if (entity.hasAttackedThisTurn && !entity.canMoveAfterAttack) return NO_CHANGE(state);
 
   const dist = distance(entity.position, destination);
-  if (dist > entity.movementRemaining + 0.01) return state;
+  if (dist > entity.movementRemaining + 0.01) return NO_CHANGE(state);
   if (!isPositionWalkable(state.grid, destination, entity.collisionRadius))
-    return state;
+    return NO_CHANGE(state);
   if (!isWithinBounds(state.grid, destination, entity.collisionRadius))
-    return state;
+    return NO_CHANGE(state);
   if (entitiesOverlap(destination, entity.collisionRadius, state.entities, entityId))
-    return state;
+    return NO_CHANGE(state);
 
+  const from = entity.position;
   const entities = new Map(state.entities);
   entities.set(entityId, {
     ...entity,
     position: destination,
     movementRemaining: entity.movementRemaining - dist,
   });
-  return { ...state, entities };
+  return {
+    state: { ...state, entities },
+    events: [{ type: "move", entityId, from, to: destination }],
+  };
 }
 
 function resolveAttack(
   state: GameState,
   entityId: string,
   aimDirection: { x: number; y: number }
-): GameState {
+): ActionResult {
   const entity = state.entities.get(entityId);
-  if (!entity) return state;
-  if (entity.teamId !== state.activeTeam) return state;
-  if (entity.actionsRemaining < entity.weapon.actionCost) return state;
+  if (!entity) return NO_CHANGE(state);
+  if (entity.teamId !== state.activeTeam) return NO_CHANGE(state);
+  if (entity.actionsRemaining < entity.weapon.actionCost) return NO_CHANGE(state);
 
   const targets = resolveWeaponAttack(
     entity,
@@ -87,14 +93,20 @@ function resolveAttack(
   });
   let newState: GameState = { ...state, entities };
 
+  let hits: readonly AttackHit[] = [];
   if (targets.length > 0) {
-    newState = applyDamage(newState, targets, entity.weapon.damage);
+    const result = applyDamage(newState, targets, entity.weapon.damage);
+    newState = result.state;
+    hits = result.hits;
   }
 
-  return { ...newState, winner: checkWinner(newState) };
+  return {
+    state: { ...newState, winner: checkWinner(newState) },
+    events: [{ type: "attack", attackerId: entityId, hits }],
+  };
 }
 
-function resolveEndTurn(state: GameState): GameState {
+function resolveEndTurn(state: GameState): ActionResult {
   const nextTeam: TeamId = state.activeTeam === "red" ? "blue" : "red";
   const entities = new Map<string, Entity>();
   for (const [id, entity] of state.entities) {
@@ -110,18 +122,21 @@ function resolveEndTurn(state: GameState): GameState {
     }
   }
   return {
-    ...state,
-    entities,
-    activeTeam: nextTeam,
-    turnNumber: state.turnNumber + 1,
+    state: {
+      ...state,
+      entities,
+      activeTeam: nextTeam,
+      turnNumber: state.turnNumber + 1,
+    },
+    events: [{ type: "endTurn", nextTeam }],
   };
 }
 
 export function resolveAction(
   state: GameState,
   action: PlayerAction
-): GameState {
-  if (state.winner) return state;
+): ActionResult {
+  if (state.winner) return NO_CHANGE(state);
 
   switch (action.type) {
     case "move":
