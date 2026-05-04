@@ -7,3 +7,4 @@ export * from "./turn-resolver.js";
 export * from "./movement.js";
 export * from "./map-definition.js";
 export * from "./maps/test-map.js";
+export * from "./serialization.js";

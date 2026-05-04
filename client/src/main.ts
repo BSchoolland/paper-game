@@ -1,6 +1,5 @@
 import { Application } from "pixi.js";
-import { createInitialGameState } from "shared";
-import { LocalGameStore } from "./state/game-store.js";
+import { RemoteGameStore } from "./state/remote-game-store.js";
 import { ClientState } from "./state/client-state.js";
 import { GameRenderer } from "./renderer/game-renderer.js";
 import { InputManager } from "./input/input-manager.js";
@@ -21,7 +20,9 @@ async function init() {
 
   await Promise.all([loadSpriteAssets(), loadMapAssets()]);
 
-  const gameStore = new LocalGameStore(createInitialGameState());
+  const gameStore = new RemoteGameStore(`ws://${window.location.hostname}:3001/ws`);
+  await gameStore.ready();
+
   const clientState = new ClientState(gameStore);
   const renderer = new GameRenderer(app, clientState);
   const hud = new Hud(container, clientState);
