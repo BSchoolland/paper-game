@@ -5,13 +5,22 @@ import type { GameStore } from "./game-store.js";
 type Listener = () => void;
 type EventListener = (events: readonly GameEvent[]) => void;
 
+interface QueuedUpdate {
+  state: GameState;
+  events: readonly GameEvent[];
+}
+
 export class RemoteGameStore implements GameStore {
   private state: GameState | null = null;
+  private displayState: GameState | null = null;
+  private queue: QueuedUpdate[] = [];
+  private draining = false;
   private listeners: Listener[] = [];
   private eventListeners: EventListener[] = [];
   private ws: WebSocket;
   private _team: TeamId | null = null;
   private _onReady: (() => void) | null = null;
+  private _animatingCheck: (() => boolean) | null = null;
 
   get team(): TeamId | null {
     return this._team;
@@ -27,36 +36,81 @@ export class RemoteGameStore implements GameStore {
         const newState = deserializeGameState(msg.state);
         const events: readonly GameEvent[] = msg.events ?? [];
 
-        if (this.state && events.length === 0) {
-          console.warn("[sync] State update with no events — full state recovery");
-        }
-
         this.state = newState;
 
-        if (this._onReady) {
-          this._onReady();
-          this._onReady = null;
-        }
-
-        if (events.length > 0) {
-          for (const listener of this.eventListeners) {
-            listener(events);
+        if (!this.displayState) {
+          this.displayState = newState;
+          if (this._onReady) {
+            this._onReady();
+            this._onReady = null;
           }
+          this.notify();
+          return;
         }
 
-        this.notify();
+        if (events.length === 0) {
+          this.queue.length = 0;
+          this.displayState = newState;
+          this.notify();
+          return;
+        }
+
+        this.queue.push({ state: newState, events });
+        this.drain();
       }
     });
   }
 
+  setAnimatingCheck(fn: () => boolean) {
+    this._animatingCheck = fn;
+  }
+
+  private drain() {
+    if (this.draining) return;
+    this.draining = true;
+    this.processNext();
+  }
+
+  private processNext() {
+    if (this.queue.length === 0) {
+      this.draining = false;
+      return;
+    }
+
+    const next = this.queue.shift()!;
+    this.displayState = next.state;
+
+    for (const listener of this.eventListeners) {
+      listener(next.events);
+    }
+    this.notify();
+
+    this.waitForAnimations(() => this.processNext());
+  }
+
+  private waitForAnimations(cb: () => void) {
+    const check = () => {
+      if (this._animatingCheck && this._animatingCheck()) {
+        requestAnimationFrame(check);
+      } else {
+        cb();
+      }
+    };
+    requestAnimationFrame(check);
+  }
+
   ready(): Promise<void> {
-    if (this.state) return Promise.resolve();
+    if (this.displayState) return Promise.resolve();
     return new Promise((resolve) => {
       this._onReady = resolve;
     });
   }
 
   getState(): GameState {
+    return this.displayState!;
+  }
+
+  getLatestState(): GameState {
     return this.state!;
   }
 
@@ -65,6 +119,8 @@ export class RemoteGameStore implements GameStore {
   }
 
   reset() {
+    this.queue.length = 0;
+    this.draining = false;
     this.ws.send(JSON.stringify({ type: "reset" }));
   }
 
@@ -80,6 +136,10 @@ export class RemoteGameStore implements GameStore {
     return () => {
       this.eventListeners = this.eventListeners.filter((l) => l !== listener);
     };
+  }
+
+  isQueueEmpty(): boolean {
+    return this.queue.length === 0 && !this.draining;
   }
 
   private notify() {

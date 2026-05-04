@@ -104,10 +104,11 @@ export class EntityManager {
   }
 
   isAnimating(): boolean {
-    return (
-      this.attackFlashes.length > 0 ||
-      this.delayedHits.length > 0
-    );
+    if (this.attackFlashes.length > 0 || this.delayedHits.length > 0) return true;
+    for (const visual of this.visuals.values()) {
+      if (visual.isBusy) return true;
+    }
+    return false;
   }
 
   private applyEvent(event: GameEvent, state: GameState) {

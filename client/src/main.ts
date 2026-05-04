@@ -34,6 +34,8 @@ async function init() {
     hud.update();
   });
 
+  gameStore.setAnimatingCheck(() => renderer.isAnimating());
+
   gameStore.subscribeEvents((events) => {
     renderer.pushEvents(events);
   });

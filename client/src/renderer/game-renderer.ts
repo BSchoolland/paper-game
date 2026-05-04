@@ -124,6 +124,10 @@ export class GameRenderer {
     this.entities.pushEvents(events);
   }
 
+  isAnimating(): boolean {
+    return this.entities.isAnimating();
+  }
+
   render() {
     this.entities.sync(
       this.clientState.getState(),

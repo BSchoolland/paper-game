@@ -140,6 +140,10 @@ export class EntityVisual {
     }
   }
 
+  get isBusy(): boolean {
+    return this.tweenProgress < 1 || this.animTimer > 0;
+  }
+
   triggerMove(
     fromX: number,
     fromY: number,
