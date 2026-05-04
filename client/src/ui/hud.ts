@@ -106,6 +106,14 @@ export class Hud {
     return btn;
   }
 
+  show() {
+    this.container.style.display = "";
+  }
+
+  hide() {
+    this.container.style.display = "none";
+  }
+
   update() {
     const state = this.clientState.getState();
     const teamStyle = TEAM_STYLES[state.activeTeam];

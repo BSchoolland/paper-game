@@ -4,6 +4,7 @@ import type { GameStore } from "./game-store.js";
 
 type Listener = () => void;
 type EventListener = (events: readonly GameEvent[]) => void;
+type HexMessageListener = (msg: any) => void;
 
 interface QueuedUpdate {
   state: GameState;
@@ -20,7 +21,9 @@ export class RemoteGameStore implements GameStore {
   private ws: WebSocket;
   private _team: TeamId | null = null;
   private _onReady: (() => void) | null = null;
+  private _onHexReady: (() => void) | null = null;
   private _animatingCheck: (() => boolean) | null = null;
+  private hexListeners: HexMessageListener[] = [];
 
   get team(): TeamId | null {
     return this._team;
@@ -32,6 +35,12 @@ export class RemoteGameStore implements GameStore {
       const msg = JSON.parse(event.data as string);
       if (msg.type === "team") {
         this._team = msg.team;
+      } else if (msg.type === "hexMapState" || msg.type === "hexCombatStart" || msg.type === "hexCombatResult") {
+        for (const hl of this.hexListeners) hl(msg);
+        if (msg.type === "hexMapState" && this._onHexReady) {
+          this._onHexReady();
+          this._onHexReady = null;
+        }
       } else if (msg.type === "state") {
         const newState = deserializeGameState(msg.state);
         const events: readonly GameEvent[] = msg.events ?? [];
@@ -140,6 +149,20 @@ export class RemoteGameStore implements GameStore {
 
   isQueueEmpty(): boolean {
     return this.queue.length === 0 && !this.draining;
+  }
+
+  sendRaw(msg: object) {
+    this.ws.send(JSON.stringify(msg));
+  }
+
+  onHexMessage(listener: HexMessageListener) {
+    this.hexListeners.push(listener);
+  }
+
+  readyForHex(): Promise<void> {
+    return new Promise((resolve) => {
+      this._onHexReady = resolve;
+    });
   }
 
   private notify() {

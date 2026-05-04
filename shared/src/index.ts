@@ -10,3 +10,4 @@ export * from "./maps/test-map.js";
 export * from "./ai/ai-runner.js";
 export * from "./serialization.js";
 export * from "./collision-stamp.js";
+export * from "./hex-map.js";

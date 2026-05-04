@@ -35,6 +35,20 @@ export class GameRenderer {
     this.entities = new EntityManager(this.sortableLayer);
   }
 
+  show() {
+    this.worldContainer.visible = true;
+  }
+
+  hide() {
+    this.worldContainer.visible = false;
+  }
+
+  rebuild() {
+    this.rebuildGrid();
+    this.layout();
+    this.entities.sync(this.clientState.getState(), this.clientState.selectedEntityId);
+  }
+
   init() {
     this.app.stage.addChild(this.worldContainer);
     this.rebuildGrid();

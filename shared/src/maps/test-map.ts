@@ -77,27 +77,9 @@ export function createPveGameState(): GameState {
 
   const gs = ENEMY_TEMPLATES["goblin-spear"];
   const ga = ENEMY_TEMPLATES["goblin-archer"];
-  const gb = ENEMY_TEMPLATES["goblin-brute"];
-  const gsh = ENEMY_TEMPLATES["goblin-shield"];
-  const sl = ENEMY_TEMPLATES["slime"];
 
-  // Front line — brute and shields
-  entities.set("enemy1", makeEntity("enemy1", "Goblin Brute", 540, 300, "blue", gb));
-  entities.set("enemy2", makeEntity("enemy2", "Goblin Shield", 560, 200, "blue", gsh));
-  entities.set("enemy3", makeEntity("enemy3", "Goblin Shield", 560, 400, "blue", gsh));
-
-  // Mid line — spearmen
-  entities.set("enemy4", makeEntity("enemy4", "Goblin Spearman", 640, 160, "blue", gs));
-  entities.set("enemy5", makeEntity("enemy5", "Goblin Spearman", 640, 300, "blue", gs));
-  entities.set("enemy6", makeEntity("enemy6", "Goblin Spearman", 640, 440, "blue", gs));
-
-  // Back line — archers
-  entities.set("enemy7", makeEntity("enemy7", "Goblin Archer", 720, 220, "blue", ga));
-  entities.set("enemy8", makeEntity("enemy8", "Goblin Archer", 720, 380, "blue", ga));
-
-  // Flanking slimes
-  entities.set("enemy9", makeEntity("enemy9", "Slime", 580, 120, "blue", sl));
-  entities.set("enemy10", makeEntity("enemy10", "Slime", 580, 480, "blue", sl));
+  entities.set("enemy1", makeEntity("enemy1", "Goblin Spearman", 600, 250, "blue", gs));
+  entities.set("enemy2", makeEntity("enemy2", "Goblin Archer", 650, 370, "blue", ga));
 
   return {
     entities,
