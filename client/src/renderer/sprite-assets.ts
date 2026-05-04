@@ -20,7 +20,7 @@ export async function loadSpriteAssets(): Promise<void> {
     for (const unit of UNIT_TYPES) {
       for (const state of ANIM_STATES) {
         const k = key(team, unit, state);
-        entries.push({ alias: k, src: `sprites/${k}.webp` });
+        entries.push({ alias: k, src: `sprites/${unit}/${k}.webp` });
       }
     }
   }
