@@ -75,7 +75,7 @@ export class Hud {
       box-shadow: 0 2px 6px rgba(74, 55, 40, 0.12);
     `;
     help.textContent =
-      "Click: select · Right-click: move · A: attack · E: end turn · R: reset · Esc: cancel";
+      "Click: select · Right-click: move · A: attack · E: end turn · R: reset · Esc: cancel · F3: debug walls";
     this.container.appendChild(help);
 
     parent.appendChild(this.container);

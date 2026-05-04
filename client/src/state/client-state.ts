@@ -10,6 +10,7 @@ export class ClientState {
 
   selectedEntityId: string | null = null;
   inputMode: "select" | "attack" = "select";
+  showDebugWalls = false;
 
   constructor(initialState: GameState) {
     this.state = initialState;
@@ -31,6 +32,11 @@ export class ClientState {
   selectEntity(entityId: string | null) {
     this.selectedEntityId = entityId;
     this.inputMode = "select";
+    this.notify();
+  }
+
+  toggleDebugWalls() {
+    this.showDebugWalls = !this.showDebugWalls;
     this.notify();
   }
 

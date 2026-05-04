@@ -75,6 +75,10 @@ export class InputManager {
       if (e.key === "a" || e.key === "A") this.clientState.toggleAttackMode();
       if (e.key === "r" || e.key === "R") this.clientState.reset();
       if (e.key === "Escape") this.clientState.selectEntity(null);
+      if (e.key === "F3") {
+        e.preventDefault();
+        this.clientState.toggleDebugWalls();
+      }
     });
   }
 

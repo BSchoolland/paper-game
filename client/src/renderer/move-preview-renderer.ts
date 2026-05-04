@@ -5,6 +5,7 @@ import {
   isPositionWalkable,
   isWithinBounds,
   distance,
+  CELL_WALL,
 } from "shared";
 import {
   PENCIL,
@@ -39,6 +40,16 @@ export function createMovePreview(
   state: GameState
 ): Graphics {
   const g = new Graphics();
+  const grid = state.grid;
+  const cs = grid.cellSize;
+  for (let cy = 0; cy < grid.height; cy++) {
+    for (let cx = 0; cx < grid.width; cx++) {
+      if (grid.walls[cy * grid.width + cx] !== CELL_WALL) continue;
+      g.rect(cx * cs, cy * cs, cs, cs);
+    }
+  }
+  g.fill({ color: 0x000000, alpha: 0.25 });
+
   const clamped = clampToMovementRange(entity, mouseWorld);
   const valid = isDestinationValid(entity, clamped, state);
   const color = valid ? PENCIL : PENCIL_HIT;
