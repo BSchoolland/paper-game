@@ -14,7 +14,7 @@ export class ClientState {
     gameStore.subscribe(() => this.notify());
   }
 
-  getState(): GameState {
+  getState(): GameState | null {
     return this.gameStore.getState();
   }
 
@@ -26,6 +26,11 @@ export class ClientState {
     this.selectedEntityId = entityId;
     this.inputMode = "select";
     this.notify();
+  }
+
+  resetSelection() {
+    this.selectedEntityId = null;
+    this.inputMode = "select";
   }
 
   toggleDebugWalls() {

@@ -116,6 +116,7 @@ export class Hud {
 
   update() {
     const state = this.clientState.getState();
+    if (!state) return;
     const teamStyle = TEAM_STYLES[state.activeTeam];
     const selected = this.clientState.selectedEntityId
       ? state.entities.get(this.clientState.selectedEntityId)

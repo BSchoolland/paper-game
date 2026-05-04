@@ -27,51 +27,97 @@ export class GameRenderer {
   private mapObjectSprites: Sprite[] = [];
   private debugLayer = new Container();
   private debugVisible = false;
+  private tickerActive = false;
 
   constructor(
     private app: Application,
     private clientState: ClientState
   ) {
     this.entities = new EntityManager(this.sortableLayer);
-  }
-
-  show() {
-    this.worldContainer.visible = true;
-  }
-
-  hide() {
+    this.app.stage.addChild(this.worldContainer);
     this.worldContainer.visible = false;
   }
 
-  rebuild() {
-    this.rebuildGrid();
-    this.layout();
-    this.entities.sync(this.clientState.getState(), this.clientState.selectedEntityId);
-  }
-
-  init() {
-    this.app.stage.addChild(this.worldContainer);
+  enter() {
     this.rebuildGrid();
     this.layout();
     this.entities.sync(
       this.clientState.getState(),
       this.clientState.selectedEntityId
     );
+    this.worldContainer.visible = true;
 
-    this.app.ticker.add((ticker) => {
-      const dt = ticker.deltaTime / 60;
-      this.entities.tick(
-        this.clientState.getState(),
-        this.clientState.selectedEntityId,
-        dt
-      );
-      this.entities.depthSort();
-    });
+    if (!this.tickerActive) {
+      this.tickerActive = true;
+      this.app.ticker.add((ticker) => {
+        if (!this.worldContainer.visible) return;
+        const dt = ticker.deltaTime / 60;
+        this.entities.tick(
+          this.clientState.getState(),
+          this.clientState.selectedEntityId,
+          dt
+        );
+        this.entities.depthSort();
+      });
 
-    window.addEventListener("resize", () => {
-      this.layout();
-      this.renderOverlay({ x: 0, y: 0 });
-    });
+      window.addEventListener("resize", () => {
+        if (!this.worldContainer.visible) return;
+        this.layout();
+        this.renderOverlay({ x: 0, y: 0 });
+      });
+    }
+  }
+
+  exit() {
+    this.worldContainer.visible = false;
+  }
+
+  screenToWorld(screenPos: Vec2): Vec2 {
+    return {
+      x: (screenPos.x - this.offsetX) / this.scale,
+      y: (screenPos.y - this.offsetY) / this.scale,
+    };
+  }
+
+  pushEvents(events: readonly GameEvent[]) {
+    this.entities.pushEvents(events);
+  }
+
+  isAnimating(): boolean {
+    return this.entities.isAnimating();
+  }
+
+  render() {
+    this.entities.sync(
+      this.clientState.getState(),
+      this.clientState.selectedEntityId
+    );
+    this.renderOverlay({ x: 0, y: 0 });
+    this.debugLayer.visible = this.clientState.showDebugWalls;
+  }
+
+  renderOverlay(mouseWorld: Vec2) {
+    this.targetingGfx.clear();
+    this.moveGfx.clear();
+    const state = this.clientState.getState();
+    if (!state) return;
+    const selectedId = this.clientState.selectedEntityId;
+
+    if (!selectedId || state.winner) return;
+    const entity = state.entities.get(selectedId);
+    if (!entity) return;
+
+    if (
+      this.clientState.inputMode === "attack" &&
+      entity.actionsRemaining > 0
+    ) {
+      drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state);
+    } else if (
+      this.clientState.inputMode === "select" &&
+      entity.movementRemaining > 1
+    ) {
+      drawMovePreview(this.moveGfx, entity, mouseWorld, state);
+    }
   }
 
   private layout() {
@@ -92,14 +138,7 @@ export class GameRenderer {
     this.worldContainer.position.set(this.offsetX, this.offsetY);
   }
 
-  screenToWorld(screenPos: Vec2): Vec2 {
-    return {
-      x: (screenPos.x - this.offsetX) / this.scale,
-      y: (screenPos.y - this.offsetY) / this.scale,
-    };
-  }
-
-  rebuildGrid() {
+  private rebuildGrid() {
     this.targetingGfx.removeFromParent();
     this.moveGfx.removeFromParent();
     for (const child of this.worldContainer.children) {
@@ -132,46 +171,6 @@ export class GameRenderer {
     this.debugLayer.visible = this.debugVisible;
     this.buildDebugWalls(grid);
     this.worldContainer.addChild(this.debugLayer);
-  }
-
-  pushEvents(events: readonly GameEvent[]) {
-    this.entities.pushEvents(events);
-  }
-
-  isAnimating(): boolean {
-    return this.entities.isAnimating();
-  }
-
-  render() {
-    this.entities.sync(
-      this.clientState.getState(),
-      this.clientState.selectedEntityId
-    );
-    this.renderOverlay({ x: 0, y: 0 });
-    this.debugLayer.visible = this.clientState.showDebugWalls;
-  }
-
-  renderOverlay(mouseWorld: Vec2) {
-    this.targetingGfx.clear();
-    this.moveGfx.clear();
-    const state = this.clientState.getState();
-    const selectedId = this.clientState.selectedEntityId;
-
-    if (!selectedId || state.winner) return;
-    const entity = state.entities.get(selectedId);
-    if (!entity) return;
-
-    if (
-      this.clientState.inputMode === "attack" &&
-      entity.actionsRemaining > 0
-    ) {
-      drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state);
-    } else if (
-      this.clientState.inputMode === "select" &&
-      entity.movementRemaining > 1
-    ) {
-      drawMovePreview(this.moveGfx, entity, mouseWorld, state);
-    }
   }
 
   private buildDebugWalls(grid: GridState) {

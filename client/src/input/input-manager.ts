@@ -34,6 +34,7 @@ export class InputManager {
     this.canvas.addEventListener("click", (e) => {
       const pos = this.screenToWorld(e);
       const state = this.clientState.getState();
+      if (!state) return;
 
       if (state.winner) return;
 
@@ -54,7 +55,7 @@ export class InputManager {
     this.canvas.addEventListener("contextmenu", (e) => {
       e.preventDefault();
       const state = this.clientState.getState();
-      if (state.winner) return;
+      if (!state || state.winner) return;
       if (!this.clientState.selectedEntityId) return;
 
       const entity = state.entities.get(this.clientState.selectedEntityId);

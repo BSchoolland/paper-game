@@ -4,7 +4,7 @@ import { resolveAction } from "shared";
 type Listener = () => void;
 
 export interface GameStore {
-  getState(): GameState;
+  getState(): GameState | null;
   dispatch(action: PlayerAction): void;
   reset(): void;
   subscribe(listener: Listener): () => void;
