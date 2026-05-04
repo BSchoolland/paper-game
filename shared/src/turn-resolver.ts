@@ -102,7 +102,14 @@ function resolveAttack(
 
   return {
     state: { ...newState, winner: checkWinner(newState) },
-    events: [{ type: "attack", attackerId: entityId, hits }],
+    events: [{
+      type: "attack",
+      attackerId: entityId,
+      attackerPosition: entity.position,
+      aimDirection,
+      weapon: entity.weapon,
+      hits,
+    }],
   };
 }
 

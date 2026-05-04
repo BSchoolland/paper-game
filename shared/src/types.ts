@@ -60,7 +60,14 @@ export type PlayerAction =
 
 export type GameEvent =
   | { type: "move"; entityId: EntityId; from: Vec2; to: Vec2 }
-  | { type: "attack"; attackerId: EntityId; hits: readonly AttackHit[] }
+  | {
+      type: "attack";
+      attackerId: EntityId;
+      attackerPosition: Vec2;
+      aimDirection: Vec2;
+      weapon: WeaponDefinition;
+      hits: readonly AttackHit[];
+    }
   | { type: "endTurn"; nextTeam: TeamId };
 
 export interface AttackHit {

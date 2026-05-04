@@ -1,10 +1,7 @@
 import { Assets, Sprite, Texture } from "pixi.js";
 import type { GridState, MapObjectPlacement } from "shared";
-import { CELL_WALL, CELL_COVER } from "shared";
-
-const CHARACTER_DIAMETER = 32;
-const CHARACTER_HEIGHT = 10;
-const ALPHA_THRESHOLD = 30;
+import { stampMapObjects } from "shared";
+import type { AlphaImage } from "shared";
 
 const ALL_OBJECT_NAMES = [
   "tree-oak-small",
@@ -72,7 +69,7 @@ export function getBottomY(sprite: Sprite): number {
   return sprite.position.y + tex.height * sprite.scale.y * (1 - sprite.anchor.y);
 }
 
-function getTextureAlpha(tex: Texture): Uint8Array | null {
+function getTextureAlpha(tex: Texture): AlphaImage | null {
   const source = tex.source.resource;
   if (!(source instanceof HTMLImageElement || source instanceof ImageBitmap))
     return null;
@@ -89,83 +86,15 @@ function getTextureAlpha(tex: Texture): Uint8Array | null {
   for (let i = 0; i < w * h; i++) {
     alpha[i] = data[i * 4 + 3]!;
   }
-  return alpha;
-}
-
-function stampWallCollision(
-  walls: Uint8Array,
-  grid: GridState,
-  sprite: Sprite,
-  tex: Texture
-): void {
-  const alpha = getTextureAlpha(tex);
-  if (!alpha) return;
-  const scale = sprite.scale.x;
-  const anchorX = sprite.anchor.x;
-  const anchorY = sprite.anchor.y;
-  const texW = tex.width;
-  const texH = tex.height;
-  const worldX = sprite.position.x - texW * scale * anchorX;
-  const worldY = sprite.position.y - texH * scale * anchorY;
-  const skipPixels = Math.ceil(CHARACTER_HEIGHT / scale);
-
-  for (let px = 0; px < texW; px++) {
-    let opaqueHit = 0;
-    for (let py = 0; py < texH; py++) {
-      if ((alpha[py * texW + px] ?? 0) < ALPHA_THRESHOLD) continue;
-      opaqueHit++;
-      const wx = worldX + px * scale;
-      const wy = worldY + py * scale;
-      const cx = Math.floor(wx / grid.cellSize);
-      const cy = Math.floor(wy / grid.cellSize);
-      if (cx >= 0 && cy >= 0 && cx < grid.width && cy < grid.height) {
-        walls[cy * grid.width + cx] = opaqueHit <= skipPixels ? CELL_COVER : CELL_WALL;
-      }
-    }
-  }
-}
-
-function stampDecorationCollision(
-  walls: Uint8Array,
-  grid: GridState,
-  sprite: Sprite,
-  tex: Texture
-): void {
-  const scale = sprite.scale.x;
-  const renderedW = tex.width * scale;
-  const renderedH = tex.height * scale;
-  if (renderedW < CHARACTER_DIAMETER && renderedH < CHARACTER_DIAMETER) return;
-
-  const alpha = getTextureAlpha(tex);
-  if (!alpha) return;
-  const anchorX = sprite.anchor.x;
-  const anchorY = sprite.anchor.y;
-  const texW = tex.width;
-  const texH = tex.height;
-  const wallStart = Math.floor(texH * 2 / 3);
-  const worldX = sprite.position.x - texW * scale * anchorX;
-  const worldY = sprite.position.y - texH * scale * anchorY;
-
-  for (let py = 0; py < texH; py++) {
-    for (let px = 0; px < texW; px++) {
-      if ((alpha[py * texW + px] ?? 0) < ALPHA_THRESHOLD) continue;
-      const wx = worldX + px * scale;
-      const wy = worldY + py * scale;
-      const cx = Math.floor(wx / grid.cellSize);
-      const cy = Math.floor(wy / grid.cellSize);
-      if (cx >= 0 && cy >= 0 && cx < grid.width && cy < grid.height) {
-        walls[cy * grid.width + cx] = py < wallStart ? CELL_COVER : CELL_WALL;
-      }
-    }
-  }
+  return { alpha, width: w, height: h };
 }
 
 export function createMapObjects(
   placements: readonly MapObjectPlacement[],
   grid: GridState
 ): Sprite[] {
-  const walls = grid.walls as Uint8Array;
   const sprites: Sprite[] = [];
+  const imageCache = new Map<string, AlphaImage | null>();
 
   for (const obj of placements) {
     const tex: Texture = Assets.get(`map-${obj.name}`);
@@ -175,12 +104,12 @@ export function createMapObjects(
     sprite.position.set(obj.position.x, obj.position.y);
     sprites.push(sprite);
 
-    if (obj.category === "wall") {
-      stampWallCollision(walls, grid, sprite, tex);
-    } else {
-      stampDecorationCollision(walls, grid, sprite, tex);
+    if (!imageCache.has(obj.name)) {
+      imageCache.set(obj.name, getTextureAlpha(tex));
     }
   }
+
+  stampMapObjects(grid, placements, (name) => imageCache.get(name) ?? null);
 
   return sprites;
 }

@@ -8,3 +8,4 @@ export * from "./movement.js";
 export * from "./map-definition.js";
 export * from "./maps/test-map.js";
 export * from "./serialization.js";
+export * from "./collision-stamp.js";

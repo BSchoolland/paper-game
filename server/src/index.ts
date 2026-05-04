@@ -1,12 +1,14 @@
 import type { ServerWebSocket } from "bun";
 import type { GameEvent, GameState, PlayerAction, TeamId } from "shared";
 import { createInitialGameState, resolveAction, serializeGameState } from "shared";
+import { loadCollisionGrid } from "./collision-loader.js";
 
 interface SocketData {
   team: TeamId | null;
 }
 
 let state: GameState = createInitialGameState();
+await loadCollisionGrid(state.grid, state.mapDefinition.objects);
 const players = new Map<TeamId, ServerWebSocket<SocketData>>();
 
 function broadcast(msg: object) {
@@ -57,7 +59,7 @@ Bun.serve({
       console.log(`${team} connected`);
     },
 
-    message(ws: ServerWebSocket<SocketData>, raw: string | Buffer) {
+    async message(ws: ServerWebSocket<SocketData>, raw: string | Buffer) {
       const team = ws.data.team;
       if (!team) return;
 
@@ -78,6 +80,7 @@ Bun.serve({
 
       if (msg.type === "reset") {
         state = createInitialGameState();
+        await loadCollisionGrid(state.grid, state.mapDefinition.objects);
         broadcastState([]);
       }
     },
