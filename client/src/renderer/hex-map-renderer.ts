@@ -48,6 +48,8 @@ export class HexMapRenderer {
 
   private pathHistory: { x: number; y: number }[] = [];
 
+  private maskGfx = new Graphics();
+
   private tweenFrom: { x: number; y: number } | null = null;
   private tweenTo: { x: number; y: number } | null = null;
   private tweenProgress = 1;
@@ -78,6 +80,9 @@ export class HexMapRenderer {
     this.worldContainer.addChild(this.playerSprite);
     this.worldContainer.addChild(this.playerMoveSprite);
     this.app.stage.addChild(this.worldContainer);
+
+    this.worldContainer.mask = this.maskGfx;
+    this.app.stage.addChild(this.maskGfx);
 
     this.app.ticker.add((ticker) => {
       if (!this.animating) return;
@@ -201,9 +206,27 @@ export class HexMapRenderer {
       this.bgSprite.position.set(screenW / 2, screenH / 2);
     }
     this.scale = 1;
-    this.offsetX = screenW / 2;
-    this.offsetY = screenH / 2;
+
+    let playerPx = { x: 0, y: 0 };
+    if (this.mapState) {
+      playerPx = hexToPixel(this.mapState.playerPos, HEX_SIZE);
+    }
+
+    this.offsetX = screenW / 2 - playerPx.x * this.scale;
+    this.offsetY = screenH / 2 - playerPx.y * this.scale;
     this.worldContainer.scale.set(this.scale);
+    this.worldContainer.position.set(this.offsetX, this.offsetY);
+
+    this.maskGfx.clear();
+    this.maskGfx.rect(0, 0, screenW, screenH);
+    this.maskGfx.fill({ color: 0xffffff });
+  }
+
+  private centerOn(worldX: number, worldY: number) {
+    const screenW = this.app.screen.width;
+    const screenH = this.app.screen.height;
+    this.offsetX = screenW / 2 - worldX * this.scale;
+    this.offsetY = screenH / 2 - worldY * this.scale;
     this.worldContainer.position.set(this.offsetX, this.offsetY);
   }
 
