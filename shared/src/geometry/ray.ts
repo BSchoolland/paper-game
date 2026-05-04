@@ -1,6 +1,6 @@
 import type { Entity, GridState, Vec2 } from "../types.js";
 import { sub, length, normalize, dot, add, scale } from "../vec2.js";
-import { blocksProjectile } from "../collision-grid.js";
+import { blocksProjectile, isBlocked } from "../collision-grid.js";
 
 export interface RayHit {
   readonly entityId: string;
@@ -20,7 +20,8 @@ export function raycast(
   range: number,
   entities: ReadonlyMap<string, Entity>,
   grid: GridState,
-  excludeId?: string
+  excludeId?: string,
+  ignoreCoverRange?: number
 ): RayResult {
   const dirNorm = normalize(direction);
   const step = grid.cellSize / 2;
@@ -61,7 +62,10 @@ export function raycast(
     const pos = add(origin, scale(dirNorm, dist));
     const cx = Math.floor(pos.x / grid.cellSize);
     const cy = Math.floor(pos.y / grid.cellSize);
-    if (blocksProjectile(grid, cx, cy)) {
+    const blocked = ignoreCoverRange && dist <= ignoreCoverRange
+      ? isBlocked(grid, cx, cy)
+      : blocksProjectile(grid, cx, cy);
+    if (blocked) {
       wallDistance = dist;
       break;
     }
@@ -83,9 +87,10 @@ export function raycastToEntity(
   range: number,
   entities: ReadonlyMap<string, Entity>,
   grid: GridState,
-  excludeId?: string
+  excludeId?: string,
+  ignoreCoverRange?: number
 ): RayHit | null {
-  const result = raycast(origin, direction, range, entities, grid, excludeId);
+  const result = raycast(origin, direction, range, entities, grid, excludeId, ignoreCoverRange);
 
   if (!result.hit) return null;
   if (result.wallDistance !== null && result.wallDistance < result.hit.distance) return null;

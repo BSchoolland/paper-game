@@ -25,6 +25,7 @@ export interface WeaponDefinition {
   readonly shape: CombatShapeDefinition;
   readonly damage: number;
   readonly actionCost: number;
+  readonly ignoreCoverRange?: number;
 }
 
 export interface Entity {
@@ -79,6 +80,7 @@ export const BOW: WeaponDefinition = {
   shape: { kind: "point", range: 300 },
   damage: 20,
   actionCost: 1,
+  ignoreCoverRange: 40,
 };
 
 export interface UnitTemplate {

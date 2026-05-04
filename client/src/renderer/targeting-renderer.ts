@@ -1,4 +1,4 @@
-import { Graphics } from "pixi.js";
+import type { Graphics } from "pixi.js";
 import type { Entity, GameState, Vec2 } from "shared";
 import { normalize, sub, length, raycast } from "shared";
 import {
@@ -12,18 +12,18 @@ import {
   drawXMark,
 } from "./sketch-utils.js";
 
-export function createTargetingPreview(
+export function drawTargetingPreview(
+  g: Graphics,
   entity: Entity,
   mouseWorld: Vec2,
   state: GameState
-): Graphics | null {
+): void {
   const dir = sub(mouseWorld, entity.position);
-  if (length(dir) < 1) return null;
+  if (length(dir) < 1) return;
 
   const norm = normalize(dir);
   const baseAngle = Math.atan2(norm.y, norm.x);
   const shape = entity.weapon.shape;
-  const g = new Graphics();
 
   switch (shape.kind) {
     case "sector": {
@@ -77,7 +77,8 @@ export function createTargetingPreview(
         shape.range,
         state.entities,
         state.grid,
-        entity.id
+        entity.id,
+        entity.weapon.ignoreCoverRange
       );
 
       const endX = result.endPoint.x;
@@ -113,6 +114,4 @@ export function createTargetingPreview(
       break;
     }
   }
-
-  return g;
 }

@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite } from "pixi.js";
-import type { Entity, GridState, Vec2 } from "shared";
+import type { GridState, Vec2 } from "shared";
 import { CELL_WALL, CELL_COVER } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
@@ -7,16 +7,9 @@ import {
   createMapObjects,
   getBottomY,
 } from "./grid-renderer.js";
-import {
-  type EntityVisual,
-  createEntityVisual,
-  updateEntityVisual,
-  triggerMove,
-  triggerAttack,
-  triggerHit,
-} from "./entity-renderer.js";
-import { createTargetingPreview } from "./targeting-renderer.js";
-import { createMovePreview } from "./move-preview-renderer.js";
+import { EntityManager } from "./entity-manager.js";
+import { drawTargetingPreview } from "./targeting-renderer.js";
+import { drawMovePreview } from "./move-preview-renderer.js";
 
 const PADDING = 60;
 
@@ -25,11 +18,12 @@ export class GameRenderer {
   private backgroundLayer = new Container();
   private sortableLayer = new Container();
   private overlayLayer = new Container();
+  private targetingGfx = new Graphics();
+  private moveGfx = new Graphics();
   private scale = 1;
   private offsetX = 0;
   private offsetY = 0;
-  private entityVisuals = new Map<string, EntityVisual>();
-  private previousEntities = new Map<string, Entity>();
+  private entities: EntityManager;
   private mapObjectSprites: Sprite[] = [];
   private debugLayer = new Container();
   private debugVisible = false;
@@ -37,18 +31,27 @@ export class GameRenderer {
   constructor(
     private app: Application,
     private clientState: ClientState
-  ) {}
+  ) {
+    this.entities = new EntityManager(this.sortableLayer);
+  }
 
   init() {
     this.app.stage.addChild(this.worldContainer);
     this.rebuildGrid();
     this.layout();
-    this.syncEntities();
+    this.entities.sync(
+      this.clientState.getState(),
+      this.clientState.selectedEntityId
+    );
 
     this.app.ticker.add((ticker) => {
       const dt = ticker.deltaTime / 60;
-      this.updateAnimations(dt);
-      this.depthSort();
+      this.entities.tick(
+        this.clientState.getState(),
+        this.clientState.selectedEntityId,
+        dt
+      );
+      this.entities.depthSort();
     });
 
     window.addEventListener("resize", () => {
@@ -83,6 +86,11 @@ export class GameRenderer {
   }
 
   rebuildGrid() {
+    this.targetingGfx.removeFromParent();
+    this.moveGfx.removeFromParent();
+    for (const child of this.worldContainer.children) {
+      child.destroy({ children: true });
+    }
     this.worldContainer.removeChildren();
     const state = this.clientState.getState();
     const grid = state.grid;
@@ -99,8 +107,11 @@ export class GameRenderer {
       this.sortableLayer.addChild(sprite);
     }
     this.worldContainer.addChild(this.sortableLayer);
+    this.entities.setLayer(this.sortableLayer);
 
     this.overlayLayer = new Container();
+    this.overlayLayer.addChild(this.targetingGfx);
+    this.overlayLayer.addChild(this.moveGfx);
     this.worldContainer.addChild(this.overlayLayer);
 
     this.debugLayer = new Container();
@@ -110,104 +121,17 @@ export class GameRenderer {
   }
 
   render() {
-    this.syncEntities();
+    this.entities.sync(
+      this.clientState.getState(),
+      this.clientState.selectedEntityId
+    );
     this.renderOverlay({ x: 0, y: 0 });
     this.debugLayer.visible = this.clientState.showDebugWalls;
   }
 
-  private syncEntities() {
-    const state = this.clientState.getState();
-    const currentEntities = state.entities;
-
-    for (const [id, visual] of this.entityVisuals) {
-      if (!currentEntities.has(id)) {
-        this.sortableLayer.removeChild(visual.container);
-        visual.container.destroy({ children: true });
-        this.entityVisuals.delete(id);
-      }
-    }
-
-    for (const [id, entity] of currentEntities) {
-      let visual = this.entityVisuals.get(id);
-
-      if (!visual) {
-        visual = createEntityVisual(entity);
-        this.entityVisuals.set(id, visual);
-        this.sortableLayer.addChild(visual.container);
-      }
-
-      const prev = this.previousEntities.get(id);
-      if (prev) {
-        const dx = entity.position.x - prev.position.x;
-        const dy = entity.position.y - prev.position.y;
-        if (dx * dx + dy * dy > 1) {
-          triggerMove(
-            visual,
-            prev.position.x,
-            prev.position.y,
-            entity.position.x,
-            entity.position.y
-          );
-        }
-
-        if (entity.hp < prev.hp) {
-          triggerHit(visual);
-        }
-
-        if (
-          entity.actionsRemaining < prev.actionsRemaining &&
-          prev.actionsRemaining > 0
-        ) {
-          const aimX = this.findAttackTarget(entity, currentEntities);
-          triggerAttack(visual, aimX);
-        }
-      }
-
-      const isSelected = entity.id === this.clientState.selectedEntityId;
-      updateEntityVisual(visual, entity, isSelected, 0);
-    }
-
-    this.previousEntities = new Map(currentEntities);
-  }
-
-  private depthSort() {
-    const footOffset = 272 * 0.2 * (1 - 0.75);
-    for (const visual of this.entityVisuals.values()) {
-      visual.container.zIndex = visual.container.position.y + footOffset;
-    }
-  }
-
-  private findAttackTarget(
-    attacker: Entity,
-    entities: ReadonlyMap<string, Entity>
-  ): number {
-    let closestDist = Infinity;
-    let closestX = attacker.position.x + 100;
-    for (const e of entities.values()) {
-      if (e.teamId === attacker.teamId || e.id === attacker.id) continue;
-      const dx = e.position.x - attacker.position.x;
-      const dy = e.position.y - attacker.position.y;
-      const dist = dx * dx + dy * dy;
-      if (dist < closestDist) {
-        closestDist = dist;
-        closestX = e.position.x;
-      }
-    }
-    return closestX;
-  }
-
-  private updateAnimations(dt: number) {
-    const state = this.clientState.getState();
-    for (const [id, visual] of this.entityVisuals) {
-      const entity = state.entities.get(id);
-      if (!entity) continue;
-      const isSelected = id === this.clientState.selectedEntityId;
-      updateEntityVisual(visual, entity, isSelected, dt);
-    }
-  }
-
   renderOverlay(mouseWorld: Vec2) {
-    this.overlayLayer.removeChildren();
+    this.targetingGfx.clear();
+    this.moveGfx.clear();
     const state = this.clientState.getState();
     const selectedId = this.clientState.selectedEntityId;
 
@@ -219,14 +143,12 @@ export class GameRenderer {
       this.clientState.inputMode === "attack" &&
       entity.actionsRemaining > 0
     ) {
-      const preview = createTargetingPreview(entity, mouseWorld, state);
-      if (preview) this.overlayLayer.addChild(preview);
+      drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state);
     } else if (
       this.clientState.inputMode === "select" &&
       entity.movementRemaining > 1
     ) {
-      const preview = createMovePreview(entity, mouseWorld, state);
-      this.overlayLayer.addChild(preview);
+      drawMovePreview(this.moveGfx, entity, mouseWorld, state);
     }
   }
 

@@ -1,4 +1,4 @@
-import { Graphics } from "pixi.js";
+import type { Graphics } from "pixi.js";
 import type { Entity, GameState, Vec2 } from "shared";
 import {
   clampToMovementRange,
@@ -34,12 +34,12 @@ function isDestinationValid(
   return true;
 }
 
-export function createMovePreview(
+export function drawMovePreview(
+  g: Graphics,
   entity: Entity,
   mouseWorld: Vec2,
   state: GameState
-): Graphics {
-  const g = new Graphics();
+): void {
   const grid = state.grid;
   const cs = grid.cellSize;
   for (let cy = 0; cy < grid.height; cy++) {
@@ -100,6 +100,4 @@ export function createMovePreview(
 
   g.circle(clamped.x, clamped.y, 2.5);
   g.fill({ color, alpha: 0.7 });
-
-  return g;
 }

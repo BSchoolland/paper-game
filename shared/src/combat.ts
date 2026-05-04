@@ -40,7 +40,8 @@ export function resolveWeaponAttack(
         shape.range,
         entities,
         grid,
-        attacker.id
+        attacker.id,
+        weapon.ignoreCoverRange
       );
       if (!hit) return [];
       const target = entities.get(hit.entityId);
