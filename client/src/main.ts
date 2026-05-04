@@ -1,5 +1,6 @@
 import { Application } from "pixi.js";
 import { createInitialGameState } from "shared";
+import { LocalGameStore } from "./state/game-store.js";
 import { ClientState } from "./state/client-state.js";
 import { GameRenderer } from "./renderer/game-renderer.js";
 import { InputManager } from "./input/input-manager.js";
@@ -20,7 +21,8 @@ async function init() {
 
   await Promise.all([loadSpriteAssets(), loadMapAssets()]);
 
-  const clientState = new ClientState(createInitialGameState());
+  const gameStore = new LocalGameStore(createInitialGameState());
+  const clientState = new ClientState(gameStore);
   const renderer = new GameRenderer(app, clientState);
   const hud = new Hud(container, clientState);
   const input = new InputManager(app.canvas, clientState, renderer, () => {

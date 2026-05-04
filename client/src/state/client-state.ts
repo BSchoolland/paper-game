@@ -1,32 +1,25 @@
 import type { GameState, PlayerAction } from "shared";
-import { resolveAction } from "shared";
+import type { GameStore } from "./game-store.js";
 
 type Listener = () => void;
 
 export class ClientState {
-  private state: GameState;
   private listeners: Listener[] = [];
-  private initialState: GameState;
 
   selectedEntityId: string | null = null;
   inputMode: "select" | "attack" = "select";
   showDebugWalls = false;
 
-  constructor(initialState: GameState) {
-    this.state = initialState;
-    this.initialState = initialState;
+  constructor(private gameStore: GameStore) {
+    gameStore.subscribe(() => this.notify());
   }
 
   getState(): GameState {
-    return this.state;
+    return this.gameStore.getState();
   }
 
   dispatch(action: PlayerAction) {
-    const next = resolveAction(this.state, action);
-    if (next !== this.state) {
-      this.state = next;
-      this.notify();
-    }
+    this.gameStore.dispatch(action);
   }
 
   selectEntity(entityId: string | null) {
@@ -53,10 +46,9 @@ export class ClientState {
   }
 
   reset() {
-    this.state = this.initialState;
+    this.gameStore.reset();
     this.selectedEntityId = null;
     this.inputMode = "select";
-    this.notify();
   }
 
   subscribe(listener: Listener) {

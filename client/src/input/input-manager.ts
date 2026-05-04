@@ -109,7 +109,7 @@ export class InputManager {
     if (!this.clientState.getState().entities.has(entityId)) {
       this.clientState.selectEntity(null);
     } else {
-      this.clientState.inputMode = "select";
+      this.clientState.selectEntity(entityId);
     }
   }
 }
