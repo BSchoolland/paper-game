@@ -1,19 +1,21 @@
 import type { ClientState } from "../state/client-state.js";
 
-const PANEL_BG = "rgba(26, 20, 14, 0.88)";
-const PANEL_BORDER = "1px solid rgba(139, 115, 85, 0.4)";
-const PANEL_RADIUS = "8px";
-const FONT = "'Segoe UI', system-ui, sans-serif";
+const PANEL_BG = "rgba(245, 235, 215, 0.92)";
+const PANEL_BORDER = "1px solid rgba(74, 55, 40, 0.3)";
+const PANEL_RADIUS = "4px";
+const FONT = "Georgia, 'Times New Roman', serif";
+const INK = "#4a3728";
+const INK_LIGHT = "#6b5a48";
 
 const TEAM_STYLES = {
-  red: { color: "#e74c3c", label: "RED" },
-  blue: { color: "#3498db", label: "BLUE" },
+  red: { color: "#8b3a3a", label: "RED" },
+  blue: { color: "#3a5a8b", label: "BLUE" },
 } as const;
 
 const WEAPON_COLORS: Record<string, string> = {
-  "short-sword": "#f1c40f",
-  spear: "#e67e22",
-  bow: "#3498db",
+  "short-sword": "#6b5a48",
+  spear: "#6b5a48",
+  bow: "#6b5a48",
 };
 
 export class Hud {
@@ -29,7 +31,7 @@ export class Hud {
     this.container = document.createElement("div");
     this.container.style.cssText = `
       position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-      pointer-events: none; font-family: ${FONT}; color: #d4c4a8;
+      pointer-events: none; font-family: ${FONT}; color: ${INK};
     `;
 
     this.info = document.createElement("div");
@@ -38,7 +40,7 @@ export class Hud {
       background: ${PANEL_BG}; border: ${PANEL_BORDER};
       padding: 12px 16px; border-radius: ${PANEL_RADIUS};
       font-size: 13px; line-height: 1.7; min-width: 220px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      box-shadow: 0 2px 8px rgba(74, 55, 40, 0.15);
     `;
     this.container.appendChild(this.info);
 
@@ -48,15 +50,17 @@ export class Hud {
       display: flex; gap: 6px; pointer-events: auto;
     `;
 
-    this.attackBtn = this.makeButton("Attack (A)", "#f39c12");
+    this.attackBtn = this.makeButton("Attack (A)", "#8b3a3a");
     controls.appendChild(this.attackBtn);
-    this.attackBtn.addEventListener("click", () => clientState.toggleAttackMode());
+    this.attackBtn.addEventListener("click", () =>
+      clientState.toggleAttackMode()
+    );
 
-    this.endTurnBtn = this.makeButton("End Turn (E)", "#8fbc6a");
+    this.endTurnBtn = this.makeButton("End Turn (E)", "#5a7a3a");
     controls.appendChild(this.endTurnBtn);
     this.endTurnBtn.addEventListener("click", () => clientState.endTurn());
 
-    const resetBtn = this.makeButton("Reset (R)", "#95a5a6");
+    const resetBtn = this.makeButton("Reset (R)", "#6b5a48");
     controls.appendChild(resetBtn);
     resetBtn.addEventListener("click", () => clientState.reset());
 
@@ -67,10 +71,11 @@ export class Hud {
       position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
       background: ${PANEL_BG}; border: ${PANEL_BORDER};
       padding: 6px 14px; border-radius: ${PANEL_RADIUS};
-      font-size: 11px; color: #7a6f60; white-space: nowrap;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      font-size: 11px; color: ${INK_LIGHT}; white-space: nowrap;
+      box-shadow: 0 2px 6px rgba(74, 55, 40, 0.12);
     `;
-    help.textContent = "Click: select · Right-click: move · A: attack · E: end turn · R: reset · Esc: cancel";
+    help.textContent =
+      "Click: select · Right-click: move · A: attack · E: end turn · R: reset · Esc: cancel";
     this.container.appendChild(help);
 
     parent.appendChild(this.container);
@@ -80,21 +85,21 @@ export class Hud {
     const btn = document.createElement("button");
     btn.textContent = text;
     btn.style.cssText = `
-      background: ${PANEL_BG}; color: #d4c4a8;
-      border: 1px solid rgba(139, 115, 85, 0.3);
-      padding: 8px 14px; border-radius: 6px; cursor: pointer;
-      font-family: ${FONT}; font-size: 12px; font-weight: 500;
+      background: ${PANEL_BG}; color: ${INK};
+      border: 1px solid rgba(74, 55, 40, 0.25);
+      padding: 8px 14px; border-radius: ${PANEL_RADIUS}; cursor: pointer;
+      font-family: ${FONT}; font-size: 12px; font-weight: normal;
       transition: border-color 0.15s, background 0.15s;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      box-shadow: 0 1px 4px rgba(74, 55, 40, 0.12);
     `;
     btn.dataset.accent = accentColor;
     btn.addEventListener("mouseenter", () => {
       btn.style.borderColor = accentColor;
-      btn.style.background = "rgba(40, 32, 22, 0.95)";
+      btn.style.background = "rgba(245, 235, 215, 0.98)";
     });
     btn.addEventListener("mouseleave", () => {
       if (!btn.dataset.active) {
-        btn.style.borderColor = "rgba(139, 115, 85, 0.3)";
+        btn.style.borderColor = "rgba(74, 55, 40, 0.25)";
         btn.style.background = PANEL_BG;
       }
     });
@@ -110,7 +115,7 @@ export class Hud {
 
     let html = `<div style="font-size:15px;font-weight:600;color:${teamStyle.color};letter-spacing:0.5px;">`;
     html += `${teamStyle.label}'s Turn`;
-    html += `<span style="color:#7a6f60;font-weight:400;font-size:12px;margin-left:8px;">Turn ${state.turnNumber}</span>`;
+    html += `<span style="color:${INK_LIGHT};font-weight:400;font-size:12px;margin-left:8px;">Turn ${state.turnNumber}</span>`;
     html += `</div>`;
 
     if (state.winner) {
@@ -121,27 +126,30 @@ export class Hud {
     }
 
     if (selected) {
-      const weaponColor = WEAPON_COLORS[selected.weapon.id] ?? "#d4c4a8";
-      html += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(139,115,85,0.2);">`;
+      const weaponColor = WEAPON_COLORS[selected.weapon.id] ?? INK;
+      html += `<div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(74,55,40,0.15);">`;
       html += `<div style="font-weight:600;font-size:13px;">${selected.name}</div>`;
-      html += `<div style="font-size:11px;color:${weaponColor};margin-top:2px;">${selected.weapon.name}</div>`;
-      html += `<div style="margin-top:6px;font-size:12px;color:#a89880;">`;
-      html += `HP <span style="color:#d4c4a8">${selected.hp}/${selected.maxHp}</span>`;
-      html += ` · Move <span style="color:#d4c4a8">${Math.round(selected.movementRemaining)}</span>`;
-      html += ` · Act <span style="color:#d4c4a8">${selected.actionsRemaining}</span>`;
+      html += `<div style="font-size:11px;color:${weaponColor};margin-top:2px;font-style:italic;">${selected.weapon.name}</div>`;
+      html += `<div style="margin-top:6px;font-size:12px;color:${INK_LIGHT};">`;
+      html += `HP <span style="color:${INK}">${selected.hp}/${selected.maxHp}</span>`;
+      html += ` · Move <span style="color:${INK}">${Math.round(selected.movementRemaining)}</span>`;
+      html += ` · Act <span style="color:${INK}">${selected.actionsRemaining}</span>`;
       html += `</div></div>`;
     }
 
     if (this.clientState.inputMode === "attack") {
-      const weaponColor = selected ? (WEAPON_COLORS[selected.weapon.id] ?? "#f39c12") : "#f39c12";
-      html += `<div style="margin-top:8px;font-size:11px;color:${weaponColor};font-weight:600;letter-spacing:0.5px;">ATTACK MODE</div>`;
+      html += `<div style="margin-top:8px;font-size:11px;color:#8b3a3a;font-weight:600;letter-spacing:0.5px;font-style:italic;">ATTACK MODE</div>`;
     }
 
     this.info.innerHTML = html;
 
     const isAttackMode = this.clientState.inputMode === "attack";
-    this.attackBtn.style.borderColor = isAttackMode ? "#f39c12" : "rgba(139, 115, 85, 0.3)";
-    this.attackBtn.style.background = isAttackMode ? "rgba(243, 156, 18, 0.15)" : PANEL_BG;
+    this.attackBtn.style.borderColor = isAttackMode
+      ? "#8b3a3a"
+      : "rgba(74, 55, 40, 0.25)";
+    this.attackBtn.style.background = isAttackMode
+      ? "rgba(139, 58, 58, 0.1)"
+      : PANEL_BG;
     this.attackBtn.dataset.active = isAttackMode ? "1" : "";
   }
 }

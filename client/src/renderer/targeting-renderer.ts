@@ -2,12 +2,119 @@ import { Graphics } from "pixi.js";
 import type { Entity, GameState, Vec2 } from "shared";
 import { normalize, sub, length, raycast } from "shared";
 
-const SWORD_COLOR = 0xf1c40f;
-const SPEAR_COLOR = 0xe67e22;
-const BOW_COLOR = 0x5dade2;
-const HIT_ENEMY = 0xe74c3c;
-const HIT_WALL = 0x7a6f60;
-const HIT_FRIENDLY = 0x5dade2;
+const PENCIL = 0x4a3728;
+const PENCIL_HIT = 0x8b3a3a;
+const PENCIL_LIGHT = 0x6b5a48;
+
+function seededRand(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return ((s >>> 0) / 0xffffffff - 0.5) * 2;
+  };
+}
+
+function drawRoughLine(
+  g: Graphics,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  wobble: number,
+  seed: number
+) {
+  const rand = seededRand(seed);
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const segments = Math.max(4, Math.floor(dist / 8));
+  const perpX = -dy / dist;
+  const perpY = dx / dist;
+
+  g.moveTo(x1 + rand() * wobble * perpX, y1 + rand() * wobble * perpY);
+  for (let i = 1; i <= segments; i++) {
+    const t = i / segments;
+    const x = x1 + dx * t + rand() * wobble * perpX;
+    const y = y1 + dy * t + rand() * wobble * perpY;
+    g.lineTo(x, y);
+  }
+}
+
+function drawRoughArc(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  radius: number,
+  startAngle: number,
+  endAngle: number,
+  wobble: number,
+  segments: number,
+  seed: number
+) {
+  const rand = seededRand(seed);
+  const span = endAngle - startAngle;
+  for (let i = 0; i <= segments; i++) {
+    const angle = startAngle + (i / segments) * span;
+    const r = radius + rand() * wobble;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+}
+
+function drawRoughRect(
+  g: Graphics,
+  corners: Vec2[],
+  wobble: number,
+  seed: number
+) {
+  const rand = seededRand(seed);
+  for (let i = 0; i < corners.length; i++) {
+    const c = corners[i]!;
+    const x = c.x + rand() * wobble;
+    const y = c.y + rand() * wobble;
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+  const first = corners[0]!;
+  g.lineTo(first.x + rand() * wobble, first.y + rand() * wobble);
+}
+
+function drawRoughCircle(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  radius: number,
+  wobble: number,
+  segments: number,
+  seed: number
+) {
+  const rand = seededRand(seed);
+  for (let i = 0; i <= segments; i++) {
+    const angle = (i / segments) * Math.PI * 2;
+    const r = radius + rand() * wobble;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+}
+
+function drawXMark(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  size: number,
+  seed: number
+) {
+  const rand = seededRand(seed);
+  const w = 0.8;
+  g.moveTo(cx - size + rand() * w, cy - size + rand() * w);
+  g.lineTo(cx + size + rand() * w, cy + size + rand() * w);
+  g.moveTo(cx + size + rand() * w, cy - size + rand() * w);
+  g.lineTo(cx - size + rand() * w, cy + size + rand() * w);
+}
 
 export function createTargetingPreview(
   entity: Entity,
@@ -24,17 +131,22 @@ export function createTargetingPreview(
 
   switch (shape.kind) {
     case "sector": {
+      const segments = 24;
       g.moveTo(entity.position.x, entity.position.y);
-      g.arc(
+      drawRoughArc(
+        g,
         entity.position.x,
         entity.position.y,
         shape.radius,
         baseAngle - shape.halfAngle,
-        baseAngle + shape.halfAngle
+        baseAngle + shape.halfAngle,
+        1.5,
+        segments,
+        17
       );
       g.lineTo(entity.position.x, entity.position.y);
-      g.fill({ color: SWORD_COLOR, alpha: 0.12 });
-      g.stroke({ color: SWORD_COLOR, alpha: 0.35, width: 1.5 });
+      g.fill({ color: PENCIL, alpha: 0.1 });
+      g.stroke({ color: PENCIL, alpha: 0.5, width: 1.2 });
       break;
     }
     case "rectangle": {
@@ -46,18 +158,20 @@ export function createTargetingPreview(
 
       const corners = [
         { x: x0 + perpX * hw, y: y0 + perpY * hw },
-        { x: x0 + norm.x * shape.length + perpX * hw, y: y0 + norm.y * shape.length + perpY * hw },
-        { x: x0 + norm.x * shape.length - perpX * hw, y: y0 + norm.y * shape.length - perpY * hw },
+        {
+          x: x0 + norm.x * shape.length + perpX * hw,
+          y: y0 + norm.y * shape.length + perpY * hw,
+        },
+        {
+          x: x0 + norm.x * shape.length - perpX * hw,
+          y: y0 + norm.y * shape.length - perpY * hw,
+        },
         { x: x0 - perpX * hw, y: y0 - perpY * hw },
       ];
 
-      g.moveTo(corners[0]!.x, corners[0]!.y);
-      g.lineTo(corners[1]!.x, corners[1]!.y);
-      g.lineTo(corners[2]!.x, corners[2]!.y);
-      g.lineTo(corners[3]!.x, corners[3]!.y);
-      g.closePath();
-      g.fill({ color: SPEAR_COLOR, alpha: 0.12 });
-      g.stroke({ color: SPEAR_COLOR, alpha: 0.35, width: 1.5 });
+      drawRoughRect(g, corners, 1, 23);
+      g.fill({ color: PENCIL, alpha: 0.1 });
+      g.stroke({ color: PENCIL, alpha: 0.5, width: 1.2 });
       break;
     }
     case "point": {
@@ -73,27 +187,32 @@ export function createTargetingPreview(
       const endX = result.endPoint.x;
       const endY = result.endPoint.y;
 
-      g.moveTo(entity.position.x, entity.position.y);
-      g.lineTo(endX, endY);
-      g.stroke({ color: BOW_COLOR, alpha: 0.45, width: 2 });
+      drawRoughLine(
+        g,
+        entity.position.x,
+        entity.position.y,
+        endX,
+        endY,
+        0.8,
+        31
+      );
+      g.stroke({ color: PENCIL, alpha: 0.6, width: 1.2 });
 
       if (result.hit && result.hit.entityId !== entity.id) {
         const hitEntity = state.entities.get(result.hit.entityId);
         if (hitEntity && hitEntity.teamId !== entity.teamId) {
-          g.circle(endX, endY, 7);
-          g.fill({ color: HIT_ENEMY, alpha: 0.55 });
-          g.circle(endX, endY, 7);
-          g.stroke({ color: HIT_ENEMY, alpha: 0.3, width: 1 });
+          drawXMark(g, endX, endY, 6, 37);
+          g.stroke({ color: PENCIL_HIT, alpha: 0.7, width: 1.5 });
         } else {
-          g.circle(endX, endY, 5);
-          g.fill({ color: HIT_FRIENDLY, alpha: 0.25 });
+          drawRoughCircle(g, endX, endY, 5, 0.8, 12, 41);
+          g.stroke({ color: PENCIL_LIGHT, alpha: 0.5, width: 1.2 });
         }
       } else if (result.wallDistance !== null) {
-        g.circle(endX, endY, 4);
-        g.fill({ color: HIT_WALL, alpha: 0.5 });
+        drawXMark(g, endX, endY, 4, 43);
+        g.stroke({ color: PENCIL_LIGHT, alpha: 0.6, width: 1.2 });
       } else {
-        g.circle(endX, endY, 3);
-        g.fill({ color: BOW_COLOR, alpha: 0.35 });
+        g.circle(endX, endY, 2.5);
+        g.fill({ color: PENCIL, alpha: 0.5 });
       }
       break;
     }

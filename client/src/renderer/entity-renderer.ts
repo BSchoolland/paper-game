@@ -71,7 +71,7 @@ export function createEntityVisual(entity: Entity): EntityVisual {
 
   const label = new Text({
     text: entity.name,
-    style: { fontSize: 9, fill: 0xbfae98, fontFamily: "monospace" },
+    style: { fontSize: 9, fill: 0x4a3728, fontFamily: "Georgia, serif" },
   });
   label.anchor.set(0.5);
   label.position.set(0, entity.collisionRadius + 12);
@@ -136,8 +136,18 @@ export function updateEntityVisual(
   visual.selectionRing.visible = isSelected;
   if (isSelected) {
     visual.selectionRing.clear();
-    visual.selectionRing.circle(0, 0, entity.collisionRadius + 4);
-    visual.selectionRing.stroke({ color: 0xf1c40f, width: 2.5 });
+    const ringColor = entity.teamId === "red" ? 0x8b3a3a : 0x3a5a8b;
+    drawRoughEllipse(
+      visual.selectionRing,
+      0,
+      3,
+      entity.collisionRadius + 6,
+      entity.collisionRadius * 0.7,
+      1,
+      24,
+      entity.id.length
+    );
+    visual.selectionRing.stroke({ color: ringColor, width: 1.5 });
   }
 
   visual.lastHp = entity.hp;
@@ -193,14 +203,38 @@ function setAnimState(visual: EntityVisual, state: AnimState): void {
   visual.animState = state;
 }
 
+function drawRoughEllipse(
+  g: Graphics,
+  cx: number,
+  cy: number,
+  rx: number,
+  ry: number,
+  wobble: number,
+  segments: number,
+  seed: number
+) {
+  let s = seed * 1664525 + 1013904223;
+  const rand = () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return ((s >>> 0) / 0xffffffff - 0.5) * 2;
+  };
+  for (let i = 0; i <= segments; i++) {
+    const angle = (i / segments) * Math.PI * 2;
+    const x = cx + Math.cos(angle) * (rx + rand() * wobble);
+    const y = cy + Math.sin(angle) * (ry + rand() * wobble);
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+}
+
 function drawHpBar(bg: Graphics, bar: Graphics, entity: Entity): void {
   bg.clear();
-  bg.roundRect(-HP_BAR_W / 2 - 1, HP_BAR_Y - 1, HP_BAR_W + 2, HP_BAR_H + 2, 2);
-  bg.fill({ color: 0x1a1a1a, alpha: 0.8 });
+  bg.roundRect(-HP_BAR_W / 2 - 1, HP_BAR_Y - 1, HP_BAR_W + 2, HP_BAR_H + 2, 1);
+  bg.fill({ color: 0x3d3528, alpha: 0.7 });
 
   const hpRatio = entity.hp / entity.maxHp;
   const hpColor =
-    hpRatio > 0.6 ? 0x27ae60 : hpRatio > 0.3 ? 0xf39c12 : 0xe74c3c;
+    hpRatio > 0.6 ? 0x5a7a3a : hpRatio > 0.3 ? 0x8b7a3a : 0x8b3a3a;
 
   bar.clear();
   if (hpRatio > 0) {
