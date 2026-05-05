@@ -1,13 +1,43 @@
-import { Application, Container, Graphics, Sprite, Texture, Assets } from "pixi.js";
+import { Application, Container, Graphics, Texture, Assets } from "pixi.js";
 
 const DEFAULT_MAP_ZOOM = 2;
 const MIN_MAP_ZOOM = 0.85;
 const MAX_MAP_ZOOM = 3.5;
 const ZOOM_STEP = 1.12;
 const DRAG_THRESHOLD = 4;
+const PAN_SPEED = 6;
+
+function averageTextureColor(tex: Texture): number {
+  const source = tex.source.resource;
+  if (!(source instanceof HTMLImageElement || source instanceof ImageBitmap)) {
+    return 0x8fae6b;
+  }
+  const canvas = document.createElement("canvas");
+  const w = Math.min(tex.width, 64);
+  const h = Math.min(tex.height, 64);
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  ctx.drawImage(source as CanvasImageSource, 0, 0, w, h);
+  const data = ctx.getImageData(0, 0, w, h).data;
+  let r = 0, g = 0, b = 0, count = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    if (data[i + 3]! < 128) continue;
+    r += data[i]!;
+    g += data[i + 1]!;
+    b += data[i + 2]!;
+    count++;
+  }
+  if (count === 0) return 0x8fae6b;
+  r = Math.round(r / count);
+  g = Math.round(g / count);
+  b = Math.round(b / count);
+  return (r << 16) | (g << 8) | b;
+}
 
 export class HexCamera {
-  private bgSprite: Sprite | null = null;
+  private bgGfx = new Graphics();
+  private bgColor = 0x8fae6b;
   private maskGfx = new Graphics();
   private scale = 1;
   private offsetX = 0;
@@ -24,14 +54,16 @@ export class HexCamera {
   private movedDuringDrag = false;
   private suppressNextClick = false;
   private viewChangedCallback: (() => void) | null = null;
+  private keysDown = new Set<string>();
+  private keyPanRAF: number | null = null;
 
   constructor(private app: Application, private worldContainer: Container) {}
 
   init() {
     const bgTex: Texture = Assets.get("map-background");
-    this.bgSprite = new Sprite(bgTex);
-    this.bgSprite.anchor.set(0.5);
-    this.app.stage.addChild(this.bgSprite);
+    this.bgColor = averageTextureColor(bgTex);
+    this.drawBg();
+    this.app.stage.addChild(this.bgGfx);
 
     this.app.stage.addChild(this.worldContainer);
 
@@ -76,15 +108,28 @@ export class HexCamera {
       },
       { passive: false }
     );
+
+    window.addEventListener("keydown", (e) => {
+      const key = e.key.toLowerCase();
+      if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
+        if (!this.worldContainer.visible) return;
+        this.keysDown.add(key);
+        this.startKeyPan();
+      }
+    });
+
+    window.addEventListener("keyup", (e) => {
+      this.keysDown.delete(e.key.toLowerCase());
+    });
   }
 
   show() {
-    if (this.bgSprite) this.bgSprite.visible = true;
+    this.bgGfx.visible = true;
     this.worldContainer.visible = true;
   }
 
   hide() {
-    if (this.bgSprite) this.bgSprite.visible = false;
+    this.bgGfx.visible = false;
     this.worldContainer.visible = false;
   }
 
@@ -122,6 +167,29 @@ export class HexCamera {
     const shouldSuppress = this.suppressNextClick;
     this.suppressNextClick = false;
     return shouldSuppress;
+  }
+
+  private startKeyPan() {
+    if (this.keyPanRAF !== null) return;
+    const tick = () => {
+      this.tickKeyPan();
+      if (this.keysDown.size > 0) {
+        this.keyPanRAF = requestAnimationFrame(tick);
+      } else {
+        this.keyPanRAF = null;
+      }
+    };
+    this.keyPanRAF = requestAnimationFrame(tick);
+  }
+
+  private tickKeyPan() {
+    let dx = 0;
+    let dy = 0;
+    if (this.keysDown.has("a") || this.keysDown.has("arrowleft")) dx += PAN_SPEED;
+    if (this.keysDown.has("d") || this.keysDown.has("arrowright")) dx -= PAN_SPEED;
+    if (this.keysDown.has("w") || this.keysDown.has("arrowup")) dy += PAN_SPEED;
+    if (this.keysDown.has("s") || this.keysDown.has("arrowdown")) dy -= PAN_SPEED;
+    if (dx !== 0 || dy !== 0) this.panBy(dx, dy);
   }
 
   private panBy(dx: number, dy: number) {
@@ -174,9 +242,7 @@ export class HexCamera {
     const screenW = this.app.screen.width;
     const screenH = this.app.screen.height;
 
-    if (this.bgSprite) {
-      this.bgSprite.position.set(screenW / 2, screenH / 2);
-    }
+    this.drawBg();
 
     this.offsetX = screenW / 2 - this.centeredWorldX * this.scale + this.userOffsetX;
     this.offsetY = screenH / 2 - this.centeredWorldY * this.scale + this.userOffsetY;
@@ -188,16 +254,14 @@ export class HexCamera {
     const screenW = this.app.screen.width;
     const screenH = this.app.screen.height;
     this.maskGfx.clear();
-    if (this.bgSprite) {
-      const bgW = this.bgSprite.texture.width;
-      const bgH = this.bgSprite.texture.height;
-      const bgLeft = screenW / 2 - bgW / 2;
-      const bgTop = screenH / 2 - bgH / 2;
-      this.maskGfx.rect(bgLeft, bgTop, bgW, bgH);
-    } else {
-      this.maskGfx.rect(0, 0, screenW, screenH);
-    }
+    this.maskGfx.rect(0, 0, screenW, screenH);
     this.maskGfx.fill({ color: 0xffffff });
+  }
+
+  private drawBg() {
+    this.bgGfx.clear();
+    this.bgGfx.rect(0, 0, this.app.screen.width, this.app.screen.height);
+    this.bgGfx.fill({ color: this.bgColor });
   }
 
   private notifyViewChanged() {
