@@ -1,5 +1,7 @@
 import { Application, Container, Graphics, Sprite, Texture, Assets } from "pixi.js";
 
+const MAP_ZOOM = 2;
+
 export class HexCamera {
   private bgSprite: Sprite | null = null;
   private maskGfx = new Graphics();
@@ -39,7 +41,7 @@ export class HexCamera {
       this.bgSprite.position.set(screenW / 2, screenH / 2);
     }
 
-    this.scale = 1;
+    this.scale = MAP_ZOOM;
     this.offsetX = screenW / 2 - worldX * this.scale;
     this.offsetY = screenH / 2 - worldY * this.scale;
     this.worldContainer.scale.set(this.scale);

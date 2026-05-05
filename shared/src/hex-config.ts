@@ -6,7 +6,7 @@ export interface HexSpawnEntry {
 }
 
 export const HEX_SPAWN_TABLE: readonly HexSpawnEntry[] = [
-  { type: null,               weight: 70 },
+  { type: null,               weight: 200 },
   { type: "enemy-camp",       weight: 8 },
   { type: "ruins",            weight: 5 },
   { type: "treasure",         weight: 4 },

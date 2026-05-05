@@ -1,7 +1,14 @@
-import { Application, Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
+import {
+  Application,
+  Assets,
+  Container,
+  Graphics,
+  Sprite,
+  Texture,
+} from "pixi.js";
 import type { HexCoord, HexIconType, HexMapState, HexStatus } from "shared";
-import { hexToPixel, parseHexKey, pixelToHex, isAdjacent, HEX_ICON_TYPES } from "shared";
-import { PENCIL, PENCIL_LIGHT, seededRand } from "./sketch-utils.js";
+import { hexToPixel, hexNeighbors, hexKey, parseHexKey, pixelToHex, isAdjacent, HEX_ICON_TYPES } from "shared";
+import { PENCIL, PENCIL_LIGHT } from "./sketch-utils.js";
 import { HexCamera } from "./hex-camera.js";
 import { HexPathTrail } from "./hex-path-trail.js";
 import { HexPlayerTween } from "./hex-player-tween.js";
@@ -11,28 +18,42 @@ const HEX_SIZE = 48;
 const PLAYER_COLOR = 0x8b6d30;
 const HOVER_COLOR = 0xd4a850;
 
-function coordSeed(q: number, r: number): number {
-  return ((q * 7919 + r * 104729 + 31) & 0xffffffff) >>> 0;
-}
-
-const ICON_SIZE = 48;
+const ICON_SIZE = 72;
+const DECORATION_SCALE = 0.6;
+const DECORATION_DENSITY = 1 / 3;
+const DECORATION_TINT = 0xc6c0ac;
 
 const iconTextures = new Map<HexIconType, Texture>();
+const decorationTextures = new Map<string, Texture>();
+let decorationNames: string[] = [];
 
 export async function loadMapIconAssets(): Promise<void> {
   const entries = HEX_ICON_TYPES.map((name) => ({
     alias: `map-icon-${name}`,
     src: `sprites/map-icons/${name}.png`,
   }));
-  await Assets.load(entries);
+
+  const manifestResponse = await fetch("sprites/map-decorations/manifest.json");
+  const loadedDecorationNames = (await manifestResponse.json()) as string[];
+  const decorationEntries = loadedDecorationNames.map((name) => ({
+    alias: `map-decoration-${name}`,
+    src: `sprites/map-decorations/${name}.png`,
+  }));
+
+  await Assets.load([...entries, ...decorationEntries]);
   for (const name of HEX_ICON_TYPES) {
     iconTextures.set(name, Assets.get(`map-icon-${name}`));
+  }
+  decorationNames = loadedDecorationNames;
+  for (const name of decorationNames) {
+    decorationTextures.set(name, Assets.get(`map-decoration-${name}`));
   }
 }
 
 export class HexMapRenderer {
   private worldContainer = new Container();
   private hexContainer = new Container();
+  private decorationContainer = new Container();
   private iconContainer = new Container();
   private hoverCoord: HexCoord | null = null;
   private mapState: HexMapState | null = null;
@@ -51,6 +72,7 @@ export class HexMapRenderer {
 
     this.worldContainer.addChild(this.pathTrail.layer);
     this.worldContainer.addChild(this.hexContainer);
+    this.worldContainer.addChild(this.decorationContainer);
     this.worldContainer.addChild(this.iconContainer);
     this.worldContainer.addChild(this.playerTween.idleSprite);
     this.worldContainer.addChild(this.playerTween.moveSprite);
@@ -124,9 +146,17 @@ export class HexMapRenderer {
   private drawHexes() {
     if (!this.mapState) return;
     this.hexContainer.removeChildren();
+    this.decorationContainer.removeChildren();
     this.iconContainer.removeChildren();
 
     const { hexes, playerPos, icons } = this.mapState;
+
+    // Only draw hex outlines for the player hex and its neighbors
+    const nearPlayer = new Set<string>();
+    nearPlayer.add(hexKey(playerPos));
+    for (const n of hexNeighbors(playerPos)) {
+      nearPlayer.add(hexKey(n));
+    }
 
     for (const [key, status] of Object.entries(hexes)) {
       const coord = parseHexKey(key);
@@ -138,8 +168,9 @@ export class HexMapRenderer {
         this.hoverCoord.r === coord.r;
       const isClickable = isAdjacent(playerPos, coord);
       const iconType = icons?.[key];
+      const showHex = nearPlayer.has(key);
 
-      this.drawHex(px.x, px.y, status, isPlayer, !!isHover && isClickable, coord, iconType);
+      this.drawHex(px.x, px.y, status, isPlayer, !!isHover && isClickable, coord, iconType, showHex);
     }
   }
 
@@ -150,39 +181,44 @@ export class HexMapRenderer {
     isPlayer: boolean,
     isHover: boolean,
     coord: HexCoord,
-    iconType?: HexIconType
+    iconType: HexIconType | undefined,
+    showHex: boolean
   ) {
     const gfx = new Graphics();
-    const seed = coordSeed(coord.q, coord.r);
-    const size = HEX_SIZE - 3;
+    const size = HEX_SIZE;
+    const points = this.exactHexPoints(x, y, size);
 
-    const points = this.sketchHexPoints(x, y, size, seed);
+    if (showHex) {
+      if (isPlayer) {
+        gfx.poly(points);
+        gfx.fill({ color: PLAYER_COLOR, alpha: 0.12 });
+        gfx.stroke({ color: PLAYER_COLOR, alpha: 0.7, width: 1.8 });
+      } else if (status === "explored") {
+        gfx.poly(points);
+        gfx.fill({ color: PENCIL, alpha: 0.05 });
+        gfx.stroke({ color: PENCIL, alpha: 0.45, width: 1.2 });
+      } else {
+        gfx.poly(points);
+        gfx.fill({ color: PENCIL, alpha: 0.03 });
+        gfx.stroke({ color: PENCIL_LIGHT, alpha: 0.35, width: 1.0 });
+      }
 
-    if (isPlayer) {
-      gfx.poly(points);
-      gfx.fill({ color: PLAYER_COLOR, alpha: 0.12 });
-      gfx.stroke({ color: PLAYER_COLOR, alpha: 0.7, width: 1.8 });
-
-      this.drawSecondPass(gfx, x, y, size, seed + 1, PLAYER_COLOR, 0.3);
-    } else if (status === "explored") {
-      gfx.poly(points);
-      gfx.fill({ color: PENCIL, alpha: 0.05 });
-      gfx.stroke({ color: PENCIL, alpha: 0.45, width: 1.2 });
-
-      this.drawSecondPass(gfx, x, y, size, seed + 1, PENCIL, 0.15);
+      if (isHover) {
+        const hoverPoints = this.exactHexPoints(x, y, size + 2);
+        gfx.poly(hoverPoints);
+        gfx.stroke({ color: HOVER_COLOR, alpha: 0.6, width: 2.0 });
+      }
     } else {
       gfx.poly(points);
-      gfx.fill({ color: PENCIL, alpha: 0.03 });
-      gfx.stroke({ color: PENCIL_LIGHT, alpha: 0.35, width: 1.0 });
-    }
-
-    if (isHover) {
-      const hoverPoints = this.sketchHexPoints(x, y, size + 2, seed + 7);
-      gfx.poly(hoverPoints);
-      gfx.stroke({ color: HOVER_COLOR, alpha: 0.6, width: 2.0 });
+      gfx.fill({ color: PENCIL, alpha: 0.02 });
+      gfx.stroke({ color: PENCIL_LIGHT, alpha: 0.25, width: 0.75 });
     }
 
     this.hexContainer.addChild(gfx);
+
+    if (!iconType && !isPlayer) {
+      this.drawDecoration(x, y, coord, status);
+    }
 
     if (iconType) {
       const tex = iconTextures.get(iconType);
@@ -201,54 +237,40 @@ export class HexMapRenderer {
     }
   }
 
-  private drawSecondPass(
-    gfx: Graphics,
-    x: number,
-    y: number,
-    size: number,
-    seed: number,
-    color: number,
-    alpha: number
-  ) {
-    const points2 = this.sketchHexPoints(x, y, size, seed);
-    gfx.poly(points2);
-    gfx.stroke({ color, alpha, width: 0.8 });
+  private drawDecoration(x: number, y: number, coord: HexCoord, status: HexStatus) {
+    if (decorationNames.length === 0) return;
+
+    const densityRoll = this.seededUnit(coord, 11);
+    if (densityRoll > DECORATION_DENSITY) return;
+
+    const index = Math.floor(this.seededUnit(coord, 23) * decorationNames.length);
+    const name = decorationNames[index];
+    if (!name) return;
+
+    const tex = decorationTextures.get(name);
+    if (!tex) return;
+
+    const sprite = new Sprite(tex);
+    sprite.anchor.set(0.5, 0.78);
+    sprite.x = x + (this.seededUnit(coord, 37) - 0.5) * HEX_SIZE * 0.42;
+    sprite.y = y + (this.seededUnit(coord, 41) - 0.5) * HEX_SIZE * 0.34 + HEX_SIZE * 0.16;
+    sprite.scale.set(DECORATION_SCALE);
+    sprite.tint = DECORATION_TINT;
+    sprite.alpha = status === "unexplored" ? 0.38 : 0.62;
+    this.decorationContainer.addChild(sprite);
   }
 
-  private drawQuestionMark(cx: number, cy: number, seed: number) {
-    const gfx = new Graphics();
-    const rand = seededRand(seed + 500);
-    const wobble = 0.6;
-
-    const topY = cy - 10;
-    const segments = 12;
-    for (let i = 0; i <= segments; i++) {
-      const angle = Math.PI + (i / segments) * Math.PI;
-      const r = 6 + rand() * wobble;
-      const x = cx + Math.cos(angle) * r + rand() * wobble;
-      const y = topY + Math.sin(angle) * r + rand() * wobble;
-      if (i === 0) gfx.moveTo(x, y);
-      else gfx.lineTo(x, y);
-    }
-    gfx.lineTo(cx + rand() * wobble, cy - 1 + rand() * wobble);
-    gfx.lineTo(cx + rand() * wobble, cy + 5 + rand() * wobble);
-    gfx.stroke({ color: PENCIL_LIGHT, alpha: 0.5, width: 1.2 });
-
-    gfx.circle(cx + rand() * 0.4, cy + 10 + rand() * 0.4, 1.3);
-    gfx.fill({ color: PENCIL_LIGHT, alpha: 0.5 });
-
-    this.hexContainer.addChild(gfx);
+  private seededUnit(coord: HexCoord, salt: number): number {
+    let seed = Math.imul(coord.q, 374761393) ^ Math.imul(coord.r, 668265263) ^ Math.imul(salt, 2246822519);
+    seed = Math.imul(seed ^ (seed >>> 13), 1274126177);
+    return ((seed ^ (seed >>> 16)) >>> 0) / 0xffffffff;
   }
 
-  private sketchHexPoints(cx: number, cy: number, size: number, seed: number): number[] {
-    const rand = seededRand(seed);
-    const wobble = 1.8;
+  private exactHexPoints(cx: number, cy: number, size: number): number[] {
     const pts: number[] = [];
     for (let i = 0; i <= 6; i++) {
       const angle = (Math.PI / 180) * (60 * (i % 6) - 30);
-      const vx = cx + Math.cos(angle) * size;
-      const vy = cy + Math.sin(angle) * size;
-      pts.push(vx + rand() * wobble, vy + rand() * wobble);
+      pts.push(cx + Math.cos(angle) * size, cy + Math.sin(angle) * size);
     }
     return pts;
   }
