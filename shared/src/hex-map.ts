@@ -5,9 +5,27 @@ export interface HexCoord {
 
 export type HexStatus = "unexplored" | "explored";
 
+export const HEX_ICON_TYPES = [
+  "town",
+  "city",
+  "gateway",
+  "gateway-city",
+  "ruins",
+  "great-ruins",
+  "enemy-camp",
+  "elite-encounter",
+  "boss",
+  "calamity",
+  "treasure",
+  "great-treasure",
+] as const;
+
+export type HexIconType = (typeof HEX_ICON_TYPES)[number];
+
 export interface HexMapState {
   readonly playerPos: HexCoord;
   readonly hexes: Record<string, HexStatus>;
+  readonly icons: Record<string, HexIconType>;
 }
 
 export function hexKey(coord: HexCoord): string {
@@ -38,10 +56,30 @@ export function isAdjacent(a: HexCoord, b: HexCoord): boolean {
   return NEIGHBOR_OFFSETS.some((d) => d.q === dq && d.r === dr);
 }
 
+import { HEX_SPAWN_TABLE, HEX_SPAWN_WEIGHT_TOTAL } from "./hex-config.js";
+
+function pickIconForHex(coord: HexCoord): HexIconType | null {
+  const seed = ((coord.q * 7919 + coord.r * 104729 + 5381) & 0xffffffff) >>> 0;
+  const roll = (seed % 10000) / 10000 * HEX_SPAWN_WEIGHT_TOTAL;
+  let acc = 0;
+  for (const entry of HEX_SPAWN_TABLE) {
+    acc += entry.weight;
+    if (roll < acc) return entry.type;
+  }
+  return null;
+}
+
+export function getHexIcon(coord: HexCoord, icons: Record<string, HexIconType>): HexIconType | null {
+  const k = hexKey(coord);
+  if (k in icons) return icons[k]!;
+  return pickIconForHex(coord);
+}
+
 export function createInitialHexMap(): HexMapState {
   const origin: HexCoord = { q: 0, r: 0 };
   const hexes: Record<string, HexStatus> = { [hexKey(origin)]: "explored" };
-  return { playerPos: origin, hexes };
+  const icons: Record<string, HexIconType> = { [hexKey(origin)]: "town" };
+  return { playerPos: origin, hexes, icons };
 }
 
 export function getVisibleHexes(state: HexMapState): Record<string, HexStatus> {

@@ -6,13 +6,22 @@ import {
   resolveAction,
   serializeGameState,
   AiController,
-  createInitialHexMap,
   getVisibleHexes,
+  getHexIcon,
   hexKey,
   isAdjacent,
+  parseHexKey,
 } from "shared";
-import type { HexCoord, HexMapState } from "shared";
+import type { HexCoord, HexMapState, HexIconType } from "shared";
 import { loadCollisionGrid } from "./collision-loader.js";
+import {
+  saveExploredHex,
+  loadExploredHexes,
+  clearExploredHexes,
+  seedDiscovery,
+} from "./db.js";
+
+seedDiscovery(15);
 
 type GameMode = "pvp" | "pve";
 type Phase = "map" | "combat";
@@ -23,6 +32,17 @@ interface SocketData {
   hexMap: HexMapState;
   phase: Phase;
   pendingHex: HexCoord | null;
+}
+
+function loadHexMapFromDb(): HexMapState {
+  const origin: HexCoord = { q: 0, r: 0 };
+  const hexes = loadExploredHexes();
+  if (!(hexKey(origin) in hexes)) {
+    hexes[hexKey(origin)] = "explored";
+    saveExploredHex(origin);
+  }
+  const icons: Record<string, HexIconType> = { [hexKey(origin)]: "town" };
+  return { playerPos: origin, hexes, icons };
 }
 
 let gameMode: GameMode = "pvp";
@@ -55,9 +75,15 @@ function sendTo(ws: ServerWebSocket<SocketData>, msg: object) {
 
 function sendHexMapState(ws: ServerWebSocket<SocketData>) {
   const visible = getVisibleHexes(ws.data.hexMap);
+  const icons: Record<string, HexIconType> = {};
+  for (const key of Object.keys(visible)) {
+    const coord = parseHexKey(key);
+    const icon = getHexIcon(coord, ws.data.hexMap.icons);
+    if (icon) icons[key] = icon;
+  }
   sendTo(ws, {
     type: "hexMapState",
-    hexMap: { playerPos: ws.data.hexMap.playerPos, hexes: visible },
+    hexMap: { playerPos: ws.data.hexMap.playerPos, hexes: visible, icons },
   });
 }
 
@@ -70,9 +96,10 @@ function checkCombatEnd(ws: ServerWebSocket<SocketData>) {
   if (won && ws.data.pendingHex) {
     const target = ws.data.pendingHex;
     const newHexes = { ...hexMap.hexes, [hexKey(target)]: "explored" as const };
-    ws.data.hexMap = { playerPos: target, hexes: newHexes };
+    ws.data.hexMap = { playerPos: target, hexes: newHexes, icons: hexMap.icons };
+    saveExploredHex(target);
   } else {
-    ws.data.hexMap = { playerPos: { q: 0, r: 0 }, hexes: hexMap.hexes };
+    ws.data.hexMap = { playerPos: { q: 0, r: 0 }, hexes: hexMap.hexes, icons: hexMap.icons };
   }
 
   ws.data.phase = "map";
@@ -113,7 +140,7 @@ Bun.serve({
         data: {
           team: null,
           mode,
-          hexMap: createInitialHexMap(),
+          hexMap: loadHexMapFromDb(),
           phase: (mode === "pve" ? "map" : "combat") as Phase,
           pendingHex: null,
         },
@@ -241,11 +268,13 @@ Bun.serve({
           ws.data.hexMap = {
             playerPos: { q: 0, r: 0 },
             hexes: ws.data.hexMap.hexes,
+            icons: ws.data.hexMap.icons,
           };
           sendTo(ws, { type: "hexCombatResult", won: false });
           sendHexMapState(ws);
         } else if (gameMode === "pve" && ws.data.phase === "map") {
-          ws.data.hexMap = createInitialHexMap();
+          clearExploredHexes();
+          ws.data.hexMap = loadHexMapFromDb();
           sendHexMapState(ws);
         } else {
           await resetCombatState();

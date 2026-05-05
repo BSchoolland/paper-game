@@ -46,7 +46,15 @@ export class HexCamera {
     this.worldContainer.position.set(this.offsetX, this.offsetY);
 
     this.maskGfx.clear();
-    this.maskGfx.rect(0, 0, screenW, screenH);
+    if (this.bgSprite) {
+      const bgW = this.bgSprite.texture.width;
+      const bgH = this.bgSprite.texture.height;
+      const bgLeft = screenW / 2 - bgW / 2;
+      const bgTop = screenH / 2 - bgH / 2;
+      this.maskGfx.rect(bgLeft, bgTop, bgW, bgH);
+    } else {
+      this.maskGfx.rect(0, 0, screenW, screenH);
+    }
     this.maskGfx.fill({ color: 0xffffff });
   }
 

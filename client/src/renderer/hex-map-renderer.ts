@@ -1,6 +1,6 @@
-import { Application, Container, Graphics } from "pixi.js";
-import type { HexCoord, HexMapState, HexStatus } from "shared";
-import { hexToPixel, parseHexKey, pixelToHex, isAdjacent } from "shared";
+import { Application, Assets, Container, Graphics, Sprite, Texture } from "pixi.js";
+import type { HexCoord, HexIconType, HexMapState, HexStatus } from "shared";
+import { hexToPixel, parseHexKey, pixelToHex, isAdjacent, HEX_ICON_TYPES } from "shared";
 import { PENCIL, PENCIL_LIGHT, seededRand } from "./sketch-utils.js";
 import { HexCamera } from "./hex-camera.js";
 import { HexPathTrail } from "./hex-path-trail.js";
@@ -15,9 +15,25 @@ function coordSeed(q: number, r: number): number {
   return ((q * 7919 + r * 104729 + 31) & 0xffffffff) >>> 0;
 }
 
+const ICON_SIZE = 48;
+
+const iconTextures = new Map<HexIconType, Texture>();
+
+export async function loadMapIconAssets(): Promise<void> {
+  const entries = HEX_ICON_TYPES.map((name) => ({
+    alias: `map-icon-${name}`,
+    src: `sprites/map-icons/${name}.png`,
+  }));
+  await Assets.load(entries);
+  for (const name of HEX_ICON_TYPES) {
+    iconTextures.set(name, Assets.get(`map-icon-${name}`));
+  }
+}
+
 export class HexMapRenderer {
   private worldContainer = new Container();
   private hexContainer = new Container();
+  private iconContainer = new Container();
   private hoverCoord: HexCoord | null = null;
   private mapState: HexMapState | null = null;
   private onHexClickCallback: ((coord: HexCoord) => void) | null = null;
@@ -35,6 +51,7 @@ export class HexMapRenderer {
 
     this.worldContainer.addChild(this.pathTrail.layer);
     this.worldContainer.addChild(this.hexContainer);
+    this.worldContainer.addChild(this.iconContainer);
     this.worldContainer.addChild(this.playerTween.idleSprite);
     this.worldContainer.addChild(this.playerTween.moveSprite);
 
@@ -107,8 +124,9 @@ export class HexMapRenderer {
   private drawHexes() {
     if (!this.mapState) return;
     this.hexContainer.removeChildren();
+    this.iconContainer.removeChildren();
 
-    const { hexes, playerPos } = this.mapState;
+    const { hexes, playerPos, icons } = this.mapState;
 
     for (const [key, status] of Object.entries(hexes)) {
       const coord = parseHexKey(key);
@@ -119,8 +137,9 @@ export class HexMapRenderer {
         this.hoverCoord.q === coord.q &&
         this.hoverCoord.r === coord.r;
       const isClickable = isAdjacent(playerPos, coord);
+      const iconType = icons?.[key];
 
-      this.drawHex(px.x, px.y, status, isPlayer, !!isHover && isClickable, coord);
+      this.drawHex(px.x, px.y, status, isPlayer, !!isHover && isClickable, coord, iconType);
     }
   }
 
@@ -130,7 +149,8 @@ export class HexMapRenderer {
     status: HexStatus,
     isPlayer: boolean,
     isHover: boolean,
-    coord: HexCoord
+    coord: HexCoord,
+    iconType?: HexIconType
   ) {
     const gfx = new Graphics();
     const seed = coordSeed(coord.q, coord.r);
@@ -164,8 +184,20 @@ export class HexMapRenderer {
 
     this.hexContainer.addChild(gfx);
 
-    if (status === "unexplored" && !isPlayer) {
-      this.drawQuestionMark(x, y, seed);
+    if (iconType) {
+      const tex = iconTextures.get(iconType);
+      if (tex) {
+        const sprite = new Sprite(tex);
+        sprite.anchor.set(0.5, 0.5);
+        sprite.x = x;
+        sprite.y = y;
+        const scale = ICON_SIZE / Math.max(tex.width, tex.height);
+        sprite.scale.set(scale);
+        if (status === "unexplored" || isPlayer) {
+          sprite.alpha = 0.4;
+        }
+        this.iconContainer.addChild(sprite);
+      }
     }
   }
 

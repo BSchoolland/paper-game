@@ -3,3 +3,6 @@ dist
 bun.lock
 .tsbuildinfo
 .vite
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

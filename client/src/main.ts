@@ -3,7 +3,7 @@ import { Connection } from "./net/connection.js";
 import { CombatStore } from "./state/combat-store.js";
 import { ClientState } from "./state/client-state.js";
 import { GameRenderer } from "./renderer/game-renderer.js";
-import { HexMapRenderer } from "./renderer/hex-map-renderer.js";
+import { HexMapRenderer, loadMapIconAssets } from "./renderer/hex-map-renderer.js";
 import { IrisTransition } from "./renderer/iris-transition.js";
 import { InputManager } from "./input/input-manager.js";
 import { Hud } from "./ui/hud.js";
@@ -23,7 +23,7 @@ async function init() {
   const container = document.getElementById("game-container")!;
   container.appendChild(app.canvas);
 
-  await Promise.all([loadSpriteAssets(), loadMapAssets()]);
+  await Promise.all([loadSpriteAssets(), loadMapAssets(), loadMapIconAssets()]);
 
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode") === "pvp" ? "pvp" : "pve";
