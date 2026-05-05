@@ -46,6 +46,7 @@ export interface Entity {
   readonly spriteScale?: number;
   readonly strategy?: AiStrategyType;
   readonly effects?: readonly EntityEffect[];
+  readonly dead?: boolean;
 }
 
 export interface GameState {
@@ -79,9 +80,6 @@ export interface AttackHit {
   readonly targetId: EntityId;
   readonly damage: number;
   readonly killed: boolean;
-  readonly killedPosition?: Vec2;
-  readonly killedTeamId?: TeamId;
-  readonly killedEffects?: readonly EntityEffect[];
 }
 
 export type EffectTrigger = "onDeath";
@@ -110,7 +108,7 @@ export const SHORT_SWORD: WeaponDefinition = {
 export const SPEAR: WeaponDefinition = {
   id: "spear",
   name: "Spear",
-  shape: { kind: "rectangle", length: 110, width: 20 },
+  shape: { kind: "rectangle", length: 140, width: 20 },
   damage: 30,
   actionCost: 1,
 };

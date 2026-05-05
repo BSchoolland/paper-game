@@ -49,7 +49,7 @@ export function entitiesInSector(
 ): Entity[] {
   const result: Entity[] = [];
   for (const entity of entities.values()) {
-    if (entity.id === excludeId) continue;
+    if (entity.id === excludeId || entity.dead) continue;
     if (entityInSector(entity, origin, direction, radius, halfAngle)) {
       result.push(entity);
     }

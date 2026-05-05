@@ -24,7 +24,7 @@ function isDestinationValid(
   if (!isWithinBounds(state.grid, destination, entity.collisionRadius))
     return false;
   for (const other of state.entities.values()) {
-    if (other.id === entity.id) continue;
+    if (other.id === entity.id || other.dead) continue;
     if (
       distance(destination, other.position) <
       entity.collisionRadius + other.collisionRadius

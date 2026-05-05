@@ -35,17 +35,9 @@ export function applyDamage(
   for (const target of targets) {
     const newHp = target.hp - damage;
     const killed = newHp <= 0;
-    const hit: AttackHit = killed
-      ? {
-          targetId: target.id, damage, killed,
-          killedPosition: target.position,
-          killedTeamId: target.teamId,
-          killedEffects: target.effects,
-        }
-      : { targetId: target.id, damage, killed };
-    hits.push(hit);
+    hits.push({ targetId: target.id, damage, killed });
     if (killed) {
-      entities.delete(target.id);
+      entities.set(target.id, { ...target, hp: 0, dead: true });
     } else {
       entities.set(target.id, { ...target, hp: newHp });
     }

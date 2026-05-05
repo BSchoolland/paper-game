@@ -30,7 +30,7 @@ export function raycast(
   let closestHit: RayHit | null = null;
 
   for (const entity of entities.values()) {
-    if (entity.id === excludeId) continue;
+    if (entity.id === excludeId || entity.dead) continue;
 
     const toEntity = sub(entity.position, origin);
     const projDist = dot(toEntity, dirNorm);

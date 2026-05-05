@@ -1,4 +1,4 @@
-import type { ActionResult, AttackHit, EntityEffect, GameEvent, TeamId, Vec2 } from "./types.js";
+import type { ActionResult, EntityEffect, GameEvent, TeamId, Vec2 } from "./types.js";
 import { ENEMY_TEMPLATES } from "./types.js";
 import { makeEntity } from "./entity-factory.js";
 
@@ -15,10 +15,12 @@ export function processEffects(result: ActionResult): ActionResult {
   for (const event of result.events) {
     if (event.type !== "attack") continue;
     for (const hit of event.hits) {
-      if (!hit.killed || !hit.killedEffects) continue;
-      const deathEffects = hit.killedEffects.filter((e) => e.trigger === "onDeath");
+      if (!hit.killed) continue;
+      const dead = state.entities.get(hit.targetId);
+      if (!dead?.effects) continue;
+      const deathEffects = dead.effects.filter((e) => e.trigger === "onDeath");
       for (const effect of deathEffects) {
-        const spawned = applyEffect(effect, hit, state);
+        const spawned = applyEffect(effect, dead.position, dead.teamId, state);
         state = spawned.state;
         events.push(...spawned.events);
       }
@@ -30,7 +32,8 @@ export function processEffects(result: ActionResult): ActionResult {
 
 function applyEffect(
   effect: EntityEffect,
-  hit: AttackHit,
+  position: Vec2,
+  teamId: TeamId,
   state: ActionResult["state"]
 ): { state: ActionResult["state"]; events: GameEvent[] } {
   switch (effect.action.type) {
@@ -38,8 +41,8 @@ function applyEffect(
       return spawnEntities(
         effect.action.templateKey,
         effect.action.count,
-        hit.killedPosition!,
-        hit.killedTeamId!,
+        position,
+        teamId,
         state
       );
   }

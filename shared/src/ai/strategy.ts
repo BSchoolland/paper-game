@@ -11,7 +11,7 @@ function closestEnemy(entity: Entity, state: GameState): Entity | null {
   let best: Entity | null = null;
   let bestDist = Infinity;
   for (const other of state.entities.values()) {
-    if (other.teamId === entity.teamId) continue;
+    if (other.teamId === entity.teamId || other.dead) continue;
     const d = distance(entity.position, other.position);
     if (d < bestDist) {
       bestDist = d;
@@ -148,8 +148,9 @@ export class ThreatStrategy implements AiStrategy {
   planActions(entity: Entity, state: GameState): PlayerAction[] {
     const actions: PlayerAction[] = [];
 
-    if (this.threatTarget && !state.entities.has(this.threatTarget)) {
-      this.threatTarget = null;
+    if (this.threatTarget) {
+      const tracked = state.entities.get(this.threatTarget);
+      if (!tracked || tracked.dead) this.threatTarget = null;
     }
 
     const target = this.threatTarget

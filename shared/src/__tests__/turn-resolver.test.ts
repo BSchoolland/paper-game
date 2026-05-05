@@ -36,13 +36,13 @@ describe("turn-resolver", () => {
     expect(next.entities.get("b1")!.hp).toBe(75);
   });
 
-  it("attack removes dead entity", () => {
+  it("attack flags dead entity", () => {
     const state = makeState([
       makeEntity("r1", 100, 100, "red"),
       makeEntity("b1", 140, 100, "blue", { hp: 20 }),
     ]);
     const { state: next } = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
-    expect(next.entities.has("b1")).toBe(false);
+    expect(next.entities.get("b1")!.dead).toBe(true);
   });
 
   it("end turn switches team and resets resources", () => {

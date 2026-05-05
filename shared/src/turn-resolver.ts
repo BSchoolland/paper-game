@@ -8,6 +8,7 @@ function checkWinner(state: GameState): TeamId | null {
   let hasRed = false;
   let hasBlue = false;
   for (const entity of state.entities.values()) {
+    if (entity.dead) continue;
     if (entity.teamId === "red") hasRed = true;
     if (entity.teamId === "blue") hasBlue = true;
     if (hasRed && hasBlue) return null;
@@ -24,7 +25,7 @@ function entitiesOverlap(
   excludeId: string
 ): boolean {
   for (const e of entities.values()) {
-    if (e.id === excludeId) continue;
+    if (e.id === excludeId || e.dead) continue;
     const dist = distance(pos, e.position);
     if (dist < radius + e.collisionRadius) return true;
   }
@@ -39,7 +40,7 @@ function resolveMove(
   destination: { x: number; y: number }
 ): ActionResult {
   const entity = state.entities.get(entityId);
-  if (!entity) return NO_CHANGE(state);
+  if (!entity || entity.dead) return NO_CHANGE(state);
   if (entity.teamId !== state.activeTeam) return NO_CHANGE(state);
   if (entity.hasAttackedThisTurn && !entity.canMoveAfterAttack) return NO_CHANGE(state);
 
@@ -71,7 +72,7 @@ function resolveAttack(
   aimDirection: { x: number; y: number }
 ): ActionResult {
   const entity = state.entities.get(entityId);
-  if (!entity) return NO_CHANGE(state);
+  if (!entity || entity.dead) return NO_CHANGE(state);
   if (entity.teamId !== state.activeTeam) return NO_CHANGE(state);
   if (entity.actionsRemaining < entity.weapon.actionCost) return NO_CHANGE(state);
 
@@ -125,7 +126,9 @@ function resolveEndTurn(state: GameState): ActionResult {
   const nextTeam: TeamId = state.activeTeam === "red" ? "blue" : "red";
   const entities = new Map<string, Entity>();
   for (const [id, entity] of state.entities) {
-    if (entity.teamId === nextTeam) {
+    if (entity.dead) {
+      entities.set(id, entity);
+    } else if (entity.teamId === nextTeam) {
       entities.set(id, {
         ...entity,
         movementRemaining: entity.movementBudget,

@@ -9,7 +9,7 @@ export function entitiesInCircle(
 ): Entity[] {
   const result: Entity[] = [];
   for (const entity of entities.values()) {
-    if (entity.id === excludeId) continue;
+    if (entity.id === excludeId || entity.dead) continue;
     const dist = distance(center, entity.position);
     if (dist <= radius + entity.collisionRadius) {
       result.push(entity);

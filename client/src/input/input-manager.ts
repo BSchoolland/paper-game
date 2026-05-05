@@ -85,6 +85,7 @@ export class InputManager {
 
   private findEntityAt(pos: Vec2) {
     for (const entity of this.clientState.getState().entities.values()) {
+      if (entity.dead) continue;
       if (distance(pos, entity.position) <= entity.collisionRadius) {
         return entity;
       }

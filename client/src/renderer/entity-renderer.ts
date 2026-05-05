@@ -17,6 +17,8 @@ function easeOutQuad(t: number): number {
   return t * (2 - t);
 }
 
+const DEATH_DURATION = 0.5;
+
 export class EntityVisual {
   readonly container: Container;
   readonly sprites: Record<AnimState, Sprite>;
@@ -34,6 +36,8 @@ export class EntityVisual {
   private facingLeft: boolean;
   private wasSelected = false;
   private readonly scale: number;
+  private deathTimer = 0;
+  private isDead = false;
 
   constructor(entity: Entity) {
     this.entityId = entity.id;
@@ -94,6 +98,21 @@ export class EntityVisual {
   }
 
   update(entity: Entity, isSelected: boolean, dt: number): void {
+    if (this.isDead) {
+      if (this.deathTimer < DEATH_DURATION) {
+        this.deathTimer += dt;
+        const t = Math.min(1, this.deathTimer / DEATH_DURATION);
+        const targetAngle = this.facingLeft ? -Math.PI / 2 : Math.PI / 2;
+        const sprite = this.sprites.hit;
+        sprite.rotation = targetAngle * easeOutQuad(t);
+        sprite.alpha = 1 - t * 0.4;
+        if (t >= 1) {
+          this.container.visible = false;
+        }
+      }
+      return;
+    }
+
     if (this.tweenProgress < 1) {
       this.tweenProgress = Math.min(1, this.tweenProgress + dt * 1.6);
       const t = easeOutQuad(this.tweenProgress);
@@ -147,7 +166,17 @@ export class EntityVisual {
   }
 
   get isBusy(): boolean {
+    if (this.isDead) return this.deathTimer < DEATH_DURATION;
     return this.tweenProgress < 1 || this.animTimer > 0;
+  }
+
+  triggerDeath(): void {
+    this.isDead = true;
+    this.deathTimer = 0;
+    this.setAnimState("hit");
+    this.selectionRing.visible = false;
+    this.hpBar.visible = false;
+    this.hpBg.visible = false;
   }
 
   triggerMove(
@@ -195,6 +224,12 @@ export class EntityVisual {
   }
 
   private drawHpBar(entity: Entity): void {
+    const hpRatio = entity.hp / entity.maxHp;
+    const full = hpRatio >= 1;
+    this.hpBg.visible = !full;
+    this.hpBar.visible = !full;
+    if (full) return;
+
     this.hpBg.clear();
     this.hpBg.roundRect(
       -HP_BAR_W / 2 - 1,
@@ -205,7 +240,6 @@ export class EntityVisual {
     );
     this.hpBg.fill({ color: 0x3d3528, alpha: 0.7 });
 
-    const hpRatio = entity.hp / entity.maxHp;
     const hpColor =
       hpRatio > 0.6 ? 0x5a7a3a : hpRatio > 0.3 ? 0x8b7a3a : 0x8b3a3a;
 

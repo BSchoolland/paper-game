@@ -122,7 +122,7 @@ function overlapsEntity(
   selfId: string
 ): boolean {
   for (const e of entities.values()) {
-    if (e.id === selfId) continue;
+    if (e.id === selfId || e.dead) continue;
     if (distance(pos, e.position) < radius + e.collisionRadius) return true;
   }
   return false;

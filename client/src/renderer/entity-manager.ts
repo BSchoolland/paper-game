@@ -17,6 +17,7 @@ interface AttackFlash {
 interface DelayedHit {
   targetId: string;
   timer: number;
+  killed: boolean;
 }
 
 export class EntityManager {
@@ -65,7 +66,7 @@ export class EntityManager {
         this.layer.addChild(visual.container);
       }
 
-      visual.update(entity, entity.id === selectedEntityId, 0);
+      visual.update(entity, entity.id === selectedEntityId && !entity.dead, 0);
     }
 
     for (const event of this.pendingEvents) {
@@ -78,7 +79,7 @@ export class EntityManager {
     for (const [id, visual] of this.visuals) {
       const entity = state.entities.get(id);
       if (!entity) continue;
-      visual.update(entity, id === selectedEntityId, dt);
+      visual.update(entity, id === selectedEntityId && !entity.dead, dt);
     }
 
     for (let i = this.attackFlashes.length - 1; i >= 0; i--) {
@@ -97,7 +98,13 @@ export class EntityManager {
       hit.timer -= dt;
       if (hit.timer <= 0) {
         const visual = this.visuals.get(hit.targetId);
-        if (visual) visual.triggerHit();
+        if (visual) {
+          if (hit.killed) {
+            visual.triggerDeath();
+          } else {
+            visual.triggerHit();
+          }
+        }
         this.delayedHits.splice(i, 1);
       }
     }
@@ -136,7 +143,7 @@ export class EntityManager {
         this.spawnAttackFlash(event.attackerPosition, event.aimDirection, event.weapon, event.attackerId, state);
 
         for (const hit of event.hits) {
-          this.delayedHits.push({ targetId: hit.targetId, timer: HIT_DELAY });
+          this.delayedHits.push({ targetId: hit.targetId, timer: HIT_DELAY, killed: hit.killed });
         }
         break;
       }

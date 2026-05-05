@@ -151,7 +151,7 @@ export class GameRenderer {
 
     if (!selectedId || state.winner) return;
     const entity = state.entities.get(selectedId);
-    if (!entity) return;
+    if (!entity || entity.dead) return;
 
     if (
       this.clientState.inputMode === "attack" &&

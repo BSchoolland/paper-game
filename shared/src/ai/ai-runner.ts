@@ -7,7 +7,7 @@ import { strategyForEntity } from "./strategy.js";
 function closestEnemyDist(entity: Entity, state: GameState): number {
   let best = Infinity;
   for (const other of state.entities.values()) {
-    if (other.teamId === entity.teamId) continue;
+    if (other.teamId === entity.teamId || other.dead) continue;
     const d = distance(entity.position, other.position);
     if (d < best) best = d;
   }
@@ -22,7 +22,7 @@ export class AiController {
     let simState = state;
 
     const aiEntities = [...state.entities.values()]
-      .filter((e) => e.teamId === aiTeam)
+      .filter((e) => e.teamId === aiTeam && !e.dead)
       .sort((a, b) => closestEnemyDist(a, state) - closestEnemyDist(b, state));
 
     for (const entity of aiEntities) {
