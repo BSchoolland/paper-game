@@ -77,9 +77,17 @@ export function createPveGameState(): GameState {
 
   const gs = ENEMY_TEMPLATES["goblin-spear"];
   const ga = ENEMY_TEMPLATES["goblin-archer"];
+  const gsh = ENEMY_TEMPLATES["goblin-shield"];
+  const sl = ENEMY_TEMPLATES["slime"];
 
-  entities.set("enemy1", makeEntity("enemy1", "Goblin Spearman", 600, 250, "blue", gs));
-  entities.set("enemy2", makeEntity("enemy2", "Goblin Archer", 650, 370, "blue", ga));
+  entities.set("enemy1", makeEntity("enemy1", "Goblin Spearman", 600, 200, "blue", gs));
+  entities.set("enemy2", makeEntity("enemy2", "Goblin Archer", 650, 320, "blue", ga));
+  entities.set("enemy3", makeEntity("enemy3", "Goblin Shield", 560, 260, "blue", gsh));
+  entities.set("enemy5", makeEntity("enemy5", "Goblin Archer", 700, 150, "blue", ga));
+  entities.set("enemy6", makeEntity("enemy6", "Slime", 500, 350, "blue", sl));
+  entities.set("enemy7", makeEntity("enemy7", "Slime", 530, 450, "blue", sl));
+  entities.set("enemy8", makeEntity("enemy8", "Goblin Spearman", 650, 430, "blue", gs));
+  entities.set("enemy9", makeEntity("enemy9", "Goblin Shield", 640, 160, "blue", gsh));
 
   return {
     entities,
