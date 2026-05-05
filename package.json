@@ -1,5 +1,5 @@
 {
-  "name": "turn-based-game",
+  "name": "paper-game",
   "private": true,
   "workspaces": ["shared", "client", "server"],
   "scripts": {
