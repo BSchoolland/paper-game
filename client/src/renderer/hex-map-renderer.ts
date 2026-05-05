@@ -17,11 +17,14 @@ const HEX_SIZE = 48;
 
 const PLAYER_COLOR = 0x8b6d30;
 const HOVER_COLOR = 0xd4a850;
+const PANEL_BG = "rgba(245, 235, 215, 0.92)";
+const PANEL_BORDER = "1px solid rgba(74, 55, 40, 0.3)";
+const FONT = "Georgia, 'Times New Roman', serif";
 
 const ICON_SIZE = 72;
 const DECORATION_SCALE = 0.6;
-const DECORATION_DENSITY = 1 / 3;
-const DECORATION_TINT = 0xc6c0ac;
+const DECORATION_DENSITY = 0.18;
+const SHOW_DECORATIONS = true;
 
 const iconTextures = new Map<HexIconType, Texture>();
 const decorationTextures = new Map<string, Texture>();
@@ -58,6 +61,8 @@ export class HexMapRenderer {
   private hoverCoord: HexCoord | null = null;
   private mapState: HexMapState | null = null;
   private onHexClickCallback: ((coord: HexCoord) => void) | null = null;
+  private cameraControls: HTMLDivElement | null = null;
+  private resetCameraBtn: HTMLButtonElement | null = null;
 
   private camera: HexCamera;
   private pathTrail = new HexPathTrail();
@@ -69,6 +74,8 @@ export class HexMapRenderer {
 
   init() {
     this.camera.init();
+    this.camera.onViewChanged(() => this.updateResetCameraButton());
+    this.createResetCameraButton();
 
     this.worldContainer.addChild(this.pathTrail.layer);
     this.worldContainer.addChild(this.hexContainer);
@@ -96,6 +103,7 @@ export class HexMapRenderer {
 
     this.app.canvas.addEventListener("click", (e) => {
       if (!this.mapState || !this.onHexClickCallback || this.playerTween.animating) return;
+      if (this.camera.consumeSuppressedClick()) return;
       const world = this.camera.screenToWorld(e.clientX, e.clientY);
       const coord = pixelToHex(world.x, world.y, HEX_SIZE);
       this.onHexClickCallback(coord);
@@ -108,10 +116,12 @@ export class HexMapRenderer {
 
   show() {
     this.camera.show();
+    this.updateResetCameraButton();
   }
 
   hide() {
     this.camera.hide();
+    if (this.cameraControls) this.cameraControls.style.display = "none";
   }
 
   isMoving(): boolean {
@@ -137,6 +147,7 @@ export class HexMapRenderer {
     this.pathTrail.initIfEmpty(px);
 
     this.drawHexes();
+    this.updateResetCameraButton();
     this.pathTrail.draw();
     if (!this.playerTween.animating) {
       this.playerTween.placeIdle(px.x, px.y);
@@ -216,7 +227,7 @@ export class HexMapRenderer {
 
     this.hexContainer.addChild(gfx);
 
-    if (!iconType && !isPlayer) {
+    if (SHOW_DECORATIONS && !iconType && !isPlayer) {
       this.drawDecoration(x, y, coord, status);
     }
 
@@ -255,7 +266,6 @@ export class HexMapRenderer {
     sprite.x = x + (this.seededUnit(coord, 37) - 0.5) * HEX_SIZE * 0.42;
     sprite.y = y + (this.seededUnit(coord, 41) - 0.5) * HEX_SIZE * 0.34 + HEX_SIZE * 0.16;
     sprite.scale.set(DECORATION_SCALE);
-    sprite.tint = DECORATION_TINT;
     sprite.alpha = status === "unexplored" ? 0.38 : 0.62;
     this.decorationContainer.addChild(sprite);
   }
@@ -264,6 +274,81 @@ export class HexMapRenderer {
     let seed = Math.imul(coord.q, 374761393) ^ Math.imul(coord.r, 668265263) ^ Math.imul(salt, 2246822519);
     seed = Math.imul(seed ^ (seed >>> 13), 1274126177);
     return ((seed ^ (seed >>> 16)) >>> 0) / 0xffffffff;
+  }
+
+  private createResetCameraButton() {
+    const parent = this.app.canvas.parentElement ?? document.body;
+    if (parent !== document.body && getComputedStyle(parent).position === "static") {
+      parent.style.position = "relative";
+    }
+    const controls = document.createElement("div");
+    controls.style.cssText = `
+      position: absolute;
+      right: 18px;
+      bottom: 18px;
+      display: none;
+      gap: 6px;
+      padding: 6px;
+      background: ${PANEL_BG};
+      border: ${PANEL_BORDER};
+      border-radius: 6px;
+      box-shadow: 0 3px 10px rgba(35, 24, 14, 0.16);
+      pointer-events: auto;
+      z-index: 20;
+    `;
+
+    const zoomOutBtn = this.makeCameraButton("-");
+    const zoomInBtn = this.makeCameraButton("+");
+    const resetBtn = this.makeCameraButton("Reset");
+    resetBtn.style.width = "62px";
+
+    zoomOutBtn.addEventListener("click", () => this.camera.zoomOut());
+    zoomInBtn.addEventListener("click", () => this.camera.zoomIn());
+    resetBtn.addEventListener("click", () => this.camera.resetView());
+
+    controls.appendChild(zoomOutBtn);
+    controls.appendChild(zoomInBtn);
+    controls.appendChild(resetBtn);
+    parent.appendChild(controls);
+
+    this.cameraControls = controls;
+    this.resetCameraBtn = resetBtn;
+  }
+
+  private makeCameraButton(label: string): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.textContent = label;
+    btn.type = "button";
+    btn.style.cssText = `
+      width: 32px;
+      height: 30px;
+      border: ${PANEL_BORDER};
+      border-radius: 5px;
+      background: rgba(255, 250, 238, 0.92);
+      color: #4a3728;
+      font: 600 13px ${FONT};
+      cursor: pointer;
+    `;
+    btn.addEventListener("mouseenter", () => {
+      btn.style.background = "rgba(238, 218, 177, 0.95)";
+    });
+    btn.addEventListener("mouseleave", () => {
+      btn.style.background = "rgba(255, 250, 238, 0.92)";
+    });
+    return btn;
+  }
+
+  private updateResetCameraButton() {
+    if (!this.cameraControls || !this.resetCameraBtn) return;
+    if (!this.mapState) {
+      this.cameraControls.style.display = "none";
+      return;
+    }
+
+    this.cameraControls.style.display = "flex";
+    this.resetCameraBtn.disabled = !this.camera.hasUserChangedView();
+    this.resetCameraBtn.style.opacity = this.resetCameraBtn.disabled ? "0.45" : "1";
+    this.resetCameraBtn.style.cursor = this.resetCameraBtn.disabled ? "default" : "pointer";
   }
 
   private exactHexPoints(cx: number, cy: number, size: number): number[] {
