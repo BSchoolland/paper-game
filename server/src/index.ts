@@ -32,6 +32,7 @@ interface SocketData {
   hexMap: HexMapState;
   phase: Phase;
   pendingHex: HexCoord | null;
+  visitedThisRun: Set<string>;
 }
 
 function loadHexMapFromDb(): HexMapState {
@@ -95,11 +96,14 @@ function checkCombatEnd(ws: ServerWebSocket<SocketData>) {
 
   if (won && ws.data.pendingHex) {
     const target = ws.data.pendingHex;
-    const newHexes = { ...hexMap.hexes, [hexKey(target)]: "explored" as const };
+    const tk = hexKey(target);
+    const newHexes = { ...hexMap.hexes, [tk]: "explored" as const };
     ws.data.hexMap = { playerPos: target, hexes: newHexes, icons: hexMap.icons };
+    ws.data.visitedThisRun.add(tk);
     saveExploredHex(target);
   } else {
     ws.data.hexMap = { playerPos: { q: 0, r: 0 }, hexes: hexMap.hexes, icons: hexMap.icons };
+    ws.data.visitedThisRun = new Set([hexKey({ q: 0, r: 0 })]);
   }
 
   ws.data.phase = "map";
@@ -143,6 +147,7 @@ Bun.serve({
           hexMap: loadHexMapFromDb(),
           phase: (mode === "pve" ? "map" : "combat") as Phase,
           pendingHex: null,
+          visitedThisRun: new Set([hexKey({ q: 0, r: 0 })]),
         },
       });
       if (!upgraded)
@@ -224,8 +229,7 @@ Bun.serve({
         const tk = hexKey(target);
         if (!(tk in visible)) return;
 
-        const status = ws.data.hexMap.hexes[tk];
-        if (status === "explored") {
+        if (ws.data.visitedThisRun.has(tk)) {
           ws.data.hexMap = { ...ws.data.hexMap, playerPos: target };
           sendHexMapState(ws);
         } else {
@@ -270,11 +274,13 @@ Bun.serve({
             hexes: ws.data.hexMap.hexes,
             icons: ws.data.hexMap.icons,
           };
+          ws.data.visitedThisRun = new Set([hexKey({ q: 0, r: 0 })]);
           sendTo(ws, { type: "hexCombatResult", won: false });
           sendHexMapState(ws);
         } else if (gameMode === "pve" && ws.data.phase === "map") {
           clearExploredHexes();
           ws.data.hexMap = loadHexMapFromDb();
+          ws.data.visitedThisRun = new Set([hexKey({ q: 0, r: 0 })]);
           sendHexMapState(ws);
         } else {
           await resetCombatState();
