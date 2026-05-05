@@ -1,6 +1,6 @@
 import { Application, Graphics } from "pixi.js";
 
-const WASH_COLOR = 0x1a140e;
+const WASH_COLOR = 0xefddac;
 const FADE_IN_DURATION = 0.45;
 const HOLD_DURATION = 0.3;
 const FADE_OUT_DURATION = 0.5;

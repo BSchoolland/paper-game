@@ -10,10 +10,21 @@ import {
 import { EntityManager } from "./entity-manager.js";
 import { drawTargetingPreview } from "./targeting-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
+import type { FramePacer } from "./frame-pacer.js";
 
-const PADDING = 60;
+const PADDING = 15;
+const DIM_ALPHA = 0.4;
+const DIM_COLOR = 0x1a140e;
+const BORDER_COLOR = 0x4a3728;
+const BORDER_WIDTH = 2;
+const SHADOW_COLOR = 0x1a140e;
+const SHADOW_BLUR = 18;
+const SHADOW_ALPHA = 0.35;
 
 export class GameRenderer {
+  private outerContainer = new Container();
+  private dimGfx = new Graphics();
+  private frameGfx = new Graphics();
   private worldContainer = new Container();
   private backgroundLayer = new Container();
   private sortableLayer = new Container();
@@ -28,14 +39,23 @@ export class GameRenderer {
   private debugLayer = new Container();
   private debugVisible = false;
   private tickerActive = false;
+  private wasAnimating = false;
 
   constructor(
     private app: Application,
-    private clientState: ClientState
+    private clientState: ClientState,
+    private pacer: FramePacer
   ) {
     this.entities = new EntityManager(this.sortableLayer);
-    this.app.stage.addChild(this.worldContainer);
-    this.worldContainer.visible = false;
+    this.outerContainer.addChild(this.dimGfx);
+    this.outerContainer.addChild(this.frameGfx);
+    this.outerContainer.addChild(this.worldContainer);
+    this.app.stage.addChild(this.outerContainer);
+    this.outerContainer.visible = false;
+  }
+
+  bringToFront() {
+    this.app.stage.addChild(this.outerContainer);
   }
 
   enter() {
@@ -45,12 +65,19 @@ export class GameRenderer {
       this.clientState.getState(),
       this.clientState.selectedEntityId
     );
-    this.worldContainer.visible = true;
+    this.bringToFront();
+    this.outerContainer.visible = true;
 
     if (!this.tickerActive) {
       this.tickerActive = true;
       this.app.ticker.add((ticker) => {
-        if (!this.worldContainer.visible) return;
+        if (!this.outerContainer.visible) return;
+        const animating = this.entities.isAnimating();
+        if (animating !== this.wasAnimating) {
+          if (animating) this.pacer.request(); else this.pacer.release();
+          this.wasAnimating = animating;
+        }
+        if (!animating) return;
         const dt = ticker.deltaTime / 60;
         this.entities.tick(
           this.clientState.getState(),
@@ -61,7 +88,7 @@ export class GameRenderer {
       });
 
       window.addEventListener("resize", () => {
-        if (!this.worldContainer.visible) return;
+        if (!this.outerContainer.visible) return;
         this.layout();
         this.renderOverlay({ x: 0, y: 0 });
       });
@@ -69,7 +96,7 @@ export class GameRenderer {
   }
 
   exit() {
-    this.worldContainer.visible = false;
+    this.outerContainer.visible = false;
   }
 
   screenToWorld(screenPos: Vec2): Vec2 {
@@ -136,6 +163,29 @@ export class GameRenderer {
 
     this.worldContainer.scale.set(this.scale);
     this.worldContainer.position.set(this.offsetX, this.offsetY);
+
+    this.dimGfx.clear();
+    this.dimGfx.rect(0, 0, screenW, screenH);
+    this.dimGfx.fill({ color: DIM_COLOR, alpha: DIM_ALPHA });
+
+    const combatX = this.offsetX;
+    const combatY = this.offsetY;
+    const combatW = worldW * this.scale;
+    const combatH = worldH * this.scale;
+
+    this.frameGfx.clear();
+    for (let i = 3; i >= 1; i--) {
+      const spread = i * (SHADOW_BLUR / 3);
+      const alpha = SHADOW_ALPHA * (1 - i / 4);
+      this.frameGfx.roundRect(
+        combatX - spread, combatY - spread,
+        combatW + spread * 2, combatH + spread * 2,
+        4
+      );
+      this.frameGfx.fill({ color: SHADOW_COLOR, alpha });
+    }
+    this.frameGfx.roundRect(combatX, combatY, combatW, combatH, 2);
+    this.frameGfx.stroke({ color: BORDER_COLOR, alpha: 0.6, width: BORDER_WIDTH });
   }
 
   private rebuildGrid() {

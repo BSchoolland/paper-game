@@ -56,8 +56,14 @@ export class HexCamera {
   private viewChangedCallback: (() => void) | null = null;
   private keysDown = new Set<string>();
   private keyPanRAF: number | null = null;
+  private enabled = true;
 
   constructor(private app: Application, private worldContainer: Container) {}
+
+  setEnabled(val: boolean) {
+    this.enabled = val;
+    if (!val) this.keysDown.clear();
+  }
 
   init() {
     const bgTex: Texture = Assets.get("map-background");
@@ -71,7 +77,7 @@ export class HexCamera {
     this.app.stage.addChild(this.maskGfx);
 
     this.app.canvas.addEventListener("pointerdown", (e) => {
-      if (!this.worldContainer.visible || e.button !== 0) return;
+      if (!this.enabled || !this.worldContainer.visible || e.button !== 0) return;
       this.draggingPointerId = e.pointerId;
       this.dragStartX = e.clientX;
       this.dragStartY = e.clientY;
@@ -101,7 +107,7 @@ export class HexCamera {
     this.app.canvas.addEventListener(
       "wheel",
       (e) => {
-        if (!this.worldContainer.visible) return;
+        if (!this.enabled || !this.worldContainer.visible) return;
         e.preventDefault();
         const zoomFactor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
         this.zoomAt(e.clientX, e.clientY, zoomFactor);
@@ -112,7 +118,7 @@ export class HexCamera {
     window.addEventListener("keydown", (e) => {
       const key = e.key.toLowerCase();
       if (["w", "a", "s", "d", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) {
-        if (!this.worldContainer.visible) return;
+        if (!this.enabled || !this.worldContainer.visible) return;
         this.keysDown.add(key);
         this.startKeyPan();
       }

@@ -35,15 +35,39 @@ interface SocketData {
   visitedThisRun: Set<string>;
 }
 
+const ORIGIN: HexCoord = { q: 0, r: 0 };
+const ORIGIN_KEY = hexKey(ORIGIN);
+
 function loadHexMapFromDb(): HexMapState {
-  const origin: HexCoord = { q: 0, r: 0 };
   const hexes = loadExploredHexes();
-  if (!(hexKey(origin) in hexes)) {
-    hexes[hexKey(origin)] = "explored";
-    saveExploredHex(origin);
+  if (!(ORIGIN_KEY in hexes)) {
+    hexes[ORIGIN_KEY] = "explored";
+    saveExploredHex(ORIGIN);
   }
-  const icons: Record<string, HexIconType> = { [hexKey(origin)]: "town" };
-  return { playerPos: origin, hexes, icons };
+  const icons: Record<string, HexIconType> = { [ORIGIN_KEY]: "town" };
+  return { playerPos: ORIGIN, hexes, icons };
+}
+
+function freshVisitedSet(): Set<string> {
+  return new Set([ORIGIN_KEY]);
+}
+
+function resetToOrigin(data: SocketData): void {
+  data.hexMap = { ...data.hexMap, playerPos: ORIGIN };
+  data.visitedThisRun = freshVisitedSet();
+  data.phase = "map";
+  data.pendingHex = null;
+}
+
+function exploreHex(data: SocketData, target: HexCoord): void {
+  const tk = hexKey(target);
+  data.hexMap = {
+    ...data.hexMap,
+    playerPos: target,
+    hexes: { ...data.hexMap.hexes, [tk]: "explored" as const },
+  };
+  data.visitedThisRun.add(tk);
+  saveExploredHex(target);
 }
 
 let gameMode: GameMode = "pvp";
@@ -92,22 +116,15 @@ function checkCombatEnd(ws: ServerWebSocket<SocketData>) {
   if (!state.winner || ws.data.phase !== "combat") return;
 
   const won = state.winner === "red";
-  const hexMap = ws.data.hexMap;
 
   if (won && ws.data.pendingHex) {
-    const target = ws.data.pendingHex;
-    const tk = hexKey(target);
-    const newHexes = { ...hexMap.hexes, [tk]: "explored" as const };
-    ws.data.hexMap = { playerPos: target, hexes: newHexes, icons: hexMap.icons };
-    ws.data.visitedThisRun.add(tk);
-    saveExploredHex(target);
+    exploreHex(ws.data, ws.data.pendingHex);
+    ws.data.phase = "map";
+    ws.data.pendingHex = null;
   } else {
-    ws.data.hexMap = { playerPos: { q: 0, r: 0 }, hexes: hexMap.hexes, icons: hexMap.icons };
-    ws.data.visitedThisRun = new Set([hexKey({ q: 0, r: 0 })]);
+    resetToOrigin(ws.data);
   }
 
-  ws.data.phase = "map";
-  ws.data.pendingHex = null;
   sendTo(ws, { type: "hexCombatResult", won });
   sendHexMapState(ws);
 }
@@ -147,7 +164,7 @@ Bun.serve({
           hexMap: loadHexMapFromDb(),
           phase: (mode === "pve" ? "map" : "combat") as Phase,
           pendingHex: null,
-          visitedThisRun: new Set([hexKey({ q: 0, r: 0 })]),
+          visitedThisRun: freshVisitedSet(),
         },
       });
       if (!upgraded)
@@ -267,20 +284,13 @@ Bun.serve({
 
       if (msg.type === "reset") {
         if (gameMode === "pve" && ws.data.phase === "combat") {
-          ws.data.phase = "map";
-          ws.data.pendingHex = null;
-          ws.data.hexMap = {
-            playerPos: { q: 0, r: 0 },
-            hexes: ws.data.hexMap.hexes,
-            icons: ws.data.hexMap.icons,
-          };
-          ws.data.visitedThisRun = new Set([hexKey({ q: 0, r: 0 })]);
+          resetToOrigin(ws.data);
           sendTo(ws, { type: "hexCombatResult", won: false });
           sendHexMapState(ws);
         } else if (gameMode === "pve" && ws.data.phase === "map") {
           clearExploredHexes();
           ws.data.hexMap = loadHexMapFromDb();
-          ws.data.visitedThisRun = new Set([hexKey({ q: 0, r: 0 })]);
+          ws.data.visitedThisRun = freshVisitedSet();
           sendHexMapState(ws);
         } else {
           await resetCombatState();

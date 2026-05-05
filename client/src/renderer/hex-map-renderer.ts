@@ -12,6 +12,7 @@ import { PENCIL, PENCIL_LIGHT } from "./sketch-utils.js";
 import { HexCamera } from "./hex-camera.js";
 import { HexPathTrail } from "./hex-path-trail.js";
 import { HexPlayerTween } from "./hex-player-tween.js";
+import type { FramePacer } from "./frame-pacer.js";
 
 const HEX_SIZE = 48;
 
@@ -58,6 +59,7 @@ export class HexMapRenderer {
   private hexContainer = new Container();
   private decorationContainer = new Container();
   private iconContainer = new Container();
+  private hoverGfx = new Graphics();
   private hoverCoord: HexCoord | null = null;
   private mapState: HexMapState | null = null;
   private onHexClickCallback: ((coord: HexCoord) => void) | null = null;
@@ -67,8 +69,9 @@ export class HexMapRenderer {
   private camera: HexCamera;
   private pathTrail = new HexPathTrail();
   private playerTween = new HexPlayerTween(HEX_SIZE);
+  private inputEnabled = true;
 
-  constructor(private app: Application) {
+  constructor(private app: Application, private pacer: FramePacer) {
     this.camera = new HexCamera(app, this.worldContainer);
   }
 
@@ -81,27 +84,38 @@ export class HexMapRenderer {
     this.worldContainer.addChild(this.hexContainer);
     this.worldContainer.addChild(this.decorationContainer);
     this.worldContainer.addChild(this.iconContainer);
+    this.worldContainer.addChild(this.hoverGfx);
     this.worldContainer.addChild(this.playerTween.idleSprite);
     this.worldContainer.addChild(this.playerTween.moveSprite);
 
+    let wasTweening = false;
     this.app.ticker.add((ticker) => {
-      if (!this.playerTween.animating) return;
+      if (!this.playerTween.animating) {
+        if (wasTweening) {
+          wasTweening = false;
+          this.pacer.release();
+        }
+        return;
+      }
+      wasTweening = true;
       const dt = ticker.deltaTime / 60;
       const pos = this.playerTween.tick(dt);
       if (pos) this.pathTrail.drawLive(pos.x, pos.y);
     });
 
     this.app.canvas.addEventListener("mousemove", (e) => {
+      if (!this.inputEnabled) return;
       const world = this.camera.screenToWorld(e.clientX, e.clientY);
       const coord = pixelToHex(world.x, world.y, HEX_SIZE);
       const prev = this.hoverCoord;
       if (!prev || prev.q !== coord.q || prev.r !== coord.r) {
         this.hoverCoord = coord;
-        if (this.mapState && !this.playerTween.animating) this.drawHexes();
+        if (this.mapState && !this.playerTween.animating) this.drawHover();
       }
     });
 
     this.app.canvas.addEventListener("click", (e) => {
+      if (!this.inputEnabled) return;
       if (!this.mapState || !this.onHexClickCallback || this.playerTween.animating) return;
       if (this.camera.consumeSuppressedClick()) return;
       const world = this.camera.screenToWorld(e.clientX, e.clientY);
@@ -124,6 +138,15 @@ export class HexMapRenderer {
     if (this.cameraControls) this.cameraControls.style.display = "none";
   }
 
+  hideControls() {
+    if (this.cameraControls) this.cameraControls.style.display = "none";
+  }
+
+  setInputEnabled(val: boolean) {
+    this.inputEnabled = val;
+    this.camera.setEnabled(val);
+  }
+
   isMoving(): boolean {
     return this.playerTween.animating;
   }
@@ -136,6 +159,7 @@ export class HexMapRenderer {
     if (!this.mapState) return;
     const to = hexToPixel(target, HEX_SIZE);
     this.pathTrail.addPoint(to);
+    this.pacer.request();
     this.playerTween.startMove(this.mapState.playerPos, target);
   }
 
@@ -173,16 +197,27 @@ export class HexMapRenderer {
       const coord = parseHexKey(key);
       const px = hexToPixel(coord, HEX_SIZE);
       const isPlayer = coord.q === playerPos.q && coord.r === playerPos.r;
-      const isHover =
-        this.hoverCoord &&
-        this.hoverCoord.q === coord.q &&
-        this.hoverCoord.r === coord.r;
-      const isClickable = isAdjacent(playerPos, coord);
       const iconType = icons?.[key];
       const showHex = nearPlayer.has(key);
 
-      this.drawHex(px.x, px.y, status, isPlayer, !!isHover && isClickable, coord, iconType, showHex);
+      this.drawHex(px.x, px.y, status, isPlayer, coord, iconType, showHex);
     }
+
+    this.drawHover();
+  }
+
+  private drawHover() {
+    this.hoverGfx.clear();
+    if (!this.mapState || !this.hoverCoord) return;
+    const { hexes, playerPos } = this.mapState;
+    const key = hexKey(this.hoverCoord);
+    if (!(key in hexes)) return;
+    if (!isAdjacent(playerPos, this.hoverCoord)) return;
+
+    const px = hexToPixel(this.hoverCoord, HEX_SIZE);
+    const hoverPoints = this.exactHexPoints(px.x, px.y, HEX_SIZE + 2);
+    this.hoverGfx.poly(hoverPoints);
+    this.hoverGfx.stroke({ color: HOVER_COLOR, alpha: 0.6, width: 2.0 });
   }
 
   private drawHex(
@@ -190,7 +225,6 @@ export class HexMapRenderer {
     y: number,
     status: HexStatus,
     isPlayer: boolean,
-    isHover: boolean,
     coord: HexCoord,
     iconType: HexIconType | undefined,
     showHex: boolean
@@ -212,12 +246,6 @@ export class HexMapRenderer {
         gfx.poly(points);
         gfx.fill({ color: PENCIL, alpha: 0.03 });
         gfx.stroke({ color: PENCIL_LIGHT, alpha: 0.35, width: 1.0 });
-      }
-
-      if (isHover) {
-        const hoverPoints = this.exactHexPoints(x, y, size + 2);
-        gfx.poly(hoverPoints);
-        gfx.stroke({ color: HOVER_COLOR, alpha: 0.6, width: 2.0 });
       }
     } else {
       gfx.poly(points);

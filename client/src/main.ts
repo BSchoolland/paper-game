@@ -4,9 +4,8 @@ import { CombatStore } from "./state/combat-store.js";
 import { ClientState } from "./state/client-state.js";
 import { GameRenderer } from "./renderer/game-renderer.js";
 import { HexMapRenderer, loadMapIconAssets } from "./renderer/hex-map-renderer.js";
-import { IrisTransition } from "./renderer/iris-transition.js";
+import { FramePacer } from "./renderer/frame-pacer.js";
 import { InputManager } from "./input/input-manager.js";
-import { Hud } from "./ui/hud.js";
 import { loadSpriteAssets } from "./renderer/sprite-assets.js";
 import { loadMapAssets } from "./renderer/grid-renderer.js";
 import type { HexCoord, HexMapState } from "shared";
@@ -15,10 +14,12 @@ import { hexKey, isAdjacent } from "shared";
 async function init() {
   const app = new Application();
   await app.init({
-    background: "#1a140e",
+    background: "#efddac",
     resizeTo: window,
     antialias: true,
   });
+
+  const pacer = new FramePacer(app.ticker);
 
   const container = document.getElementById("game-container")!;
   container.appendChild(app.canvas);
@@ -35,28 +36,22 @@ async function init() {
 
   // Combat screen objects (created once, entered/exited many times)
   const clientState = new ClientState(combatStore);
-  const combatRenderer = new GameRenderer(app, clientState);
-  const hud = new Hud(container, clientState);
+  const combatRenderer = new GameRenderer(app, clientState, pacer);
   const input = new InputManager(app.canvas, clientState, combatRenderer, () => {
     if (!combatStore.hasState()) return;
     combatRenderer.renderOverlay(input.mouseWorld);
-    hud.update();
   });
   combatStore.setAnimatingCheck(() => combatRenderer.isAnimating());
   combatStore.subscribeEvents((events) => combatRenderer.pushEvents(events));
   clientState.subscribe(() => {
     if (!combatStore.hasState()) return;
     combatRenderer.render();
-    hud.update();
   });
-  hud.hide();
 
   // Hex map screen objects
-  const hexRenderer = new HexMapRenderer(app);
+  const hexRenderer = new HexMapRenderer(app, pacer);
   hexRenderer.init();
   hexRenderer.hide();
-
-  const iris = new IrisTransition(app);
 
   let hexMapState: HexMapState | null = null;
   let activeScreen: "map" | "combat" = mode === "pve" ? "map" : "combat";
@@ -65,45 +60,22 @@ async function init() {
   function enterMap() {
     activeScreen = "map";
     combatRenderer.exit();
-    hud.hide();
+    hexRenderer.setInputEnabled(true);
     hexRenderer.show();
     if (hexMapState) hexRenderer.render(hexMapState);
   }
 
-  function enterCombatWithTransition() {
-    const cx = app.screen.width / 2;
-    const cy = app.screen.height / 2;
-
-    iris.bringToFront();
-    iris.play(
-      cx,
-      cy,
-      () => {
-        activeScreen = "combat";
-        hexRenderer.hide();
-        combatStore.waitForState().then(() => {
-          combatRenderer.enter();
-          hud.show();
-          hud.update();
-        });
-      },
-      () => {}
-    );
+  function enterCombat() {
+    activeScreen = "combat";
+    hexRenderer.hideControls();
+    hexRenderer.setInputEnabled(false);
+    combatStore.waitForState().then(() => {
+      combatRenderer.enter();
+    });
   }
 
-  function exitCombatWithTransition() {
-    const cx = app.screen.width / 2;
-    const cy = app.screen.height / 2;
-
-    iris.bringToFront();
-    iris.play(
-      cx,
-      cy,
-      () => {
-        enterMap();
-      },
-      () => {}
-    );
+  function exitCombat() {
+    enterMap();
   }
 
   // Hex map input
@@ -130,19 +102,15 @@ async function init() {
     clientState.resetSelection();
     combatStore.resetDisplayState();
 
-    const doTransition = () => {
-      setTimeout(() => enterCombatWithTransition(), 400);
-    };
-
     if (hexRenderer.isMoving()) {
-      hexRenderer.onMoveComplete(doTransition);
+      hexRenderer.onMoveComplete(() => enterCombat());
     } else {
-      doTransition();
+      enterCombat();
     }
   });
 
   conn.on("hexCombatResult", () => {
-    exitCombatWithTransition();
+    exitCombat();
   });
 
   // Debug: F2 to instantly win combat
@@ -162,8 +130,6 @@ async function init() {
     await combatStore.waitForState();
     activeScreen = "combat";
     combatRenderer.enter();
-    hud.show();
-    hud.update();
   }
 }
 
