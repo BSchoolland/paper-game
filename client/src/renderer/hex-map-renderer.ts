@@ -7,7 +7,7 @@ import {
   Texture,
 } from "pixi.js";
 import type { HexCoord, HexIconType, HexMapState, HexStatus } from "shared";
-import { hexToPixel, hexNeighbors, hexKey, parseHexKey, pixelToHex, isAdjacent, HEX_ICON_TYPES } from "shared";
+import { hexToPixel, hexNeighbors, hexKey, parseHexKey, pixelToHex, isAdjacent, isDecorationHex, HEX_ICON_TYPES } from "shared";
 import { PENCIL, PENCIL_LIGHT } from "./sketch-utils.js";
 import { HexCamera } from "./hex-camera.js";
 import { HexPathTrail } from "./hex-path-trail.js";
@@ -24,7 +24,6 @@ const FONT = "Georgia, 'Times New Roman', serif";
 
 const ICON_SIZE = 72;
 const DECORATION_SCALE = 0.6;
-const DECORATION_DENSITY = 0.18;
 const SHOW_DECORATIONS = true;
 
 const iconTextures = new Map<HexIconType, Texture>();
@@ -278,8 +277,7 @@ export class HexMapRenderer {
   private drawDecoration(x: number, y: number, coord: HexCoord, status: HexStatus) {
     if (decorationNames.length === 0) return;
 
-    const densityRoll = this.seededUnit(coord, 11);
-    if (densityRoll > DECORATION_DENSITY) return;
+    if (!isDecorationHex(coord)) return;
 
     const index = Math.floor(this.seededUnit(coord, 23) * decorationNames.length);
     const name = decorationNames[index];

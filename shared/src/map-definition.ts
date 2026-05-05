@@ -14,6 +14,53 @@ export interface MapDefinition {
   readonly objects: readonly MapObjectPlacement[];
 }
 
+export interface PlaceableObject {
+  readonly name: string;
+  readonly category: MapObjectCategory;
+  readonly scale: number;
+}
+
+export function seededRandom(seed: number) {
+  let s = seed;
+  return () => {
+    s = (s * 1664525 + 1013904223) & 0xffffffff;
+    return (s >>> 0) / 0xffffffff;
+  };
+}
+
+export function placeObjects(
+  objects: readonly PlaceableObject[],
+  worldWidth: number,
+  worldHeight: number,
+  rand: () => number,
+  margin = 40,
+  minDist = 50
+): MapObjectPlacement[] {
+  const placed: { x: number; y: number; r: number }[] = [];
+  const result: MapObjectPlacement[] = [];
+
+  for (const obj of objects) {
+    let x: number, y: number;
+    let attempts = 0;
+
+    do {
+      x = margin + rand() * (worldWidth - margin * 2);
+      y = margin + rand() * (worldHeight - margin * 2);
+      attempts++;
+    } while (
+      attempts < 30 &&
+      placed.some(
+        (p) => (p.x - x) ** 2 + (p.y - y) ** 2 < (minDist + p.r) ** 2
+      )
+    );
+
+    result.push({ name: obj.name, category: obj.category, position: { x, y }, scale: obj.scale });
+    placed.push({ x, y, r: obj.scale * 30 });
+  }
+
+  return result;
+}
+
 const DECORATION_OBJECTS = [
   "tree-oak-small",
   "tree-oak-medium",
@@ -73,57 +120,27 @@ const OBJECT_SCALES: Record<string, number> = {
   "wall-u-shape": 0.3,
 };
 
-function seededRandom(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) & 0xffffffff;
-    return (s >>> 0) / 0xffffffff;
-  };
-}
-
 export function generateMapObjects(
   worldWidth: number,
   worldHeight: number,
   seed: number
 ): MapDefinition {
   const rand = seededRandom(seed);
-  const margin = 40;
   const wallCount = 18;
   const decoCount = 12;
-  const minDist = 50;
-  const placed: { x: number; y: number; r: number }[] = [];
-  const objects: MapObjectPlacement[] = [];
 
-  function place(name: string, category: MapObjectCategory) {
-    const scale = OBJECT_SCALES[name] ?? 0.3;
-    let x: number, y: number;
-    let attempts = 0;
-
-    do {
-      x = margin + rand() * (worldWidth - margin * 2);
-      y = margin + rand() * (worldHeight - margin * 2);
-      attempts++;
-    } while (
-      attempts < 30 &&
-      placed.some(
-        (p) => (p.x - x) ** 2 + (p.y - y) ** 2 < (minDist + p.r) ** 2
-      )
-    );
-
-    objects.push({ name, category, position: { x, y }, scale });
-    placed.push({ x, y, r: scale * 30 });
-  }
+  const picks: PlaceableObject[] = [];
 
   for (let i = 0; i < wallCount; i++) {
     const name = WALL_OBJECTS[Math.floor(rand() * WALL_OBJECTS.length)]!;
-    place(name, "wall");
+    picks.push({ name, category: "wall", scale: OBJECT_SCALES[name] ?? 0.3 });
   }
 
   for (let i = 0; i < decoCount; i++) {
-    const name =
-      DECORATION_OBJECTS[Math.floor(rand() * DECORATION_OBJECTS.length)]!;
-    place(name, "decoration");
+    const name = DECORATION_OBJECTS[Math.floor(rand() * DECORATION_OBJECTS.length)]!;
+    picks.push({ name, category: "decoration", scale: OBJECT_SCALES[name] ?? 0.3 });
   }
 
+  const objects = placeObjects(picks, worldWidth, worldHeight, rand);
   return { seed, objects };
 }

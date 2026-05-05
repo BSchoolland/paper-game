@@ -110,7 +110,14 @@ async function init() {
   });
 
   conn.on("hexCombatResult", () => {
-    exitCombat();
+    const waitForIdle = () => {
+      if (combatRenderer.isAnimating()) {
+        requestAnimationFrame(waitForIdle);
+      } else {
+        exitCombat();
+      }
+    };
+    requestAnimationFrame(waitForIdle);
   });
 
   // Debug: F2 to instantly win combat

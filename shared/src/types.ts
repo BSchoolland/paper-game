@@ -107,6 +107,17 @@ export const BOW: WeaponDefinition = {
   ignoreCoverRange: 40,
 };
 
+export const ENEMY_TAGS = [
+  "melee",
+  "ranged",
+  "tank",
+  "swarm",
+  "elite",
+  "boss",
+] as const;
+
+export type EnemyTag = (typeof ENEMY_TAGS)[number];
+
 export interface UnitTemplate {
   readonly weapon: WeaponDefinition;
   readonly hp: number;
@@ -115,6 +126,8 @@ export interface UnitTemplate {
   readonly canMoveAfterAttack: boolean;
   readonly className: string;
   readonly spriteType?: string;
+  readonly cost?: number;
+  readonly tags?: readonly EnemyTag[];
 }
 
 export const UNIT_TEMPLATES = {
@@ -201,6 +214,8 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Goblin Spearman",
     spriteType: "goblin-spear",
+    cost: 3,
+    tags: ["melee"],
   },
   "goblin-archer": {
     weapon: GOBLIN_BOW,
@@ -210,6 +225,8 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Goblin Archer",
     spriteType: "goblin-archer",
+    cost: 3,
+    tags: ["ranged"],
   },
   "goblin-shield": {
     weapon: SHIELD_BASH,
@@ -219,6 +236,8 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Goblin Shield",
     spriteType: "goblin-shield",
+    cost: 4,
+    tags: ["melee", "tank"],
   },
   "goblin-brute": {
     weapon: BRUTE_SLAM,
@@ -228,6 +247,8 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Goblin Brute",
     spriteType: "goblin-brute",
+    cost: 6,
+    tags: ["melee", "elite"],
   },
   "stone-golem": {
     weapon: GOLEM_SMASH,
@@ -237,6 +258,8 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Stone Golem",
     spriteType: "stone-golem",
+    cost: 10,
+    tags: ["melee", "tank", "boss"],
   },
   "slime": {
     weapon: SLIME_SPIT,
@@ -246,5 +269,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Slime",
     spriteType: "slime",
+    cost: 1,
+    tags: ["ranged", "swarm"],
   },
 } as const satisfies Record<string, UnitTemplate>;

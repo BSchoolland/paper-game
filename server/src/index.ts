@@ -11,9 +11,13 @@ import {
   hexKey,
   isAdjacent,
   parseHexKey,
+  generateEncounter,
+  GREENLANDS_BIOME,
+  isDecorationHex,
 } from "shared";
-import type { HexCoord, HexMapState, HexIconType } from "shared";
+import type { HexCoord, HexMapState, HexIconType, EncounterType } from "shared";
 import { loadCollisionGrid } from "./collision-loader.js";
+import { createEncounterGameState } from "./encounter-builder.js";
 import {
   saveExploredHex,
   loadExploredHexes,
@@ -74,8 +78,16 @@ let gameMode: GameMode = "pvp";
 let state: GameState = createInitialGameState();
 await loadCollisionGrid(state.grid, state.mapDefinition.objects);
 
-async function resetCombatState() {
-  state = gameMode === "pve" ? createPveGameState() : createInitialGameState();
+async function resetCombatState(hexType?: EncounterType, hexCoord?: HexCoord) {
+  if (gameMode === "pve" && hexType && hexCoord) {
+    const seed = (hexCoord.q * 7919 + hexCoord.r * 104729 + 5381) & 0x7fffffff;
+    const encounter = generateEncounter(hexType, GREENLANDS_BIOME, seed);
+    state = createEncounterGameState(encounter);
+  } else if (gameMode === "pve") {
+    state = createPveGameState();
+  } else {
+    state = createInitialGameState();
+  }
   await loadCollisionGrid(state.grid, state.mapDefinition.objects);
 }
 
@@ -252,7 +264,9 @@ Bun.serve({
         } else {
           ws.data.phase = "combat";
           ws.data.pendingHex = target;
-          await resetCombatState();
+          const hexType = getHexIcon(target, ws.data.hexMap.icons)
+            ?? (isDecorationHex(target) ? "dense-wilderness" : "wilderness");
+          await resetCombatState(hexType, target);
           sendTo(ws, { type: "hexCombatStart" });
           sendTo(ws, {
             type: "state",

@@ -1,44 +1,19 @@
-import type { Entity, GameState, TeamId, UnitTemplate } from "../types.js";
+import type { Entity, GameState } from "../types.js";
 import { UNIT_TEMPLATES, ENEMY_TEMPLATES } from "../types.js";
 import { createGrid } from "../collision-grid.js";
 import { generateMapObjects } from "../map-definition.js";
+import { makeEntity } from "../entity-factory.js";
 
-function makeEntity(
-  id: string,
-  name: string,
-  x: number,
-  y: number,
-  teamId: TeamId,
-  template: UnitTemplate
-): Entity {
-  return {
-    id,
-    name,
-    position: { x, y },
-    collisionRadius: template.collisionRadius,
-    hp: template.hp,
-    maxHp: template.hp,
-    teamId,
-    movementBudget: template.movementBudget,
-    movementRemaining: template.movementBudget,
-    actionsRemaining: 1,
-    canMoveAfterAttack: template.canMoveAfterAttack,
-    hasAttackedThisTurn: false,
-    weapon: template.weapon,
-    spriteType: template.spriteType,
-  };
-}
+const GRID_WIDTH = 400;
+const GRID_HEIGHT = 300;
+const CELL_SIZE = 2;
 
-export function createTestMap() {
-  const cellSize = 2;
-  const width = 400;
-  const height = 300;
-  const grid = createGrid(width, height, cellSize);
-  return grid;
+export function createCombatGrid() {
+  return createGrid(GRID_WIDTH, GRID_HEIGHT, CELL_SIZE);
 }
 
 export function createInitialGameState(): GameState {
-  const grid = createTestMap();
+  const grid = createCombatGrid();
   const worldW = grid.width * grid.cellSize;
   const worldH = grid.height * grid.cellSize;
   const mapDefinition = generateMapObjects(worldW, worldH, 42);
@@ -64,7 +39,7 @@ export function createInitialGameState(): GameState {
 }
 
 export function createPveGameState(): GameState {
-  const grid = createTestMap();
+  const grid = createCombatGrid();
   const worldW = grid.width * grid.cellSize;
   const worldH = grid.height * grid.cellSize;
   const mapDefinition = generateMapObjects(worldW, worldH, 42);

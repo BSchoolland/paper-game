@@ -33,8 +33,8 @@ export function hexKey(coord: HexCoord): string {
 }
 
 export function parseHexKey(key: string): HexCoord {
-  const [q, r] = key.split(",").map(Number);
-  return { q, r };
+  const parts = key.split(",");
+  return { q: Number(parts[0]), r: Number(parts[1]) };
 }
 
 const NEIGHBOR_OFFSETS: readonly HexCoord[] = [
@@ -112,6 +112,18 @@ export function pixelToHex(x: number, y: number, size: number): HexCoord {
   const q = ((SQRT3 / 3) * x - (1 / 3) * y) / size;
   const r = ((2 / 3) * y) / size;
   return hexRound(q, r);
+}
+
+const DECORATION_DENSITY = 0.18;
+
+function hexSeededUnit(coord: HexCoord, salt: number): number {
+  let seed = Math.imul(coord.q, 374761393) ^ Math.imul(coord.r, 668265263) ^ Math.imul(salt, 2246822519);
+  seed = Math.imul(seed ^ (seed >>> 13), 1274126177);
+  return ((seed ^ (seed >>> 16)) >>> 0) / 0xffffffff;
+}
+
+export function isDecorationHex(coord: HexCoord): boolean {
+  return hexSeededUnit(coord, 11) <= DECORATION_DENSITY;
 }
 
 function hexRound(q: number, r: number): HexCoord {
