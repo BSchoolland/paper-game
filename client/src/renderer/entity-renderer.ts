@@ -26,6 +26,7 @@ export class EntityVisual {
   private animState: AnimState = "idle";
   private animTimer = 0;
   readonly entityId: string;
+  readonly spriteType: string | undefined;
   private lastHp: number;
   private tweenFrom: { x: number; y: number } | null = null;
   private tweenProgress = 1;
@@ -34,6 +35,7 @@ export class EntityVisual {
 
   constructor(entity: Entity) {
     this.entityId = entity.id;
+    this.spriteType = entity.spriteType;
     this.lastHp = entity.hp;
     this.facingLeft = entity.teamId === "blue";
 

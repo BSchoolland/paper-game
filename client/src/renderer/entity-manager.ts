@@ -53,6 +53,12 @@ export class EntityManager {
     for (const [id, entity] of currentEntities) {
       let visual = this.visuals.get(id);
 
+      if (visual && visual.spriteType !== entity.spriteType) {
+        this.layer.removeChild(visual.container);
+        visual.container.destroy({ children: true });
+        visual = undefined;
+      }
+
       if (!visual) {
         visual = new EntityVisual(entity);
         this.visuals.set(id, visual);
