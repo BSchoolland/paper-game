@@ -27,15 +27,19 @@ export class EntityVisual {
   private animTimer = 0;
   readonly entityId: string;
   readonly spriteType: string | undefined;
+  readonly spriteScale: number;
   private lastHp: number;
   private tweenFrom: { x: number; y: number } | null = null;
   private tweenProgress = 1;
   private facingLeft: boolean;
   private wasSelected = false;
+  private readonly scale: number;
 
   constructor(entity: Entity) {
     this.entityId = entity.id;
     this.spriteType = entity.spriteType;
+    this.spriteScale = entity.spriteScale ?? 1;
+    this.scale = SPRITE_SCALE * this.spriteScale;
     this.lastHp = entity.hp;
     this.facingLeft = entity.teamId === "blue";
 
@@ -53,7 +57,7 @@ export class EntityVisual {
         : getSpriteTexture(team, unitType, state);
       const sprite = new Sprite(tex!);
       sprite.anchor.set(0.5, 0.75);
-      sprite.scale.set(SPRITE_SCALE);
+      sprite.scale.set(this.scale);
       sprite.position.set(0, 0);
       sprite.visible = state === "idle";
       this.container.addChild(sprite);
@@ -62,7 +66,7 @@ export class EntityVisual {
 
     if (this.facingLeft) {
       for (const s of Object.values(sprites)) {
-        s.scale.x = -SPRITE_SCALE;
+        s.scale.x = -this.scale;
       }
     }
 
@@ -179,7 +183,7 @@ export class EntityVisual {
     if (left === this.facingLeft) return;
     this.facingLeft = left;
     for (const s of Object.values(this.sprites)) {
-      s.scale.x = left ? -SPRITE_SCALE : SPRITE_SCALE;
+      s.scale.x = left ? -this.scale : this.scale;
     }
   }
 

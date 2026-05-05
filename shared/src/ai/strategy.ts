@@ -1,4 +1,4 @@
-import type { Entity, GameState, PlayerAction, Vec2 } from "../types.js";
+import type { AiStrategyType, Entity, GameState, PlayerAction, Vec2 } from "../types.js";
 import { distance, sub, normalize, add, scale } from "../vec2.js";
 import { pathfindMove } from "../pathfinding.js";
 import { isPositionWalkable, isWithinBounds } from "../collision-grid.js";
@@ -173,14 +173,10 @@ export class ThreatStrategy implements AiStrategy {
 }
 
 export function strategyForEntity(entity: Entity): AiStrategy {
-  switch (entity.spriteType) {
-    case "goblin-archer":
-    case "slime":
-      return kiteStrategy;
-    case "stone-golem":
-      return new ThreatStrategy();
-    default:
-      if (entity.weapon.shape.kind === "point") return kiteStrategy;
-      return rushStrategy;
+  const type: AiStrategyType = entity.strategy ?? "rush";
+  switch (type) {
+    case "kite": return kiteStrategy;
+    case "threat": return new ThreatStrategy();
+    case "rush": return rushStrategy;
   }
 }

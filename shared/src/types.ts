@@ -43,6 +43,8 @@ export interface Entity {
   readonly hasAttackedThisTurn: boolean;
   readonly weapon: WeaponDefinition;
   readonly spriteType?: string;
+  readonly spriteScale?: number;
+  readonly strategy?: AiStrategyType;
 }
 
 export interface GameState {
@@ -118,6 +120,8 @@ export const ENEMY_TAGS = [
 
 export type EnemyTag = (typeof ENEMY_TAGS)[number];
 
+export type AiStrategyType = "rush" | "kite" | "threat";
+
 export interface UnitTemplate {
   readonly weapon: WeaponDefinition;
   readonly hp: number;
@@ -126,6 +130,8 @@ export interface UnitTemplate {
   readonly canMoveAfterAttack: boolean;
   readonly className: string;
   readonly spriteType?: string;
+  readonly spriteScale?: number;
+  readonly strategy?: AiStrategyType;
   readonly cost?: number;
   readonly tags?: readonly EnemyTag[];
 }
@@ -205,6 +211,22 @@ export const SLIME_SPIT: WeaponDefinition = {
   actionCost: 1,
 };
 
+export const SLIME_LASH: WeaponDefinition = {
+  id: "slime-lash",
+  name: "Slime Lash",
+  shape: { kind: "sector", radius: 70, halfAngle: Math.PI / 3 },
+  damage: 20,
+  actionCost: 1,
+};
+
+export const SLIME_WAVE: WeaponDefinition = {
+  id: "slime-wave",
+  name: "Slime Wave",
+  shape: { kind: "circle", radius: 80, range: 50 },
+  damage: 35,
+  actionCost: 1,
+};
+
 export const ENEMY_TEMPLATES = {
   "goblin-spear": {
     weapon: GOBLIN_SPEAR,
@@ -214,6 +236,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Goblin Spearman",
     spriteType: "goblin-spear",
+    strategy: "rush",
     cost: 3,
     tags: ["melee"],
   },
@@ -225,6 +248,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Goblin Archer",
     spriteType: "goblin-archer",
+    strategy: "kite",
     cost: 3,
     tags: ["ranged"],
   },
@@ -236,6 +260,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Goblin Shield",
     spriteType: "goblin-shield",
+    strategy: "rush",
     cost: 4,
     tags: ["melee", "tank"],
   },
@@ -247,6 +272,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Goblin Brute",
     spriteType: "goblin-brute",
+    strategy: "rush",
     cost: 6,
     tags: ["melee", "elite"],
   },
@@ -258,6 +284,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Stone Golem",
     spriteType: "stone-golem",
+    strategy: "threat",
     cost: 10,
     tags: ["melee", "tank", "boss"],
   },
@@ -269,7 +296,34 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Slime",
     spriteType: "slime",
+    strategy: "kite",
     cost: 1,
     tags: ["ranged", "swarm"],
+  },
+  "big-slime": {
+    weapon: SLIME_LASH,
+    hp: 90,
+    movementBudget: 100,
+    collisionRadius: 18,
+    canMoveAfterAttack: true,
+    className: "Big Slime",
+    spriteType: "slime",
+    spriteScale: 1.5,
+    strategy: "rush",
+    cost: 4,
+    tags: ["melee", "tank"],
+  },
+  "massive-slime": {
+    weapon: SLIME_WAVE,
+    hp: 200,
+    movementBudget: 70,
+    collisionRadius: 28,
+    canMoveAfterAttack: false,
+    className: "Massive Slime",
+    spriteType: "slime",
+    spriteScale: 3,
+    strategy: "threat",
+    cost: 10,
+    tags: ["melee", "tank", "elite"],
   },
 } as const satisfies Record<string, UnitTemplate>;

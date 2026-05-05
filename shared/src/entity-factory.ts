@@ -23,5 +23,7 @@ export function makeEntity(
     hasAttackedThisTurn: false,
     weapon: template.weapon,
     spriteType: template.spriteType,
+    spriteScale: template.spriteScale,
+    strategy: template.strategy,
   };
 }
