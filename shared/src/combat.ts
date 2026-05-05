@@ -1,5 +1,5 @@
 import type { AttackHit, Entity, GameState, GridState, WeaponDefinition, Vec2 } from "./types.js";
-import { entitiesInSector, entitiesInRectangle, raycastToEntity } from "./geometry/index.js";
+import { entitiesInShape } from "./geometry/index.js";
 
 export interface DamageResult {
   readonly state: GameState;
@@ -13,49 +13,16 @@ export function resolveWeaponAttack(
   weapon: WeaponDefinition,
   grid: GridState
 ): Entity[] {
-  const shape = weapon.shape;
-
-  switch (shape.kind) {
-    case "sector": {
-      const hits = entitiesInSector(
-        attacker.position,
-        aimDirection,
-        shape.radius,
-        shape.halfAngle,
-        entities,
-        attacker.id
-      );
-      return hits.filter((e) => e.teamId !== attacker.teamId);
-    }
-    case "rectangle": {
-      const hits = entitiesInRectangle(
-        attacker.position,
-        aimDirection,
-        shape.length,
-        shape.width,
-        entities,
-        attacker.id
-      );
-      return hits.filter((e) => e.teamId !== attacker.teamId);
-    }
-    case "point": {
-      const hit = raycastToEntity(
-        attacker.position,
-        aimDirection,
-        shape.range,
-        entities,
-        grid,
-        attacker.id,
-        weapon.ignoreCoverRange
-      );
-      if (!hit) return [];
-      const target = entities.get(hit.entityId);
-      if (!target || target.teamId === attacker.teamId) return [];
-      return [target];
-    }
-    case "circle":
-      return [];
-  }
+  const hits = entitiesInShape(
+    attacker.position,
+    aimDirection,
+    weapon.shape,
+    entities,
+    grid,
+    attacker.id,
+    weapon.ignoreCoverRange
+  );
+  return hits.filter((e) => e.teamId !== attacker.teamId);
 }
 
 export function applyDamage(
