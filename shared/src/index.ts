@@ -15,3 +15,4 @@ export * from "./hex-map.js";
 export * from "./hex-config.js";
 export * from "./biome.js";
 export * from "./encounter.js";
+export * from "./effects.js";

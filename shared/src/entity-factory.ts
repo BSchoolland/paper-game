@@ -25,5 +25,6 @@ export function makeEntity(
     spriteType: template.spriteType,
     spriteScale: template.spriteScale,
     strategy: template.strategy,
+    effects: template.effects,
   };
 }

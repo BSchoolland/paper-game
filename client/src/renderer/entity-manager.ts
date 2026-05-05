@@ -140,6 +140,8 @@ export class EntityManager {
         }
         break;
       }
+      case "spawn":
+        break;
     }
   }
 

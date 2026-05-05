@@ -45,6 +45,7 @@ export interface Entity {
   readonly spriteType?: string;
   readonly spriteScale?: number;
   readonly strategy?: AiStrategyType;
+  readonly effects?: readonly EntityEffect[];
 }
 
 export interface GameState {
@@ -71,12 +72,26 @@ export type GameEvent =
       weapon: WeaponDefinition;
       hits: readonly AttackHit[];
     }
-  | { type: "endTurn"; nextTeam: TeamId };
+  | { type: "endTurn"; nextTeam: TeamId }
+  | { type: "spawn"; entityId: EntityId; position: Vec2; templateKey: string };
 
 export interface AttackHit {
   readonly targetId: EntityId;
   readonly damage: number;
   readonly killed: boolean;
+  readonly killedPosition?: Vec2;
+  readonly killedTeamId?: TeamId;
+  readonly killedEffects?: readonly EntityEffect[];
+}
+
+export type EffectTrigger = "onDeath";
+
+export type EffectAction =
+  | { type: "spawn"; templateKey: string; count: number };
+
+export interface EntityEffect {
+  readonly trigger: EffectTrigger;
+  readonly action: EffectAction;
 }
 
 export interface ActionResult {
@@ -132,6 +147,7 @@ export interface UnitTemplate {
   readonly spriteType?: string;
   readonly spriteScale?: number;
   readonly strategy?: AiStrategyType;
+  readonly effects?: readonly EntityEffect[];
   readonly cost?: number;
   readonly tags?: readonly EnemyTag[];
 }
@@ -310,8 +326,9 @@ export const ENEMY_TEMPLATES = {
     spriteType: "slime",
     spriteScale: 1.5,
     strategy: "rush",
-    cost: 4,
-    tags: ["melee", "tank"],
+    effects: [{ trigger: "onDeath", action: { type: "spawn", templateKey: "slime", count: 2 } }],
+    cost: 6,
+    tags: ["melee", "tank", "elite"],
   },
   "massive-slime": {
     weapon: SLIME_WAVE,
@@ -323,7 +340,8 @@ export const ENEMY_TEMPLATES = {
     spriteType: "slime",
     spriteScale: 3,
     strategy: "threat",
-    cost: 10,
-    tags: ["melee", "tank", "elite"],
+    effects: [{ trigger: "onDeath", action: { type: "spawn", templateKey: "big-slime", count: 2 } }],
+    cost: 14,
+    tags: ["melee", "tank", "boss"],
   },
 } as const satisfies Record<string, UnitTemplate>;

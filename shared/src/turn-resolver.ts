@@ -2,6 +2,7 @@ import type { ActionResult, AttackHit, Entity, GameEvent, GameState, PlayerActio
 import { distance } from "./vec2.js";
 import { isPositionWalkable, isWithinBounds } from "./collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
+import { processEffects } from "./effects.js";
 
 function checkWinner(state: GameState): TeamId | null {
   let hasRed = false;
@@ -100,8 +101,8 @@ function resolveAttack(
     hits = result.hits;
   }
 
-  return {
-    state: { ...newState, winner: checkWinner(newState) },
+  let result: ActionResult = {
+    state: newState,
     events: [{
       type: "attack",
       attackerId: entityId,
@@ -110,6 +111,13 @@ function resolveAttack(
       weapon: entity.weapon,
       hits,
     }],
+  };
+
+  result = processEffects(result);
+
+  return {
+    state: { ...result.state, winner: checkWinner(result.state) },
+    events: result.events,
   };
 }
 
