@@ -10,7 +10,7 @@ import {
 import { EntityManager } from "./entity-manager.js";
 import { drawTargetingPreview } from "./targeting-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
-import type { FramePacer } from "./frame-pacer.js";
+import type { FramePacer, PacerToken } from "./frame-pacer.js";
 
 const PADDING = 15;
 const DIM_ALPHA = 0.4;
@@ -40,6 +40,8 @@ export class GameRenderer {
   private debugVisible = false;
   private tickerActive = false;
   private wasAnimating = false;
+  private animToken: PacerToken | null = null;
+  private selectionToken: PacerToken | null = null;
 
   constructor(
     private app: Application,
@@ -74,7 +76,12 @@ export class GameRenderer {
         if (!this.outerContainer.visible) return;
         const animating = this.entities.isAnimating();
         if (animating !== this.wasAnimating) {
-          if (animating) this.pacer.request(); else this.pacer.release();
+          if (animating) {
+            this.animToken = this.pacer.request(60);
+          } else {
+            this.pacer.release(this.animToken!);
+            this.animToken = null;
+          }
           this.wasAnimating = animating;
         }
         if (!animating) return;
@@ -97,6 +104,10 @@ export class GameRenderer {
 
   exit() {
     this.outerContainer.visible = false;
+    if (this.selectionToken !== null) {
+      this.pacer.release(this.selectionToken);
+      this.selectionToken = null;
+    }
   }
 
   screenToWorld(screenPos: Vec2): Vec2 {
@@ -121,6 +132,14 @@ export class GameRenderer {
     );
     this.renderOverlay({ x: 0, y: 0 });
     this.debugLayer.visible = this.clientState.showDebugWalls;
+
+    const hasSelection = !!this.clientState.selectedEntityId;
+    if (hasSelection && this.selectionToken === null) {
+      this.selectionToken = this.pacer.request(45);
+    } else if (!hasSelection && this.selectionToken !== null) {
+      this.pacer.release(this.selectionToken);
+      this.selectionToken = null;
+    }
   }
 
   renderOverlay(mouseWorld: Vec2) {
