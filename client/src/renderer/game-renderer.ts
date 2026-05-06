@@ -34,7 +34,7 @@ export class GameRenderer {
   private scale = 1;
   private offsetX = 0;
   private offsetY = 0;
-  private entities: EntityManager;
+  private entities: EntityManager | null = null;
   private mapObjectSprites: Sprite[] = [];
   private debugLayer = new Container();
   private debugVisible = false;
@@ -48,7 +48,6 @@ export class GameRenderer {
     private clientState: ClientState,
     private pacer: FramePacer
   ) {
-    this.entities = new EntityManager(this.sortableLayer);
     this.outerContainer.addChild(this.dimGfx);
     this.outerContainer.addChild(this.frameGfx);
     this.outerContainer.addChild(this.worldContainer);
@@ -61,7 +60,12 @@ export class GameRenderer {
   }
 
   enter() {
+    if (this.entities) {
+      this.entities.destroy();
+      this.entities = null;
+    }
     this.rebuildGrid();
+    this.entities = new EntityManager(this.sortableLayer);
     this.layout();
     this.entities.sync(
       this.clientState.getState(),
@@ -73,7 +77,7 @@ export class GameRenderer {
     if (!this.tickerActive) {
       this.tickerActive = true;
       this.app.ticker.add((ticker) => {
-        if (!this.outerContainer.visible) return;
+        if (!this.outerContainer.visible || !this.entities) return;
         const animating = this.entities.isAnimating();
         if (animating !== this.wasAnimating) {
           if (animating) {
@@ -104,9 +108,18 @@ export class GameRenderer {
 
   exit() {
     this.outerContainer.visible = false;
+    if (this.entities) {
+      this.entities.destroy();
+      this.entities = null;
+    }
     if (this.selectionToken !== null) {
       this.pacer.release(this.selectionToken);
       this.selectionToken = null;
+    }
+    if (this.animToken !== null) {
+      this.pacer.release(this.animToken);
+      this.animToken = null;
+      this.wasAnimating = false;
     }
   }
 
@@ -118,14 +131,15 @@ export class GameRenderer {
   }
 
   pushEvents(events: readonly GameEvent[]) {
-    this.entities.pushEvents(events);
+    if (this.entities) this.entities.pushEvents(events);
   }
 
   isAnimating(): boolean {
-    return this.entities.isAnimating();
+    return this.entities?.isAnimating() ?? false;
   }
 
   render() {
+    if (!this.entities) return;
     this.entities.sync(
       this.clientState.getState(),
       this.clientState.selectedEntityId
@@ -229,7 +243,6 @@ export class GameRenderer {
       this.sortableLayer.addChild(sprite);
     }
     this.worldContainer.addChild(this.sortableLayer);
-    this.entities.setLayer(this.sortableLayer);
 
     this.overlayLayer = new Container();
     this.overlayLayer.addChild(this.targetingGfx);

@@ -28,14 +28,6 @@ export class EntityManager {
 
   constructor(private layer: Container) {}
 
-  setLayer(layer: Container) {
-    for (const visual of this.visuals.values()) {
-      this.layer.removeChild(visual.container);
-      layer.addChild(visual.container);
-    }
-    this.layer = layer;
-  }
-
   pushEvents(events: readonly GameEvent[]) {
     this.pendingEvents.push(...events);
   }
@@ -108,6 +100,21 @@ export class EntityManager {
         this.delayedHits.splice(i, 1);
       }
     }
+  }
+
+  destroy() {
+    for (const visual of this.visuals.values()) {
+      this.layer.removeChild(visual.container);
+      visual.container.destroy({ children: true });
+    }
+    this.visuals.clear();
+    for (const flash of this.attackFlashes) {
+      this.layer.removeChild(flash.gfx);
+      flash.gfx.destroy();
+    }
+    this.attackFlashes.length = 0;
+    this.delayedHits.length = 0;
+    this.pendingEvents.length = 0;
   }
 
   depthSort() {
