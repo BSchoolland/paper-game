@@ -10,6 +10,11 @@ db.exec(`
     PRIMARY KEY (q, r)
   )
 `);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT
+  )
+`);
 
 const insertStmt = db.prepare(
   "INSERT OR IGNORE INTO explored_hexes (q, r) VALUES (?, ?)"
@@ -40,6 +45,15 @@ export function loadExploredHexes(): Record<string, HexStatus> {
 export function clearExploredHexes(): void {
   clearStmt.run();
 }
+
+const insertRunStmt = db.prepare("INSERT INTO runs DEFAULT VALUES");
+const lastRunStmt = db.prepare("SELECT MAX(id) as id FROM runs");
+
+export function startNewRun(): number {
+  insertRunStmt.run();
+  return (lastRunStmt.get() as { id: number }).id;
+}
+
 
 export function seedDiscovery(radius: number): void {
   const coords: HexCoord[] = [];

@@ -15,6 +15,7 @@ import {
   loadExploredHexes,
   clearExploredHexes,
   seedDiscovery,
+  startNewRun,
 } from "./db.js";
 
 seedDiscovery(15);
@@ -29,6 +30,7 @@ interface SocketData {
   phase: Phase;
   pendingHex: HexCoord | null;
   visitedThisRun: Set<string>;
+  runId: number;
 }
 
 const ORIGIN: HexCoord = { q: 0, r: 0 };
@@ -51,6 +53,7 @@ function freshVisitedSet(): Set<string> {
 function resetToOrigin(data: SocketData): void {
   data.hexMap = { ...data.hexMap, playerPos: ORIGIN };
   data.visitedThisRun = freshVisitedSet();
+  data.runId = startNewRun();
   data.phase = "map";
   data.pendingHex = null;
 }
@@ -148,6 +151,7 @@ Bun.serve({
           phase: (mode === "pve" ? "map" : "combat") as Phase,
           pendingHex: null,
           visitedThisRun: freshVisitedSet(),
+          runId: startNewRun(),
         },
       });
       if (!upgraded)
@@ -237,7 +241,8 @@ Bun.serve({
           ws.data.pendingHex = target;
           const hexType = getHexIcon(target, ws.data.hexMap.icons)
             ?? (isDecorationHex(target) ? "dense-wilderness" : "wilderness");
-          session = await EncounterSession.create(gameMode, hexType, target);
+          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId);
+          console.log(`encounter run=${ws.data.runId} hex=(${target.q},${target.r}) type=${hexType}`);
           sendTo(ws, { type: "hexCombatStart" });
           sendTo(ws, {
             type: "state",
@@ -275,6 +280,7 @@ Bun.serve({
           clearExploredHexes();
           ws.data.hexMap = loadHexMapFromDb();
           ws.data.visitedThisRun = freshVisitedSet();
+          ws.data.runId = startNewRun();
           sendHexMapState(ws);
         } else {
           session = await EncounterSession.create(gameMode);

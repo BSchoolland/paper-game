@@ -23,13 +23,14 @@ export class EncounterSession {
   static async create(
     mode: "pvp" | "pve",
     hexType?: EncounterType,
-    hexCoord?: HexCoord
+    hexCoord?: HexCoord,
+    runId?: number
   ): Promise<EncounterSession> {
     resetSpawnCounter();
     let state: GameState;
 
-    if (mode === "pve" && hexType && hexCoord) {
-      const encounter = generateEncounter(hexType, GREENLANDS_BIOME, hexCoord.q, hexCoord.r);
+    if (mode === "pve" && hexType && hexCoord && runId !== undefined) {
+      const encounter = generateEncounter(hexType, GREENLANDS_BIOME, hexCoord.q, hexCoord.r, runId);
       state = createEncounterGameState(encounter);
     } else if (mode === "pve") {
       state = createPveGameState();

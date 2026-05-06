@@ -10,9 +10,9 @@ export class Rng {
     return new Rng(seed);
   }
 
-  static trueRandom(): Rng {
-    // eslint-disable-next-line no-restricted-syntax -- Rng implementation seeding from Math.random
-    return new Rng((Math.random() * 0x7fffffff) | 0);
+  static perRun(runId: number, x: number, y: number): Rng {
+    const seed = (runId * 48271 + x * 7919 + y * 104729 + 91831) & 0x7fffffff;
+    return new Rng(seed);
   }
 
   next(): number {

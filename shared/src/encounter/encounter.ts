@@ -30,11 +30,12 @@ export function generateEncounter(
   hexType: EncounterType,
   biome: Biome,
   x: number,
-  y: number
+  y: number,
+  runId: number
 ): GeneratedEncounter {
   const profile = getEncounterProfile(hexType);
   const layoutRng = Rng.seeded(x, y);
-  const enemyRng = Rng.trueRandom();
+  const enemyRng = Rng.perRun(runId, x, y);
 
   const enemies = rollEnemies(biome.enemies, profile, enemyRng);
   const structures = rollStructures(biome.structures, profile, layoutRng);
