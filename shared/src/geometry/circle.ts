@@ -1,5 +1,5 @@
-import type { Entity, Vec2 } from "../types.js";
-import { distance } from "../vec2.js";
+import type { Entity, Vec2 } from "../core/types.js";
+import { distance } from "../core/vec2.js";
 
 export function entitiesInCircle(
   center: Vec2,

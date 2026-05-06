@@ -1,7 +1,7 @@
-import type { AiStrategyType, Entity, GameState, PlayerAction, Vec2 } from "../types.js";
-import { distance, sub, normalize, add, scale } from "../vec2.js";
-import { pathfindMove } from "../pathfinding.js";
-import { isPositionWalkable, isWithinBounds } from "../collision-grid.js";
+import type { AiStrategyType, Entity, GameState, PlayerAction, Vec2 } from "../core/types.js";
+import { distance, sub, normalize, add, scale } from "../core/vec2.js";
+import { pathfindMove } from "../map/pathfinding.js";
+import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 
 export interface AiStrategy {
   planActions(entity: Entity, state: GameState): PlayerAction[];

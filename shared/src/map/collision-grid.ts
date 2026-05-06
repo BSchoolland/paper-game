@@ -1,4 +1,4 @@
-import type { GridState, Vec2 } from "./types.js";
+import type { GridState, Vec2 } from "../core/types.js";
 
 export const CELL_EMPTY = 0;
 export const CELL_WALL = 1;

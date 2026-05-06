@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { pointInSector } from "../geometry/sector.js";
 import { entityInRectangle } from "../geometry/rectangle.js";
-import { resolveWeaponAttack } from "../combat.js";
-import { SHORT_SWORD, SPEAR, BOW } from "../types.js";
-import { createGrid } from "../collision-grid.js";
+import { resolveWeaponAttack } from "../combat/combat.js";
+import { SHORT_SWORD, SPEAR, BOW } from "../core/types.js";
+import { createGrid } from "../map/collision-grid.js";
 import { makeEntity } from "./test-helpers.js";
 
 const emptyGrid = createGrid(100, 100, 8);

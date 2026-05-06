@@ -1,6 +1,6 @@
-import type { UnitTemplate } from "./types.js";
-import { ENEMY_TEMPLATES } from "./types.js";
-import type { MapObjectCategory } from "./map-definition.js";
+import type { UnitTemplate } from "../core/types.js";
+import { ENEMY_TEMPLATES } from "../core/types.js";
+import type { MapObjectCategory } from "../map/map-definition.js";
 
 export interface StructureEntry {
   readonly name: string;

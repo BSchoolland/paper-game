@@ -1,5 +1,5 @@
-import type { ActionResult, EntityEffect, GameEvent, TeamId, Vec2 } from "./types.js";
-import { ENEMY_TEMPLATES } from "./types.js";
+import type { ActionResult, EntityEffect, GameEvent, TeamId, Vec2 } from "../core/types.js";
+import { ENEMY_TEMPLATES } from "../core/types.js";
 import { makeEntity } from "./entity-factory.js";
 
 let spawnCounter = 0;

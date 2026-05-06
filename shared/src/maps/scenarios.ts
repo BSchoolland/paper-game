@@ -1,8 +1,8 @@
-import type { Entity, GameState } from "../types.js";
-import { UNIT_TEMPLATES, ENEMY_TEMPLATES } from "../types.js";
-import { createGrid } from "../collision-grid.js";
-import { generateMapObjects } from "../map-definition.js";
-import { makeEntity } from "../entity-factory.js";
+import type { Entity, GameState } from "../core/types.js";
+import { UNIT_TEMPLATES, ENEMY_TEMPLATES } from "../core/types.js";
+import { createGrid } from "../map/collision-grid.js";
+import { generateMapObjects } from "../map/map-definition.js";
+import { makeEntity } from "../encounter/entity-factory.js";
 
 const GRID_WIDTH = 400;
 const GRID_HEIGHT = 300;

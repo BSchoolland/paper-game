@@ -1,6 +1,6 @@
-import type { Entity, GameState } from "../types.js";
-import { SHORT_SWORD } from "../types.js";
-import { createGrid } from "../collision-grid.js";
+import type { Entity, GameState } from "../core/types.js";
+import { SHORT_SWORD } from "../core/types.js";
+import { createGrid } from "../map/collision-grid.js";
 
 export function makeEntity(
   id: string,

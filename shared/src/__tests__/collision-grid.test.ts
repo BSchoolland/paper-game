@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createGrid, setBlocked, isBlocked, isPositionWalkable, worldToCell } from "../collision-grid.js";
+import { createGrid, setBlocked, isBlocked, isPositionWalkable, worldToCell } from "../map/collision-grid.js";
 
 describe("collision-grid", () => {
   it("new grid has no walls", () => {

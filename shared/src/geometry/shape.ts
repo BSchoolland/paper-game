@@ -1,5 +1,5 @@
-import type { CombatShapeDefinition, Entity, GridState, Vec2 } from "../types.js";
-import { add, normalize, scale } from "../vec2.js";
+import type { CombatShapeDefinition, Entity, GridState, Vec2 } from "../core/types.js";
+import { add, normalize, scale } from "../core/vec2.js";
 import { entitiesInSector } from "./sector.js";
 import { entitiesInRectangle } from "./rectangle.js";
 import { entitiesInCircle } from "./circle.js";

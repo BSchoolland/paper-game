@@ -1,4 +1,4 @@
-import type { Entity, TeamId, UnitTemplate } from "./types.js";
+import type { Entity, TeamId, UnitTemplate } from "../core/types.js";
 
 export function makeEntity(
   id: string,

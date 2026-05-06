@@ -1,5 +1,5 @@
 import type { GameState, GameEvent, PlayerAction } from "shared";
-import { deserializeGameState } from "shared/src/serialization.js";
+import { deserializeGameState } from "shared/src/core/serialization.js";
 import type { Connection } from "../net/connection.js";
 import type { GameStore } from "./game-store.js";
 

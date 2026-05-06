@@ -1,6 +1,6 @@
-import type { Entity, GridState, Vec2 } from "../types.js";
-import { sub, length, normalize, dot, add, scale } from "../vec2.js";
-import { blocksProjectile, isBlocked } from "../collision-grid.js";
+import type { Entity, GridState, Vec2 } from "../core/types.js";
+import { sub, length, normalize, dot, add, scale } from "../core/vec2.js";
+import { blocksProjectile, isBlocked } from "../map/collision-grid.js";
 
 export interface RayHit {
   readonly entityId: string;

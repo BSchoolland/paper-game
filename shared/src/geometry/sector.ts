@@ -1,5 +1,5 @@
-import type { Entity, Vec2 } from "../types.js";
-import { sub, length, normalize, dot } from "../vec2.js";
+import type { Entity, Vec2 } from "../core/types.js";
+import { sub, length, normalize, dot } from "../core/vec2.js";
 
 export function pointInSector(
   point: Vec2,

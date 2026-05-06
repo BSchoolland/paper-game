@@ -1,6 +1,6 @@
-import type { Entity, EntityId, GameState, PlayerAction } from "../types.js";
-import { distance } from "../vec2.js";
-import { resolveAction } from "../turn-resolver.js";
+import type { Entity, EntityId, GameState, PlayerAction } from "../core/types.js";
+import { distance } from "../core/vec2.js";
+import { resolveAction } from "../combat/turn-resolver.js";
 import type { AiStrategy } from "./strategy.js";
 import { strategyForEntity } from "./strategy.js";
 

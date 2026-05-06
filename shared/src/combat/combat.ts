@@ -1,5 +1,5 @@
-import type { AttackHit, Entity, GameState, GridState, WeaponDefinition, Vec2 } from "./types.js";
-import { entitiesInShape } from "./geometry/index.js";
+import type { AttackHit, Entity, GameState, GridState, WeaponDefinition, Vec2 } from "../core/types.js";
+import { entitiesInShape } from "../geometry/index.js";
 
 export interface DamageResult {
   readonly state: GameState;

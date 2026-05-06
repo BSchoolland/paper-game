@@ -1,8 +1,8 @@
-import type { ActionResult, AttackHit, Entity, GameEvent, GameState, PlayerAction, TeamId } from "./types.js";
-import { distance } from "./vec2.js";
-import { isPositionWalkable, isWithinBounds } from "./collision-grid.js";
+import type { ActionResult, AttackHit, Entity, GameEvent, GameState, PlayerAction, TeamId } from "../core/types.js";
+import { distance } from "../core/vec2.js";
+import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
-import { processEffects } from "./effects.js";
+import { processEffects } from "../encounter/effects.js";
 
 function checkWinner(state: GameState): TeamId | null {
   let hasRed = false;

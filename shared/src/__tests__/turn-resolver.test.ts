@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveAction } from "../turn-resolver.js";
+import { resolveAction } from "../combat/turn-resolver.js";
 import { makeEntity, makeState } from "./test-helpers.js";
 
 describe("turn-resolver", () => {

@@ -1,5 +1,5 @@
-import type { Entity, Vec2 } from "./types.js";
-import { distance, sub, normalize, add, scale } from "./vec2.js";
+import type { Entity, Vec2 } from "../core/types.js";
+import { distance, sub, normalize, add, scale } from "../core/vec2.js";
 
 export function clampToMovementRange(entity: Entity, target: Vec2): Vec2 {
   const dist = distance(entity.position, target);
