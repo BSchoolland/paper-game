@@ -17,6 +17,10 @@ function closestEnemyDist(entity: Entity, state: GameState): number {
 export class AiController {
   private strategies = new Map<EntityId, AiStrategy>();
 
+  reset() {
+    this.strategies.clear();
+  }
+
   computeActions(state: GameState, aiTeam: "red" | "blue"): PlayerAction[] {
     const actions: PlayerAction[] = [];
     let simState = state;

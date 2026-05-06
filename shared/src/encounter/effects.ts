@@ -4,6 +4,10 @@ import { makeEntity } from "./entity-factory.js";
 
 let spawnCounter = 0;
 
+export function resetSpawnCounter() {
+  spawnCounter = 0;
+}
+
 function nextSpawnId(): string {
   return `spawn-${++spawnCounter}`;
 }

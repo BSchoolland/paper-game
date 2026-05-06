@@ -1,23 +1,15 @@
 import type { ServerWebSocket } from "bun";
-import type { GameEvent, GameState, PlayerAction, TeamId } from "shared";
+import type { GameEvent, TeamId } from "shared";
 import {
-  createInitialGameState,
-  createPveGameState,
-  resolveAction,
-  serializeGameState,
-  AiController,
   getVisibleHexes,
   getHexIcon,
   hexKey,
   isAdjacent,
   parseHexKey,
-  generateEncounter,
-  GREENLANDS_BIOME,
   isDecorationHex,
 } from "shared";
-import type { HexCoord, HexMapState, HexIconType, EncounterType } from "shared";
-import { loadCollisionGrid } from "./collision-loader.js";
-import { createEncounterGameState } from "./encounter-builder.js";
+import type { HexCoord, HexMapState, HexIconType } from "shared";
+import { EncounterSession } from "./encounter-session.js";
 import {
   saveExploredHex,
   loadExploredHexes,
@@ -75,24 +67,9 @@ function exploreHex(data: SocketData, target: HexCoord): void {
 }
 
 let gameMode: GameMode = "pvp";
-let state: GameState = createInitialGameState();
-await loadCollisionGrid(state.grid, state.mapDefinition.objects);
-
-async function resetCombatState(hexType?: EncounterType, hexCoord?: HexCoord) {
-  if (gameMode === "pve" && hexType && hexCoord) {
-    const seed = (hexCoord.q * 7919 + hexCoord.r * 104729 + 5381) & 0x7fffffff;
-    const encounter = generateEncounter(hexType, GREENLANDS_BIOME, seed);
-    state = createEncounterGameState(encounter);
-  } else if (gameMode === "pve") {
-    state = createPveGameState();
-  } else {
-    state = createInitialGameState();
-  }
-  await loadCollisionGrid(state.grid, state.mapDefinition.objects);
-}
+let session = await EncounterSession.create(gameMode);
 
 const aiTeam: TeamId = "blue";
-const ai = new AiController();
 const players = new Map<TeamId, ServerWebSocket<SocketData>>();
 
 function broadcast(msg: object) {
@@ -103,7 +80,7 @@ function broadcast(msg: object) {
 }
 
 function broadcastState(events: readonly GameEvent[]) {
-  broadcast({ type: "state", state: serializeGameState(state), events });
+  broadcast({ type: "state", state: session.serialize(), events });
 }
 
 function sendTo(ws: ServerWebSocket<SocketData>, msg: object) {
@@ -125,9 +102,9 @@ function sendHexMapState(ws: ServerWebSocket<SocketData>) {
 }
 
 function checkCombatEnd(ws: ServerWebSocket<SocketData>) {
-  if (!state.winner || ws.data.phase !== "combat") return;
+  if (!session.state.winner || ws.data.phase !== "combat") return;
 
-  const won = state.winner === "red";
+  const won = session.state.winner === "red";
 
   if (won && ws.data.pendingHex) {
     exploreHex(ws.data, ws.data.pendingHex);
@@ -143,17 +120,11 @@ function checkCombatEnd(ws: ServerWebSocket<SocketData>) {
 
 function runAiTurn(ws: ServerWebSocket<SocketData>) {
   if (gameMode !== "pve") return;
-  if (state.activeTeam !== aiTeam) return;
-  if (state.winner) return;
 
-  const actions = ai.computeActions(state, aiTeam);
-  for (const action of actions) {
-    const result = resolveAction(state, action);
-    if (result.state !== state) {
-      state = result.state;
-      broadcastState(result.events);
-    }
-    if (state.winner) {
+  const results = session.runAi(aiTeam);
+  for (const { serializedState, events, won } of results) {
+    broadcast({ type: "state", state: serializedState, events });
+    if (won) {
       checkCombatEnd(ws);
       break;
     }
@@ -202,7 +173,7 @@ Bun.serve({
           players.delete("blue");
         }
         gameMode = newMode;
-        await resetCombatState();
+        session = await EncounterSession.create(gameMode);
       }
 
       let team: TeamId | null = null;
@@ -227,7 +198,7 @@ Bun.serve({
       } else {
         sendTo(ws, {
           type: "state",
-          state: serializeGameState(state),
+          state: session.serialize(),
           events: [],
         });
       }
@@ -266,11 +237,11 @@ Bun.serve({
           ws.data.pendingHex = target;
           const hexType = getHexIcon(target, ws.data.hexMap.icons)
             ?? (isDecorationHex(target) ? "dense-wilderness" : "wilderness");
-          await resetCombatState(hexType, target);
+          session = await EncounterSession.create(gameMode, hexType, target);
           sendTo(ws, { type: "hexCombatStart" });
           sendTo(ws, {
             type: "state",
-            state: serializeGameState(state),
+            state: session.serialize(),
             events: [],
           });
         }
@@ -278,11 +249,10 @@ Bun.serve({
       }
 
       if (msg.type === "action") {
-        const result = resolveAction(state, msg.action);
-        if (result.state !== state) {
-          state = result.state;
-          broadcastState(result.events);
-          if (state.winner) {
+        const { changed, events } = session.applyAction(msg.action);
+        if (changed) {
+          broadcastState(events);
+          if (session.state.winner) {
             checkCombatEnd(ws);
           } else {
             runAiTurn(ws);
@@ -291,7 +261,7 @@ Bun.serve({
       }
 
       if (msg.type === "debugWin" && ws.data.phase === "combat") {
-        state = { ...state, winner: "red" };
+        session.state = { ...session.state, winner: "red" };
         broadcastState([]);
         checkCombatEnd(ws);
       }
@@ -307,7 +277,7 @@ Bun.serve({
           ws.data.visitedThisRun = freshVisitedSet();
           sendHexMapState(ws);
         } else {
-          await resetCombatState();
+          session = await EncounterSession.create(gameMode);
           broadcastState([]);
           runAiTurn(ws);
         }
