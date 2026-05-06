@@ -1,17 +1,10 @@
 import type { Graphics } from "pixi.js";
 import type { Vec2 } from "shared";
+import { Rng } from "shared";
 
 export const PENCIL = 0x4a3728;
 export const PENCIL_HIT = 0x8b3a3a;
 export const PENCIL_LIGHT = 0x6b5a48;
-
-export function seededRand(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) & 0xffffffff;
-    return ((s >>> 0) / 0xffffffff - 0.5) * 2;
-  };
-}
 
 export function drawRoughCircle(
   g: Graphics,
@@ -22,10 +15,10 @@ export function drawRoughCircle(
   segments: number,
   seed: number
 ) {
-  const rand = seededRand(seed);
+  const rng = Rng.seeded(seed, 0);
   for (let i = 0; i <= segments; i++) {
     const angle = (i / segments) * Math.PI * 2;
-    const r = radius + rand() * wobble;
+    const r = radius + rng.symmetric() * wobble;
     const x = cx + Math.cos(angle) * r;
     const y = cy + Math.sin(angle) * r;
     if (i === 0) g.moveTo(x, y);
@@ -43,11 +36,11 @@ export function drawRoughEllipse(
   segments: number,
   seed: number
 ) {
-  const rand = seededRand(seed);
+  const rng = Rng.seeded(seed, 0);
   for (let i = 0; i <= segments; i++) {
     const angle = (i / segments) * Math.PI * 2;
-    const x = cx + Math.cos(angle) * (rx + rand() * wobble);
-    const y = cy + Math.sin(angle) * (ry + rand() * wobble);
+    const x = cx + Math.cos(angle) * (rx + rng.symmetric() * wobble);
+    const y = cy + Math.sin(angle) * (ry + rng.symmetric() * wobble);
     if (i === 0) g.moveTo(x, y);
     else g.lineTo(x, y);
   }
@@ -64,11 +57,11 @@ export function drawRoughArc(
   segments: number,
   seed: number
 ) {
-  const rand = seededRand(seed);
+  const rng = Rng.seeded(seed, 0);
   const span = endAngle - startAngle;
   for (let i = 0; i <= segments; i++) {
     const angle = startAngle + (i / segments) * span;
-    const r = radius + rand() * wobble;
+    const r = radius + rng.symmetric() * wobble;
     const x = cx + Math.cos(angle) * r;
     const y = cy + Math.sin(angle) * r;
     if (i === 0) g.moveTo(x, y);
@@ -85,7 +78,7 @@ export function drawRoughLine(
   wobble: number,
   seed: number
 ) {
-  const rand = seededRand(seed);
+  const rng = Rng.seeded(seed, 0);
   const dx = x2 - x1;
   const dy = y2 - y1;
   const dist = Math.sqrt(dx * dx + dy * dy);
@@ -93,11 +86,11 @@ export function drawRoughLine(
   const perpX = -dy / dist;
   const perpY = dx / dist;
 
-  g.moveTo(x1 + rand() * wobble * perpX, y1 + rand() * wobble * perpY);
+  g.moveTo(x1 + rng.symmetric() * wobble * perpX, y1 + rng.symmetric() * wobble * perpY);
   for (let i = 1; i <= segments; i++) {
     const t = i / segments;
-    const x = x1 + dx * t + rand() * wobble * perpX;
-    const y = y1 + dy * t + rand() * wobble * perpY;
+    const x = x1 + dx * t + rng.symmetric() * wobble * perpX;
+    const y = y1 + dy * t + rng.symmetric() * wobble * perpY;
     g.lineTo(x, y);
   }
 }
@@ -108,16 +101,16 @@ export function drawRoughRect(
   wobble: number,
   seed: number
 ) {
-  const rand = seededRand(seed);
+  const rng = Rng.seeded(seed, 0);
   for (let i = 0; i < corners.length; i++) {
     const c = corners[i]!;
-    const x = c.x + rand() * wobble;
-    const y = c.y + rand() * wobble;
+    const x = c.x + rng.symmetric() * wobble;
+    const y = c.y + rng.symmetric() * wobble;
     if (i === 0) g.moveTo(x, y);
     else g.lineTo(x, y);
   }
   const first = corners[0]!;
-  g.lineTo(first.x + rand() * wobble, first.y + rand() * wobble);
+  g.lineTo(first.x + rng.symmetric() * wobble, first.y + rng.symmetric() * wobble);
 }
 
 export function drawXMark(
@@ -127,10 +120,10 @@ export function drawXMark(
   size: number,
   seed: number
 ) {
-  const rand = seededRand(seed);
+  const rng = Rng.seeded(seed, 0);
   const w = 0.8;
-  g.moveTo(cx - size + rand() * w, cy - size + rand() * w);
-  g.lineTo(cx + size + rand() * w, cy + size + rand() * w);
-  g.moveTo(cx + size + rand() * w, cy - size + rand() * w);
-  g.lineTo(cx - size + rand() * w, cy + size + rand() * w);
+  g.moveTo(cx - size + rng.symmetric() * w, cy - size + rng.symmetric() * w);
+  g.lineTo(cx + size + rng.symmetric() * w, cy + size + rng.symmetric() * w);
+  g.moveTo(cx + size + rng.symmetric() * w, cy - size + rng.symmetric() * w);
+  g.lineTo(cx - size + rng.symmetric() * w, cy + size + rng.symmetric() * w);
 }

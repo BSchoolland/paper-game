@@ -1,8 +1,14 @@
 {
   "name": "paper-game",
   "private": true,
+  "type": "module",
   "workspaces": ["shared", "client", "server"],
   "scripts": {
-    "dev": "bun --filter '*' dev"
+    "dev": "bun --filter '*' dev",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "eslint": "^10.3.0",
+    "typescript-eslint": "^8.59.2"
   }
 }

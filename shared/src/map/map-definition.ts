@@ -1,4 +1,5 @@
 import type { Vec2 } from "../core/types.js";
+import { Rng } from "../core/rng.js";
 
 export type MapObjectCategory = "wall" | "decoration";
 
@@ -20,19 +21,11 @@ export interface PlaceableObject {
   readonly scale: number;
 }
 
-export function seededRandom(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 1664525 + 1013904223) & 0xffffffff;
-    return (s >>> 0) / 0xffffffff;
-  };
-}
-
 export function placeObjects(
   objects: readonly PlaceableObject[],
   worldWidth: number,
   worldHeight: number,
-  rand: () => number,
+  rng: Rng,
   margin = 40,
   minDist = 50
 ): MapObjectPlacement[] {
@@ -44,8 +37,8 @@ export function placeObjects(
     let attempts = 0;
 
     do {
-      x = margin + rand() * (worldWidth - margin * 2);
-      y = margin + rand() * (worldHeight - margin * 2);
+      x = margin + rng.next() * (worldWidth - margin * 2);
+      y = margin + rng.next() * (worldHeight - margin * 2);
       attempts++;
     } while (
       attempts < 30 &&
@@ -125,22 +118,22 @@ export function generateMapObjects(
   worldHeight: number,
   seed: number
 ): MapDefinition {
-  const rand = seededRandom(seed);
+  const rng = Rng.seeded(seed, 0);
   const wallCount = 18;
   const decoCount = 12;
 
   const picks: PlaceableObject[] = [];
 
   for (let i = 0; i < wallCount; i++) {
-    const name = WALL_OBJECTS[Math.floor(rand() * WALL_OBJECTS.length)]!;
+    const name = WALL_OBJECTS[Math.floor(rng.next() * WALL_OBJECTS.length)]!;
     picks.push({ name, category: "wall", scale: OBJECT_SCALES[name] ?? 0.3 });
   }
 
   for (let i = 0; i < decoCount; i++) {
-    const name = DECORATION_OBJECTS[Math.floor(rand() * DECORATION_OBJECTS.length)]!;
+    const name = DECORATION_OBJECTS[Math.floor(rng.next() * DECORATION_OBJECTS.length)]!;
     picks.push({ name, category: "decoration", scale: OBJECT_SCALES[name] ?? 0.3 });
   }
 
-  const objects = placeObjects(picks, worldWidth, worldHeight, rand);
+  const objects = placeObjects(picks, worldWidth, worldHeight, rng);
   return { seed, objects };
 }

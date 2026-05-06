@@ -1,6 +1,7 @@
 export * from "./core/types.js";
 export * from "./core/vec2.js";
 export * from "./core/serialization.js";
+export * from "./core/rng.js";
 export * from "./map/collision-grid.js";
 export * from "./map/collision-stamp.js";
 export * from "./map/map-definition.js";

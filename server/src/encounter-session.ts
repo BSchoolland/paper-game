@@ -29,8 +29,7 @@ export class EncounterSession {
     let state: GameState;
 
     if (mode === "pve" && hexType && hexCoord) {
-      const seed = (hexCoord.q * 7919 + hexCoord.r * 104729 + 5381) & 0x7fffffff;
-      const encounter = generateEncounter(hexType, GREENLANDS_BIOME, seed);
+      const encounter = generateEncounter(hexType, GREENLANDS_BIOME, hexCoord.q, hexCoord.r);
       state = createEncounterGameState(encounter);
     } else if (mode === "pve") {
       state = createPveGameState();

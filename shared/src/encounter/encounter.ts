@@ -1,7 +1,8 @@
 import type { EnemyTag, UnitTemplate } from "../core/types.js";
 import type { Biome, StructureEntry } from "./biome.js";
 import type { MapObjectPlacement } from "../map/map-definition.js";
-import { seededRandom, placeObjects } from "../map/map-definition.js";
+import { placeObjects } from "../map/map-definition.js";
+import { Rng } from "../core/rng.js";
 import type { EncounterProfile, EncounterType } from "./encounter-profiles.js";
 import { getEncounterProfile } from "./encounter-profiles.js";
 
@@ -28,13 +29,15 @@ export interface GeneratedEncounter {
 export function generateEncounter(
   hexType: EncounterType,
   biome: Biome,
-  seed: number
+  x: number,
+  y: number
 ): GeneratedEncounter {
   const profile = getEncounterProfile(hexType);
-  const rand = seededRandom(seed);
+  const layoutRng = Rng.seeded(x, y);
+  const enemyRng = Rng.trueRandom();
 
-  const enemies = rollEnemies(biome.enemies, profile, rand);
-  const structures = rollStructures(biome.structures, profile, rand);
+  const enemies = rollEnemies(biome.enemies, profile, enemyRng);
+  const structures = rollStructures(biome.structures, profile, layoutRng);
 
   return { enemies, structures };
 }
@@ -42,7 +45,7 @@ export function generateEncounter(
 function rollEnemies(
   pool: readonly UnitTemplate[],
   profile: EncounterProfile,
-  rand: () => number
+  rng: Rng
 ): UnitTemplate[] {
   if (pool.length === 0) return [];
 
@@ -55,7 +58,7 @@ function rollEnemies(
   while (candidates.length > 0) {
     const weights = candidates.map((e) => scoreEnemy(e, profile.tagWeights));
     const totalWeight = weights.reduce((a, b) => a + b, 0);
-    const roll = rand() * totalWeight;
+    const roll = rng.next() * totalWeight;
 
     let acc = 0;
     let picked = candidates[0]!;
@@ -78,7 +81,7 @@ function rollEnemies(
 function rollStructures(
   pool: readonly StructureEntry[],
   profile: EncounterProfile,
-  rand: () => number
+  rng: Rng
 ): MapObjectPlacement[] {
   if (pool.length === 0) return [];
 
@@ -93,7 +96,7 @@ function rollStructures(
 
   let candidates = affordable();
   while (candidates.length > 0) {
-    const idx = Math.floor(rand() * candidates.length);
+    const idx = Math.floor(rng.next() * candidates.length);
     const entry = candidates[idx]!;
     picks.push(entry);
     budgetRemaining -= entry.cost;
@@ -104,7 +107,7 @@ function rollStructures(
     picks.map((e) => ({ name: e.name, category: e.category, scale: e.scale })),
     800,
     600,
-    rand
+    rng
   );
 }
 

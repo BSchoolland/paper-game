@@ -7,10 +7,10 @@ import {
   distance,
   CELL_WALL,
 } from "shared";
+import { Rng } from "shared";
 import {
   PENCIL,
   PENCIL_HIT,
-  seededRand,
   drawRoughCircle,
 } from "./sketch-utils.js";
 
@@ -72,13 +72,13 @@ export function drawMovePreview(
   if (dist > 1) {
     const nx = dx / dist;
     const ny = dy / dist;
-    const rand = seededRand(42);
+    const rng = Rng.seeded(42, 0);
     const dotSpacing = 6;
     let d = 0;
 
     while (d < dist) {
-      const ox = rand() * 0.8;
-      const oy = rand() * 0.8;
+      const ox = rng.symmetric() * 0.8;
+      const oy = rng.symmetric() * 0.8;
       const x = entity.position.x + nx * d + ox;
       const y = entity.position.y + ny * d + oy;
       g.circle(x, y, 1.2);
