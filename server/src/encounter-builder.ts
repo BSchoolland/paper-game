@@ -20,11 +20,9 @@ export function buildEncounterMap(encounter: GeneratedEncounter): EncounterMap {
 
 export function placeEncounterEntities(encounter: GeneratedEncounter, grid: GridState): Map<string, Entity> {
   const entities = new Map<string, Entity>();
-  const { warrior, spearman, archer } = UNIT_TEMPLATES;
+  const { warrior } = UNIT_TEMPLATES;
 
-  entities.set("red1", placeEntity("red1", "Warrior", 120, 200, "red", warrior, grid));
-  entities.set("red2", placeEntity("red2", "Spearman", 120, 300, "red", spearman, grid));
-  entities.set("red3", placeEntity("red3", "Archer", 100, 400, "red", archer, grid));
+  entities.set("red1", placeEntity("red1", "Warrior", 120, 300, "red", warrior, grid));
 
   const enemyStartX = 500;
   const enemySpreadX = 200;

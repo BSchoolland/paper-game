@@ -42,26 +42,20 @@ function placeEntity(
 
 export function placePvpEntities(grid: GridState): Map<string, Entity> {
   const entities = new Map<string, Entity>();
-  const { warrior, spearman, archer } = UNIT_TEMPLATES;
+  const { warrior } = UNIT_TEMPLATES;
 
-  entities.set("red1", placeEntity("red1", "Red Warrior", 120, 200, "red", warrior, grid));
-  entities.set("red2", placeEntity("red2", "Red Spearman", 120, 300, "red", spearman, grid));
-  entities.set("red3", placeEntity("red3", "Red Archer", 100, 400, "red", archer, grid));
+  entities.set("red1", placeEntity("red1", "Warrior", 120, 300, "red", warrior, grid));
 
-  entities.set("blue1", placeEntity("blue1", "Blue Warrior", 680, 200, "blue", warrior, grid));
-  entities.set("blue2", placeEntity("blue2", "Blue Spearman", 680, 300, "blue", spearman, grid));
-  entities.set("blue3", placeEntity("blue3", "Blue Archer", 700, 400, "blue", archer, grid));
+  entities.set("blue1", placeEntity("blue1", "Warrior", 680, 300, "blue", warrior, grid));
 
   return entities;
 }
 
 export function placePveEntities(grid: GridState): Map<string, Entity> {
   const entities = new Map<string, Entity>();
-  const { warrior, spearman, archer } = UNIT_TEMPLATES;
+  const { warrior } = UNIT_TEMPLATES;
 
-  entities.set("red1", placeEntity("red1", "Warrior", 120, 200, "red", warrior, grid));
-  entities.set("red2", placeEntity("red2", "Spearman", 120, 300, "red", spearman, grid));
-  entities.set("red3", placeEntity("red3", "Archer", 100, 400, "red", archer, grid));
+  entities.set("red1", placeEntity("red1", "Warrior", 120, 300, "red", warrior, grid));
 
   const gs = ENEMY_TEMPLATES["goblin-spear"];
   const ga = ENEMY_TEMPLATES["goblin-archer"];
