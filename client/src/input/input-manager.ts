@@ -84,7 +84,9 @@ export class InputManager {
   }
 
   private findEntityAt(pos: Vec2) {
-    for (const entity of this.clientState.getState().entities.values()) {
+    const state = this.clientState.getState();
+    if (!state) return undefined;
+    for (const entity of state.entities.values()) {
       if (entity.dead) continue;
       if (distance(pos, entity.position) <= entity.collisionRadius) {
         return entity;
@@ -96,7 +98,9 @@ export class InputManager {
   private doAttack(mousePos: Vec2) {
     const entityId = this.clientState.selectedEntityId;
     if (!entityId) return;
-    const entity = this.clientState.getState().entities.get(entityId);
+    const state = this.clientState.getState();
+    if (!state) return;
+    const entity = state.entities.get(entityId);
     if (!entity) return;
 
     const dir = sub(mousePos, entity.position);
@@ -108,7 +112,7 @@ export class InputManager {
       aimDirection,
     });
 
-    if (!this.clientState.getState().entities.has(entityId)) {
+    if (!state.entities.has(entityId)) {
       this.clientState.selectEntity(null);
     } else {
       this.clientState.selectEntity(entityId);

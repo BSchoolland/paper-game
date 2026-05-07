@@ -67,10 +67,10 @@ export class GameRenderer {
     this.rebuildGrid();
     this.entities = new EntityManager(this.sortableLayer);
     this.layout();
-    this.entities.sync(
-      this.clientState.getState(),
-      this.clientState.selectedEntityId
-    );
+    const enterState = this.clientState.getState();
+    if (enterState) {
+      this.entities.sync(enterState, this.clientState.selectedEntityId);
+    }
     this.bringToFront();
     this.outerContainer.visible = true;
 
@@ -90,8 +90,10 @@ export class GameRenderer {
         }
         if (!animating) return;
         const dt = ticker.deltaTime / 60;
+        const tickState = this.clientState.getState();
+        if (!tickState) return;
         this.entities.tick(
-          this.clientState.getState(),
+          tickState,
           this.clientState.selectedEntityId,
           dt
         );
@@ -140,10 +142,9 @@ export class GameRenderer {
 
   render() {
     if (!this.entities) return;
-    this.entities.sync(
-      this.clientState.getState(),
-      this.clientState.selectedEntityId
-    );
+    const renderState = this.clientState.getState();
+    if (!renderState) return;
+    this.entities.sync(renderState, this.clientState.selectedEntityId);
     this.renderOverlay({ x: 0, y: 0 });
     this.debugLayer.visible = this.clientState.showDebugWalls;
 
@@ -181,7 +182,9 @@ export class GameRenderer {
   }
 
   private layout() {
-    const grid = this.clientState.getState().grid;
+    const layoutState = this.clientState.getState();
+    if (!layoutState) return;
+    const grid = layoutState.grid;
     const worldW = grid.width * grid.cellSize;
     const worldH = grid.height * grid.cellSize;
     const screenW = this.app.screen.width;
@@ -229,6 +232,7 @@ export class GameRenderer {
     }
     this.worldContainer.removeChildren();
     const state = this.clientState.getState();
+    if (!state) return;
     const grid = state.grid;
 
     this.backgroundLayer = new Container();

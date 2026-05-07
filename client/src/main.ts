@@ -8,6 +8,9 @@ import { FramePacer } from "./renderer/frame-pacer.js";
 import { InputManager } from "./input/input-manager.js";
 import { loadSpriteAssets } from "./renderer/sprite-assets.js";
 import { loadMapAssets } from "./renderer/grid-renderer.js";
+import { ScreenManager } from "./screens/screen-manager.js";
+import { MapScreen } from "./screens/map-screen.js";
+import { CombatScreen } from "./screens/combat-screen.js";
 import type { HexCoord, HexMapState } from "shared";
 import { hexKey, isAdjacent } from "shared";
 
@@ -34,7 +37,7 @@ async function init() {
   );
   const combatStore = new CombatStore(conn);
 
-  // Combat screen objects (created once, entered/exited many times)
+  // Combat screen objects
   const clientState = new ClientState(combatStore);
   const combatRenderer = new GameRenderer(app, clientState, pacer);
   const input = new InputManager(app.canvas, clientState, combatRenderer, () => {
@@ -53,34 +56,17 @@ async function init() {
   hexRenderer.init();
   hexRenderer.hide();
 
+  // Screen manager
+  const screens = new ScreenManager();
+  screens.register("map", new MapScreen(hexRenderer));
+  screens.register("combat", new CombatScreen(combatRenderer, clientState, combatStore));
+
   let hexMapState: HexMapState | null = null;
-  let activeScreen: "map" | "combat" = mode === "pve" ? "map" : "combat";
   let moveLocked = false;
-
-  function enterMap() {
-    activeScreen = "map";
-    combatRenderer.exit();
-    hexRenderer.setInputEnabled(true);
-    hexRenderer.show();
-    if (hexMapState) hexRenderer.render(hexMapState);
-  }
-
-  function enterCombat() {
-    activeScreen = "combat";
-    hexRenderer.hideControls();
-    hexRenderer.setInputEnabled(false);
-    combatStore.waitForState().then(() => {
-      combatRenderer.enter();
-    });
-  }
-
-  function exitCombat() {
-    enterMap();
-  }
 
   // Hex map input
   hexRenderer.onHexClick((coord: HexCoord) => {
-    if (activeScreen !== "map" || !hexMapState || moveLocked) return;
+    if (!screens.isActive("map") || !hexMapState || moveLocked) return;
     if (!isAdjacent(hexMapState.playerPos, coord)) return;
     if (!(hexKey(coord) in hexMapState.hexes)) return;
 
@@ -95,17 +81,14 @@ async function init() {
   conn.on("hexMapState", (msg) => {
     hexMapState = msg.hexMap;
     moveLocked = false;
-    if (activeScreen === "map") hexRenderer.render(hexMapState!);
+    if (screens.isActive("map")) hexRenderer.render(hexMapState!);
   });
 
   conn.on("hexCombatStart", () => {
-    clientState.resetSelection();
-    combatStore.resetDisplayState();
-
     if (hexRenderer.isMoving()) {
-      hexRenderer.onMoveComplete(() => enterCombat());
+      hexRenderer.onMoveComplete(() => screens.switchTo("combat"));
     } else {
-      enterCombat();
+      screens.switchTo("combat");
     }
   });
 
@@ -114,7 +97,8 @@ async function init() {
       if (combatRenderer.isAnimating()) {
         requestAnimationFrame(waitForIdle);
       } else {
-        exitCombat();
+        screens.switchTo("map");
+        if (hexMapState) hexRenderer.render(hexMapState);
       }
     };
     requestAnimationFrame(waitForIdle);
@@ -122,7 +106,7 @@ async function init() {
 
   // Debug: F2 to instantly win combat
   document.addEventListener("keydown", (e) => {
-    if (e.key === "F2" && activeScreen === "combat") {
+    if (e.key === "F2" && screens.isActive("combat")) {
       e.preventDefault();
       conn.send({ type: "debugWin" });
     }
@@ -132,10 +116,9 @@ async function init() {
   await conn.ready();
 
   if (mode === "pve") {
-    enterMap();
+    screens.switchTo("map");
   } else {
     await combatStore.waitForState();
-    activeScreen = "combat";
     combatRenderer.enter();
   }
 }
