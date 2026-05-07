@@ -1,16 +1,22 @@
 import type { GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord } from "shared";
 import {
-  createInitialGameState,
-  createPveGameState,
   resolveAction,
   serializeGameState,
   AiController,
   generateEncounter,
   GREENLANDS_BIOME,
   resetSpawnCounter,
+  buildScenarioMap,
+  placePvpEntities,
+  placePveEntities,
+  assembleGameState as assembleScenarioState,
 } from "shared";
 import { loadCollisionGrid } from "./collision-loader.js";
-import { createEncounterGameState } from "./encounter-builder.js";
+import {
+  buildEncounterMap,
+  placeEncounterEntities,
+  assembleGameState as assembleEncounterState,
+} from "./encounter-builder.js";
 
 export class EncounterSession {
   state: GameState;
@@ -27,19 +33,19 @@ export class EncounterSession {
     runId?: number
   ): Promise<EncounterSession> {
     resetSpawnCounter();
-    let state: GameState;
 
     if (mode === "pve" && hexType && hexCoord && runId !== undefined) {
       const encounter = generateEncounter(hexType, GREENLANDS_BIOME, hexCoord.q, hexCoord.r, runId);
-      state = createEncounterGameState(encounter);
-    } else if (mode === "pve") {
-      state = createPveGameState();
-    } else {
-      state = createInitialGameState();
+      const map = buildEncounterMap(encounter);
+      await loadCollisionGrid(map.grid, map.mapDefinition.objects);
+      const entities = placeEncounterEntities(encounter, map.grid);
+      return new EncounterSession(assembleEncounterState(map, entities));
     }
 
-    await loadCollisionGrid(state.grid, state.mapDefinition.objects);
-    return new EncounterSession(state);
+    const map = buildScenarioMap(42);
+    await loadCollisionGrid(map.grid, map.mapDefinition.objects);
+    const entities = mode === "pve" ? placePveEntities(map.grid) : placePvpEntities(map.grid);
+    return new EncounterSession(assembleScenarioState(map, entities));
   }
 
   serialize(): object {

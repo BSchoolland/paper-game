@@ -2,7 +2,7 @@ import type { ActionResult, Entity, EntityEffect, GameEvent, TeamId, Vec2, Weapo
 import { ENEMY_TEMPLATES } from "../core/types.js";
 import { makeEntity } from "./entity-factory.js";
 import { normalize, sub, add, scale, distance } from "../core/vec2.js";
-import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
+import { isPositionWalkable, isWithinBounds, findWalkablePosition } from "../map/collision-grid.js";
 
 let spawnCounter = 0;
 
@@ -140,10 +140,11 @@ function spawnEntities(
   for (let i = 0; i < count; i++) {
     const angle = angleStep * i + Math.PI / 4;
     const offset = template.collisionRadius * 2;
-    const position: Vec2 = {
+    const raw: Vec2 = {
       x: origin.x + Math.cos(angle) * offset,
       y: origin.y + Math.sin(angle) * offset,
     };
+    const position = findWalkablePosition(state.grid, raw, template.collisionRadius);
 
     const id = nextSpawnId();
     const entity = makeEntity(id, template.className, position.x, position.y, teamId, template);

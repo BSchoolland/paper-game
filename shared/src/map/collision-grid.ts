@@ -82,6 +82,29 @@ export function isWithinBounds(
   );
 }
 
+export function findWalkablePosition(
+  grid: GridState,
+  pos: Vec2,
+  collisionRadius: number
+): Vec2 {
+  if (isPositionWalkable(grid, pos, collisionRadius) && isWithinBounds(grid, pos, collisionRadius)) {
+    return pos;
+  }
+
+  for (let radius = 10; radius <= 200; radius += 10) {
+    const steps = Math.max(8, Math.floor((2 * Math.PI * radius) / 15));
+    for (let i = 0; i < steps; i++) {
+      const angle = (2 * Math.PI * i) / steps;
+      const candidate = { x: pos.x + Math.cos(angle) * radius, y: pos.y + Math.sin(angle) * radius };
+      if (isPositionWalkable(grid, candidate, collisionRadius) && isWithinBounds(grid, candidate, collisionRadius)) {
+        return candidate;
+      }
+    }
+  }
+
+  return pos;
+}
+
 export function rasterizeRect(
   grid: GridState,
   cx: number,

@@ -1,18 +1,30 @@
-import type { Entity, GameState } from "shared";
-import { UNIT_TEMPLATES, makeEntity } from "shared";
+import type { Entity, GameState, GridState } from "shared";
+import { UNIT_TEMPLATES, makeEntity, findWalkablePosition } from "shared";
 import { createCombatGrid } from "shared";
 import type { GeneratedEncounter } from "shared";
 import type { MapDefinition } from "shared";
 
-export function createEncounterGameState(encounter: GeneratedEncounter): GameState {
-  const grid = createCombatGrid();
+export interface EncounterMap {
+  readonly grid: GridState;
+  readonly mapDefinition: MapDefinition;
+}
 
+export function buildEncounterMap(encounter: GeneratedEncounter): EncounterMap {
+  const grid = createCombatGrid();
+  const mapDefinition: MapDefinition = {
+    seed: 0,
+    objects: encounter.structures,
+  };
+  return { grid, mapDefinition };
+}
+
+export function placeEncounterEntities(encounter: GeneratedEncounter, grid: GridState): Map<string, Entity> {
   const entities = new Map<string, Entity>();
   const { warrior, spearman, archer } = UNIT_TEMPLATES;
 
-  entities.set("red1", makeEntity("red1", "Warrior", 120, 200, "red", warrior));
-  entities.set("red2", makeEntity("red2", "Spearman", 120, 300, "red", spearman));
-  entities.set("red3", makeEntity("red3", "Archer", 100, 400, "red", archer));
+  entities.set("red1", placeEntity("red1", "Warrior", 120, 200, "red", warrior, grid));
+  entities.set("red2", placeEntity("red2", "Spearman", 120, 300, "red", spearman, grid));
+  entities.set("red3", placeEntity("red3", "Archer", 100, 400, "red", archer, grid));
 
   const enemyStartX = 500;
   const enemySpreadX = 200;
@@ -27,18 +39,30 @@ export function createEncounterGameState(encounter: GeneratedEncounter): GameSta
     const y = enemyStartY + row * (enemySpreadY / 4);
     const id = `enemy${i + 1}`;
     console.log(`[encounter] ${id}: class=${template.className} sprite=${template.spriteType} hp=${template.hp} weapon=${template.weapon.id} shape=${template.weapon.shape.kind}`);
-    entities.set(id, makeEntity(id, template.className, x, y, "blue", template));
+    entities.set(id, placeEntity(id, template.className, x, y, "blue", template, grid));
   }
 
-  const mapDefinition: MapDefinition = {
-    seed: 0,
-    objects: encounter.structures,
-  };
+  return entities;
+}
 
+function placeEntity(
+  id: string,
+  name: string,
+  x: number,
+  y: number,
+  teamId: "red" | "blue",
+  template: Parameters<typeof makeEntity>[5],
+  grid: GridState
+): Entity {
+  const pos = findWalkablePosition(grid, { x, y }, template.collisionRadius);
+  return makeEntity(id, name, pos.x, pos.y, teamId, template);
+}
+
+export function assembleGameState(map: EncounterMap, entities: Map<string, Entity>): GameState {
   return {
     entities,
-    grid,
-    mapDefinition,
+    grid: map.grid,
+    mapDefinition: map.mapDefinition,
     activeTeam: "red",
     turnNumber: 1,
     winner: null,
