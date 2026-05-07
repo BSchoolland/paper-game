@@ -141,6 +141,9 @@ Bun.serve({
 
   fetch(req, server) {
     const url = new URL(req.url);
+    if (url.pathname === "/health") {
+      return Response.json({ status: "ok", uptime: process.uptime() });
+    }
     if (url.pathname === "/ws") {
       const mode = (url.searchParams.get("mode") as GameMode) || "pvp";
       const upgraded = server.upgrade(req, {
