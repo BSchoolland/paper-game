@@ -56,12 +56,13 @@ async function init() {
   hexRenderer.init();
   hexRenderer.hide();
 
+  let hexMapState: HexMapState | null = null;
+
   // Screen manager
   const screens = new ScreenManager();
-  screens.register("map", new MapScreen(hexRenderer));
-  screens.register("combat", new CombatScreen(combatRenderer, clientState, combatStore));
+  screens.register("map", new MapScreen(hexRenderer, () => hexMapState));
+  screens.register("combat", new CombatScreen(combatRenderer, clientState, combatStore, input));
 
-  let hexMapState: HexMapState | null = null;
   let moveLocked = false;
 
   // Hex map input
@@ -98,7 +99,6 @@ async function init() {
         requestAnimationFrame(waitForIdle);
       } else {
         screens.switchTo("map");
-        if (hexMapState) hexRenderer.render(hexMapState);
       }
     };
     requestAnimationFrame(waitForIdle);
@@ -118,8 +118,7 @@ async function init() {
   if (mode === "pve") {
     screens.switchTo("map");
   } else {
-    await combatStore.waitForState();
-    combatRenderer.enter();
+    screens.switchTo("combat");
   }
 }
 

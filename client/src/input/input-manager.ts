@@ -6,6 +6,7 @@ import type { GameRenderer } from "../renderer/game-renderer.js";
 export class InputManager {
   mouseWorld: Vec2 = { x: 0, y: 0 };
   private onMouseMove: () => void;
+  private enabled = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -15,6 +16,10 @@ export class InputManager {
   ) {
     this.onMouseMove = onMouseMove;
     this.bind();
+  }
+
+  setEnabled(val: boolean) {
+    this.enabled = val;
   }
 
   private screenToWorld(e: MouseEvent): Vec2 {
@@ -27,11 +32,13 @@ export class InputManager {
 
   private bind() {
     this.canvas.addEventListener("mousemove", (e) => {
+      if (!this.enabled) return;
       this.mouseWorld = this.screenToWorld(e);
       this.onMouseMove();
     });
 
     this.canvas.addEventListener("click", (e) => {
+      if (!this.enabled) return;
       const pos = this.screenToWorld(e);
       const state = this.clientState.getState();
       if (!state) return;
@@ -54,6 +61,7 @@ export class InputManager {
 
     this.canvas.addEventListener("contextmenu", (e) => {
       e.preventDefault();
+      if (!this.enabled) return;
       const state = this.clientState.getState();
       if (!state || state.winner) return;
       if (!this.clientState.selectedEntityId) return;
@@ -72,6 +80,7 @@ export class InputManager {
     });
 
     document.addEventListener("keydown", (e) => {
+      if (!this.enabled) return;
       if (e.key === "e" || e.key === "E") this.clientState.endTurn();
       if (e.key === "a" || e.key === "A") this.clientState.toggleAttackMode();
       if (e.key === "r" || e.key === "R") this.clientState.reset();
