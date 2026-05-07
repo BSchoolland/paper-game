@@ -5,6 +5,7 @@
   "workspaces": ["shared", "client", "server"],
   "scripts": {
     "dev": "bun --filter '*' dev",
+    "typecheck": "bunx tsc",
     "lint": "eslint ."
   },
   "devDependencies": {
