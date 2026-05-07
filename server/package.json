@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "bun --watch src/index.ts",
+    "dev": "bun --watch --watch-path=src --watch-path=../shared/src src/index.ts",
     "start": "bun src/index.ts"
   },
   "dependencies": {
