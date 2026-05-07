@@ -38,6 +38,7 @@ export class EntityVisual {
   private readonly scale: number;
   private deathTimer = 0;
   private isDead = false;
+  private isKnockback = false;
 
   constructor(entity: Entity) {
     this.entityId = entity.id;
@@ -114,13 +115,15 @@ export class EntityVisual {
     }
 
     if (this.tweenProgress < 1) {
-      this.tweenProgress = Math.min(1, this.tweenProgress + dt * 1.6);
+      const speed = this.isKnockback ? 2.8 : 1.6;
+      this.tweenProgress = Math.min(1, this.tweenProgress + dt * speed);
       const t = easeOutQuad(this.tweenProgress);
       const from = this.tweenFrom!;
       this.container.position.set(
         from.x + (entity.position.x - from.x) * t,
         from.y + (entity.position.y - from.y) * t
       );
+      if (this.tweenProgress >= 1) this.isKnockback = false;
     } else {
       this.container.position.set(entity.position.x, entity.position.y);
     }
@@ -132,7 +135,7 @@ export class EntityVisual {
       }
     }
 
-    if (this.tweenProgress < 1 && this.animState !== "move") {
+    if (this.tweenProgress < 1 && !this.isKnockback && this.animState !== "move") {
       this.setAnimState("move");
     }
     if (this.tweenProgress >= 1 && this.animState === "move") {
@@ -189,6 +192,24 @@ export class EntityVisual {
     this.tweenProgress = 0;
 
     const dx = toX - fromX;
+    if (Math.abs(dx) > 1) {
+      this.setFacing(dx < 0);
+    }
+  }
+
+  triggerKnockback(
+    fromX: number,
+    fromY: number,
+    toX: number,
+    toY: number
+  ): void {
+    this.tweenFrom = { x: fromX, y: fromY };
+    this.tweenProgress = 0;
+    this.isKnockback = true;
+    this.setAnimState("hit");
+    this.animTimer = 0.6;
+
+    const dx = fromX - toX;
     if (Math.abs(dx) > 1) {
       this.setFacing(dx < 0);
     }

@@ -109,8 +109,8 @@ describe("turn-resolver", () => {
       makeEntity("b1", 140, 100, "blue"),
     ]);
     const { events } = resolveAction(state, { type: "attack", entityId: "r1", aimDirection: { x: 1, y: 0 } });
-    expect(events).toHaveLength(1);
     expect(events[0]).toMatchObject({ type: "attack", attackerId: "r1", hits: [{ targetId: "b1", damage: 25, killed: false }] });
+    expect(events[1]).toMatchObject({ type: "knockback", entityId: "b1" });
   });
 
   it("attack event marks killed targets", () => {

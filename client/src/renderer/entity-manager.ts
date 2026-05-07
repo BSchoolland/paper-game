@@ -154,6 +154,13 @@ export class EntityManager {
         }
         break;
       }
+      case "knockback": {
+        const kbVisual = this.visuals.get(event.entityId);
+        if (kbVisual) {
+          kbVisual.triggerKnockback(event.from.x, event.from.y, event.to.x, event.to.y);
+        }
+        break;
+      }
       case "spawn":
         break;
     }

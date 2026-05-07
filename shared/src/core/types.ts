@@ -26,7 +26,11 @@ export interface WeaponDefinition {
   readonly damage: number;
   readonly actionCost: number;
   readonly ignoreCoverRange?: number;
+  readonly onHit?: readonly WeaponEffect[];
 }
+
+export type WeaponEffect =
+  | { type: "knockback"; distance: number };
 
 export interface Entity {
   readonly id: EntityId;
@@ -74,7 +78,8 @@ export type GameEvent =
       hits: readonly AttackHit[];
     }
   | { type: "endTurn"; nextTeam: TeamId }
-  | { type: "spawn"; entityId: EntityId; position: Vec2; templateKey: string };
+  | { type: "spawn"; entityId: EntityId; position: Vec2; templateKey: string }
+  | { type: "knockback"; entityId: EntityId; from: Vec2; to: Vec2 };
 
 export interface AttackHit {
   readonly targetId: EntityId;
@@ -103,6 +108,7 @@ export const SHORT_SWORD: WeaponDefinition = {
   shape: { kind: "sector", radius: 80, halfAngle: Math.PI / 3 },
   damage: 25,
   actionCost: 1,
+  onHit: [{ type: "knockback", distance: 30 }],
 };
 
 export const SPEAR: WeaponDefinition = {
@@ -111,6 +117,7 @@ export const SPEAR: WeaponDefinition = {
   shape: { kind: "rectangle", length: 140, width: 20 },
   damage: 30,
   actionCost: 1,
+  onHit: [{ type: "knockback", distance: 25 }],
 };
 
 export const BOW: WeaponDefinition = {
@@ -183,6 +190,7 @@ export const GOBLIN_SPEAR: WeaponDefinition = {
   shape: { kind: "rectangle", length: 100, width: 18 },
   damage: 25,
   actionCost: 1,
+  onHit: [{ type: "knockback", distance: 20 }],
 };
 
 export const GOBLIN_BOW: WeaponDefinition = {
@@ -199,6 +207,7 @@ export const SHIELD_BASH: WeaponDefinition = {
   shape: { kind: "sector", radius: 60, halfAngle: Math.PI / 4 },
   damage: 15,
   actionCost: 1,
+  onHit: [{ type: "knockback", distance: 45 }],
 };
 
 export const BRUTE_SLAM: WeaponDefinition = {
@@ -207,6 +216,7 @@ export const BRUTE_SLAM: WeaponDefinition = {
   shape: { kind: "sector", radius: 90, halfAngle: Math.PI / 2 },
   damage: 40,
   actionCost: 1,
+  onHit: [{ type: "knockback", distance: 50 }],
 };
 
 export const GOLEM_SMASH: WeaponDefinition = {
@@ -215,6 +225,7 @@ export const GOLEM_SMASH: WeaponDefinition = {
   shape: { kind: "circle", radius: 70, range: 60 },
   damage: 50,
   actionCost: 1,
+  onHit: [{ type: "knockback", distance: 60 }],
 };
 
 export const SLIME_SPIT: WeaponDefinition = {
@@ -231,6 +242,7 @@ export const SLIME_LASH: WeaponDefinition = {
   shape: { kind: "sector", radius: 70, halfAngle: Math.PI / 3 },
   damage: 20,
   actionCost: 1,
+  onHit: [{ type: "knockback", distance: 20 }],
 };
 
 export const SLIME_WAVE: WeaponDefinition = {
@@ -239,6 +251,7 @@ export const SLIME_WAVE: WeaponDefinition = {
   shape: { kind: "circle", radius: 80, range: 50 },
   damage: 35,
   actionCost: 1,
+  onHit: [{ type: "knockback", distance: 35 }],
 };
 
 export const ENEMY_TEMPLATES = {
