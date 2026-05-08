@@ -20,4 +20,15 @@ export class MapScreen implements Screen {
     this.hexRenderer.setInputEnabled(false);
     this.hexRenderer.hide();
   }
+
+  suspend() {
+    this.hexRenderer.hideControls();
+    this.hexRenderer.setInputEnabled(false);
+  }
+
+  resume() {
+    this.hexRenderer.setInputEnabled(true);
+    const state = this.getHexMapState();
+    if (state) this.hexRenderer.render(state);
+  }
 }

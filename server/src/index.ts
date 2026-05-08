@@ -7,8 +7,12 @@ import {
   isAdjacent,
   parseHexKey,
   isDecorationHex,
+  createInventory,
+  equipFromSlot,
+  unequipWeapon,
+  ITEMS,
 } from "shared";
-import type { HexCoord, HexMapState, HexIconType } from "shared";
+import type { HexCoord, HexMapState, HexIconType, InventoryState } from "shared";
 import { EncounterSession } from "./encounter-session.js";
 import {
   saveExploredHex,
@@ -23,6 +27,13 @@ seedDiscovery(15);
 type GameMode = "pvp" | "pve";
 type Phase = "map" | "combat";
 
+const DEFAULT_INVENTORY = createInventory([
+  ITEMS["short-sword"]!,
+  ITEMS["spear"]!,
+  ITEMS["bow"]!,
+  ITEMS["potion"]!,
+]);
+
 interface SocketData {
   team: TeamId | null;
   mode: GameMode;
@@ -31,6 +42,7 @@ interface SocketData {
   pendingHex: HexCoord | null;
   visitedThisRun: Set<string>;
   runId: number;
+  inventory: InventoryState;
 }
 
 const ORIGIN: HexCoord = { q: 0, r: 0 };
@@ -88,6 +100,10 @@ function broadcastState(events: readonly GameEvent[]) {
 
 function sendTo(ws: ServerWebSocket<SocketData>, msg: object) {
   ws.send(JSON.stringify(msg));
+}
+
+function sendInventory(ws: ServerWebSocket<SocketData>) {
+  sendTo(ws, { type: "inventory", inventory: ws.data.inventory });
 }
 
 function sendHexMapState(ws: ServerWebSocket<SocketData>) {
@@ -155,6 +171,7 @@ Bun.serve({
           pendingHex: null,
           visitedThisRun: freshVisitedSet(),
           runId: startNewRun(),
+          inventory: DEFAULT_INVENTORY,
         },
       });
       if (!upgraded)
@@ -200,6 +217,8 @@ Bun.serve({
       players.set(team, ws);
       sendTo(ws, { type: "team", team });
 
+      sendInventory(ws);
+
       if (gameMode === "pve") {
         sendHexMapState(ws);
       } else {
@@ -244,7 +263,8 @@ Bun.serve({
           ws.data.pendingHex = target;
           const hexType = getHexIcon(target, ws.data.hexMap.icons)
             ?? (isDecorationHex(target) ? "dense-wilderness" : "wilderness");
-          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId);
+          const weapon = ws.data.inventory.equippedWeapon?.weapon;
+          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId, weapon);
           console.log(`encounter run=${ws.data.runId} hex=(${target.q},${target.r}) type=${hexType}`);
           sendTo(ws, { type: "hexCombatStart" });
           sendTo(ws, {
@@ -272,6 +292,18 @@ Bun.serve({
         session.state = { ...session.state, winner: "red" };
         broadcastState([]);
         checkCombatEnd(ws);
+      }
+
+      if (msg.type === "equip" && typeof msg.slotIndex === "number") {
+        ws.data.inventory = equipFromSlot(ws.data.inventory, msg.slotIndex);
+        sendInventory(ws);
+        return;
+      }
+
+      if (msg.type === "unequip") {
+        ws.data.inventory = unequipWeapon(ws.data.inventory);
+        sendInventory(ws);
+        return;
       }
 
       if (msg.type === "reset") {

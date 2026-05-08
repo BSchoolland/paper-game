@@ -11,6 +11,7 @@ import { loadMapAssets } from "./renderer/grid-renderer.js";
 import { ScreenManager } from "./screens/screen-manager.js";
 import { MapScreen } from "./screens/map-screen.js";
 import { CombatScreen } from "./screens/combat-screen.js";
+import { InventoryScreen } from "./screens/inventory-screen.js";
 import type { HexCoord, HexMapState } from "shared";
 import { hexKey, isAdjacent } from "shared";
 
@@ -58,10 +59,16 @@ async function init() {
 
   let hexMapState: HexMapState | null = null;
 
+  // Inventory screen
+  const inventoryScreen = new InventoryScreen(conn);
+
   // Screen manager
   const screens = new ScreenManager();
   screens.register("map", new MapScreen(hexRenderer, () => hexMapState));
-  screens.register("combat", new CombatScreen(combatRenderer, clientState, combatStore, input));
+  screens.register("combat", new CombatScreen(combatRenderer, clientState, combatStore, input), true);
+  screens.register("inventory", inventoryScreen, true);
+
+  inventoryScreen.onClose(() => screens.switchTo("map"));
 
   let moveLocked = false;
 
@@ -102,6 +109,17 @@ async function init() {
       }
     };
     requestAnimationFrame(waitForIdle);
+  });
+
+  // Inventory toggle
+  document.addEventListener("keydown", (e) => {
+    if ((e.key === "i" || e.key === "I") && !e.ctrlKey && !e.metaKey) {
+      if (screens.isActive("map")) {
+        screens.switchTo("inventory");
+      } else if (screens.isActive("inventory")) {
+        screens.switchTo("map");
+      }
+    }
   });
 
   // Debug: F2 to instantly win combat

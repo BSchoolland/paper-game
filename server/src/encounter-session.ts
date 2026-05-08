@@ -1,4 +1,4 @@
-import type { GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord } from "shared";
+import type { GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord, WeaponDefinition } from "shared";
 import {
   resolveAction,
   serializeGameState,
@@ -30,7 +30,8 @@ export class EncounterSession {
     mode: "pvp" | "pve",
     hexType?: EncounterType,
     hexCoord?: HexCoord,
-    runId?: number
+    runId?: number,
+    equippedWeapon?: WeaponDefinition
   ): Promise<EncounterSession> {
     resetSpawnCounter();
 
@@ -38,7 +39,7 @@ export class EncounterSession {
       const encounter = generateEncounter(hexType, GREENLANDS_BIOME, hexCoord.q, hexCoord.r, runId);
       const map = buildEncounterMap(encounter);
       await loadCollisionGrid(map.grid, map.mapDefinition.objects);
-      const entities = placeEncounterEntities(encounter, map.grid);
+      const entities = placeEncounterEntities(encounter, map.grid, equippedWeapon);
       return new EncounterSession(assembleEncounterState(map, entities));
     }
 

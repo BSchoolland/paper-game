@@ -1,5 +1,6 @@
 export * from "./core/types.js";
 export * from "./core/items.js";
+export * from "./core/inventory.js";
 export * from "./core/vec2.js";
 export * from "./core/serialization.js";
 export * from "./core/rng.js";
