@@ -1,42 +1,67 @@
-import type { ItemDefinition, WeaponItem } from "./items.js";
+import type { ItemDefinition, SlotType, SlotCost } from "./items.js";
 
-export const INVENTORY_SIZE = 12;
+export const BAG_SIZE = 12;
+
+export const PLAYER_SLOTS: Record<SlotType, number> = {
+  hand: 2,
+  hat: 1,
+  utility: 3,
+  accessory: 3,
+};
 
 export interface InventoryState {
-  readonly slots: readonly (ItemDefinition | null)[];
-  readonly equippedWeapon: WeaponItem | null;
+  readonly bag: readonly (ItemDefinition | null)[];
+  readonly equipped: readonly ItemDefinition[];
 }
 
 export function createInventory(startingItems: ItemDefinition[]): InventoryState {
-  const slots: (ItemDefinition | null)[] = new Array(INVENTORY_SIZE).fill(null);
-  for (let i = 0; i < startingItems.length && i < INVENTORY_SIZE; i++) {
-    slots[i] = startingItems[i]!;
+  const bag: (ItemDefinition | null)[] = new Array(BAG_SIZE).fill(null);
+  for (let i = 0; i < startingItems.length && i < BAG_SIZE; i++) {
+    bag[i] = startingItems[i]!;
   }
-  return { slots, equippedWeapon: null };
+  return { bag, equipped: [] };
 }
 
-export function equipFromSlot(inv: InventoryState, slotIndex: number): InventoryState {
-  const item = inv.slots[slotIndex];
-  if (!item || item.type !== "weapon") return inv;
-
-  const newSlots = [...inv.slots];
-
-  if (inv.equippedWeapon) {
-    newSlots[slotIndex] = inv.equippedWeapon;
-  } else {
-    newSlots[slotIndex] = null;
+function usedSlots(equipped: readonly ItemDefinition[]): Record<SlotType, number> {
+  const used: Record<SlotType, number> = { hand: 0, hat: 0, utility: 0, accessory: 0 };
+  for (const item of equipped) {
+    for (const [slot, count] of Object.entries(item.slotCost) as [SlotType, number][]) {
+      used[slot] += count;
+    }
   }
-
-  return { slots: newSlots, equippedWeapon: item };
+  return used;
 }
 
-export function unequipWeapon(inv: InventoryState): InventoryState {
-  if (!inv.equippedWeapon) return inv;
+export function canEquip(equipped: readonly ItemDefinition[], item: ItemDefinition): boolean {
+  const used = usedSlots(equipped);
+  for (const [slot, count] of Object.entries(item.slotCost) as [SlotType, number][]) {
+    if (used[slot] + count > PLAYER_SLOTS[slot]) return false;
+  }
+  return true;
+}
 
-  const emptySlot = inv.slots.indexOf(null);
+export function equipFromBag(inv: InventoryState, bagIndex: number): InventoryState {
+  const item = inv.bag[bagIndex];
+  if (!item) return inv;
+  if (!canEquip(inv.equipped, item)) return inv;
+
+  const newBag = [...inv.bag];
+  newBag[bagIndex] = null;
+  return { bag: newBag, equipped: [...inv.equipped, item] };
+}
+
+export function unequipItem(inv: InventoryState, equippedIndex: number): InventoryState {
+  if (equippedIndex < 0 || equippedIndex >= inv.equipped.length) return inv;
+
+  const emptySlot = inv.bag.indexOf(null);
   if (emptySlot === -1) return inv;
 
-  const newSlots = [...inv.slots];
-  newSlots[emptySlot] = inv.equippedWeapon;
-  return { slots: newSlots, equippedWeapon: null };
+  const newBag = [...inv.bag];
+  newBag[emptySlot] = inv.equipped[equippedIndex]!;
+  const newEquipped = inv.equipped.filter((_, i) => i !== equippedIndex);
+  return { bag: newBag, equipped: newEquipped };
+}
+
+export function getEquippedWeapon(inv: InventoryState): ItemDefinition | null {
+  return inv.equipped.find((item) => item.type === "weapon") ?? null;
 }

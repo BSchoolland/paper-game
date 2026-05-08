@@ -5,12 +5,17 @@ export type ItemRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 
 export type ItemType = "weapon" | "shield" | "consumable" | "accessory";
 
+export type SlotType = "hand" | "hat" | "utility" | "accessory";
+
+export type SlotCost = Partial<Record<SlotType, number>>;
+
 interface ItemBase {
   readonly id: string;
   readonly name: string;
   readonly description: string;
   readonly rarity: ItemRarity;
   readonly sprite: string;
+  readonly slotCost: SlotCost;
 }
 
 export interface WeaponItem extends ItemBase {
@@ -54,6 +59,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A light blade suited for quick strikes.",
     rarity: "common",
     sprite: "short-sword",
+    slotCost: { hand: 1 },
     weapon: SHORT_SWORD,
   },
   "long-sword": {
@@ -63,6 +69,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A versatile blade with good reach and damage.",
     rarity: "uncommon",
     sprite: "long-sword",
+    slotCost: { hand: 1 },
     weapon: {
       id: "long-sword",
       name: "Long Sword",
@@ -79,6 +86,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A long polearm with superior reach.",
     rarity: "common",
     sprite: "spear",
+    slotCost: { hand: 1 },
     weapon: SPEAR,
   },
   "axe": {
@@ -88,6 +96,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A brutal chopping weapon that hits hard.",
     rarity: "common",
     sprite: "axe",
+    slotCost: { hand: 1 },
     weapon: {
       id: "axe",
       name: "Axe",
@@ -106,6 +115,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A ranged weapon that fires arrows at distant targets.",
     rarity: "common",
     sprite: "bow",
+    slotCost: { hand: 2 },
     weapon: BOW,
   },
   "broadsword": {
@@ -115,6 +125,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A heavy blade with a wide sweeping arc.",
     rarity: "uncommon",
     sprite: "broadsword",
+    slotCost: { hand: 1 },
     weapon: {
       id: "broadsword",
       name: "Broadsword",
@@ -131,6 +142,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A massive axe that cleaves through armor.",
     rarity: "rare",
     sprite: "battle-axe",
+    slotCost: { hand: 2 },
     weapon: {
       id: "battle-axe",
       name: "Battle Axe",
@@ -147,6 +159,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A spiked bludgeon that delivers crushing blows.",
     rarity: "uncommon",
     sprite: "mace",
+    slotCost: { hand: 1 },
     weapon: {
       id: "mace",
       name: "Mace",
@@ -165,6 +178,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A simple wooden shield that blocks some damage.",
     rarity: "common",
     sprite: "round-shield",
+    slotCost: { hand: 1 },
     damageReduction: 5,
   },
   "kite-shield": {
@@ -174,6 +188,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A sturdy metal shield offering strong protection.",
     rarity: "uncommon",
     sprite: "kite-shield",
+    slotCost: { hand: 1 },
     damageReduction: 10,
   },
   "buckler": {
@@ -183,6 +198,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A small, light shield for parrying attacks.",
     rarity: "common",
     sprite: "buckler",
+    slotCost: { hand: 1 },
     damageReduction: 3,
   },
   "quiver": {
@@ -192,6 +208,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A leather quiver that improves ranged accuracy.",
     rarity: "common",
     sprite: "quiver",
+    slotCost: { accessory: 1 },
     statBonus: { damage: 5 },
   },
 
@@ -203,6 +220,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A magical staff that channels arcane energy.",
     rarity: "rare",
     sprite: "staff",
+    slotCost: { hand: 1, utility: 1 },
     weapon: {
       id: "staff",
       name: "Staff",
@@ -218,6 +236,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "An ancient tome that bolsters the wielder's power.",
     rarity: "rare",
     sprite: "spellbook",
+    slotCost: { accessory: 1 },
     statBonus: { damage: 10 },
   },
   "potion": {
@@ -227,6 +246,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "A red brew that restores health when consumed.",
     rarity: "common",
     sprite: "potion",
+    slotCost: { utility: 1 },
     effect: { kind: "heal", amount: 50 },
   },
   "bomb": {
@@ -236,6 +256,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     description: "An explosive device that damages all nearby enemies.",
     rarity: "uncommon",
     sprite: "bomb",
+    slotCost: { utility: 1 },
     effect: { kind: "damage", amount: 40, radius: 80 },
   },
 };

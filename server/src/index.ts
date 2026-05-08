@@ -8,8 +8,9 @@ import {
   parseHexKey,
   isDecorationHex,
   createInventory,
-  equipFromSlot,
-  unequipWeapon,
+  equipFromBag,
+  unequipItem,
+  getEquippedWeapon,
   ITEMS,
 } from "shared";
 import type { HexCoord, HexMapState, HexIconType, InventoryState } from "shared";
@@ -263,7 +264,8 @@ Bun.serve({
           ws.data.pendingHex = target;
           const hexType = getHexIcon(target, ws.data.hexMap.icons)
             ?? (isDecorationHex(target) ? "dense-wilderness" : "wilderness");
-          const weapon = ws.data.inventory.equippedWeapon?.weapon;
+          const eqWeapon = getEquippedWeapon(ws.data.inventory);
+          const weapon = eqWeapon?.type === "weapon" ? eqWeapon.weapon : undefined;
           session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId, weapon);
           console.log(`encounter run=${ws.data.runId} hex=(${target.q},${target.r}) type=${hexType}`);
           sendTo(ws, { type: "hexCombatStart" });
@@ -294,14 +296,14 @@ Bun.serve({
         checkCombatEnd(ws);
       }
 
-      if (msg.type === "equip" && typeof msg.slotIndex === "number") {
-        ws.data.inventory = equipFromSlot(ws.data.inventory, msg.slotIndex);
+      if (msg.type === "equip" && typeof msg.bagIndex === "number") {
+        ws.data.inventory = equipFromBag(ws.data.inventory, msg.bagIndex);
         sendInventory(ws);
         return;
       }
 
-      if (msg.type === "unequip") {
-        ws.data.inventory = unequipWeapon(ws.data.inventory);
+      if (msg.type === "unequip" && typeof msg.equippedIndex === "number") {
+        ws.data.inventory = unequipItem(ws.data.inventory, msg.equippedIndex);
         sendInventory(ws);
         return;
       }

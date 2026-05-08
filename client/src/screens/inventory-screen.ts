@@ -1,11 +1,12 @@
 import type { Screen } from "./screen-manager.js";
 import type { Connection } from "../net/connection.js";
-import type { InventoryState, ItemDefinition, WeaponItem } from "shared";
+import type { InventoryState, ItemDefinition } from "shared";
+import { PLAYER_SLOTS, canEquip } from "shared";
+import type { SlotType } from "shared";
 
 const SLOT_SIZE = 72;
 const SLOT_GAP = 8;
-const COLS = 4;
-const EQUIPPED_SIZE = 80;
+const BAG_COLS = 4;
 
 const RARITY_COLORS: Record<string, string> = {
   common: "#8b8b7a",
@@ -14,6 +15,13 @@ const RARITY_COLORS: Record<string, string> = {
   epic: "#8a4ab0",
   legendary: "#c47030",
 };
+
+const SLOT_LABELS: { type: SlotType; label: string }[] = [
+  { type: "hand", label: "Hand" },
+  { type: "hat", label: "Hat" },
+  { type: "utility", label: "Utility" },
+  { type: "accessory", label: "Accessory" },
+];
 
 export class InventoryScreen implements Screen {
   private container: HTMLDivElement;
@@ -72,12 +80,13 @@ export class InventoryScreen implements Screen {
       borderRadius: "12px",
       padding: "24px",
       minWidth: "380px",
-      maxWidth: "480px",
+      maxWidth: "520px",
       boxShadow: "0 8px 32px rgba(26, 20, 14, 0.4)",
       fontFamily: "Georgia, 'Times New Roman', serif",
       color: "#2a2520",
     });
 
+    // Header
     const header = document.createElement("div");
     Object.assign(header.style, {
       display: "flex",
@@ -88,11 +97,7 @@ export class InventoryScreen implements Screen {
 
     const title = document.createElement("h2");
     title.textContent = "Inventory";
-    Object.assign(title.style, {
-      margin: "0",
-      fontSize: "20px",
-      fontWeight: "500",
-    });
+    Object.assign(title.style, { margin: "0", fontSize: "20px", fontWeight: "500" });
 
     const closeBtn = document.createElement("button");
     closeBtn.textContent = "Close";
@@ -112,7 +117,7 @@ export class InventoryScreen implements Screen {
     header.appendChild(closeBtn);
     panel.appendChild(header);
 
-    // Equipped weapon section
+    // Equipped section
     const equippedSection = document.createElement("div");
     Object.assign(equippedSection.style, {
       marginBottom: "16px",
@@ -123,18 +128,48 @@ export class InventoryScreen implements Screen {
     });
 
     const equippedLabel = document.createElement("div");
-    equippedLabel.textContent = "Equipped Weapon";
+    equippedLabel.textContent = "Equipped";
     Object.assign(equippedLabel.style, {
       fontSize: "12px",
       color: "#6b6358",
-      marginBottom: "8px",
+      marginBottom: "4px",
       textTransform: "uppercase",
       letterSpacing: "0.5px",
     });
     equippedSection.appendChild(equippedLabel);
 
-    const equippedSlot = this.createEquippedSlot(inv.equippedWeapon);
-    equippedSection.appendChild(equippedSlot);
+    const slotSummary = document.createElement("div");
+    Object.assign(slotSummary.style, {
+      fontSize: "10px",
+      color: "#8b8b7a",
+      marginBottom: "8px",
+    });
+    const used = this.getUsedSlots(inv.equipped);
+    slotSummary.textContent = SLOT_LABELS
+      .map(({ type, label }) => `${label}: ${used[type]}/${PLAYER_SLOTS[type]}`)
+      .join("  ");
+    equippedSection.appendChild(slotSummary);
+
+    if (inv.equipped.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "No items equipped";
+      Object.assign(empty.style, { fontSize: "12px", color: "#b8a888", fontStyle: "italic" });
+      equippedSection.appendChild(empty);
+    } else {
+      const equippedGrid = document.createElement("div");
+      Object.assign(equippedGrid.style, {
+        display: "grid",
+        gridTemplateColumns: `repeat(${BAG_COLS}, ${SLOT_SIZE}px)`,
+        gap: `${SLOT_GAP}px`,
+      });
+      for (let i = 0; i < inv.equipped.length; i++) {
+        equippedGrid.appendChild(this.createItemSlot(inv.equipped[i]!, () => {
+          this.conn.send({ type: "unequip", equippedIndex: i });
+        }, "Unequip"));
+      }
+      equippedSection.appendChild(equippedGrid);
+    }
+
     panel.appendChild(equippedSection);
 
     // Bag section
@@ -152,138 +187,112 @@ export class InventoryScreen implements Screen {
     const grid = document.createElement("div");
     Object.assign(grid.style, {
       display: "grid",
-      gridTemplateColumns: `repeat(${COLS}, ${SLOT_SIZE}px)`,
+      gridTemplateColumns: `repeat(${BAG_COLS}, ${SLOT_SIZE}px)`,
       gap: `${SLOT_GAP}px`,
     });
 
-    for (let i = 0; i < inv.slots.length; i++) {
-      const slot = this.createBagSlot(inv.slots[i] ?? null, i);
-      grid.appendChild(slot);
+    for (let i = 0; i < inv.bag.length; i++) {
+      const item = inv.bag[i];
+      if (item) {
+        const equipable = canEquip(inv.equipped, item);
+        grid.appendChild(this.createItemSlot(item, equipable ? () => {
+          this.conn.send({ type: "equip", bagIndex: i });
+        } : null, "Equip", !equipable));
+      } else {
+        grid.appendChild(this.createEmptySlot());
+      }
     }
 
     panel.appendChild(grid);
     this.container.appendChild(panel);
   }
 
-  private createEquippedSlot(weapon: WeaponItem | null): HTMLDivElement {
-    const slot = document.createElement("div");
-    Object.assign(slot.style, {
-      width: `${EQUIPPED_SIZE}px`,
-      height: `${EQUIPPED_SIZE}px`,
-      background: "#d4c4a8",
-      border: weapon ? `2px solid ${RARITY_COLORS[weapon.rarity] ?? "#8b8b7a"}` : "2px dashed #b8a888",
-      borderRadius: "8px",
-      display: "flex",
-      flexDirection: "column",
-      alignItems: "center",
-      justifyContent: "center",
-      cursor: weapon ? "pointer" : "default",
-      position: "relative",
-    });
-
-    if (weapon) {
-      const name = document.createElement("div");
-      name.textContent = weapon.name;
-      Object.assign(name.style, {
-        fontSize: "11px",
-        color: "#2a2520",
-        textAlign: "center",
-        lineHeight: "1.2",
-      });
-      slot.appendChild(name);
-
-      const dmg = document.createElement("div");
-      dmg.textContent = `${weapon.weapon.damage} dmg`;
-      Object.assign(dmg.style, {
-        fontSize: "10px",
-        color: "#6b6358",
-      });
-      slot.appendChild(dmg);
-
-      slot.addEventListener("click", () => {
-        this.conn.send({ type: "unequip" });
-      });
-      slot.addEventListener("mouseenter", () => {
-        slot.style.background = "#c8b898";
-      });
-      slot.addEventListener("mouseleave", () => {
-        slot.style.background = "#d4c4a8";
-      });
-    } else {
-      const empty = document.createElement("div");
-      empty.textContent = "Empty";
-      Object.assign(empty.style, {
-        fontSize: "11px",
-        color: "#b8a888",
-        fontStyle: "italic",
-      });
-      slot.appendChild(empty);
+  private getUsedSlots(equipped: readonly ItemDefinition[]): Record<SlotType, number> {
+    const used: Record<SlotType, number> = { hand: 0, hat: 0, utility: 0, accessory: 0 };
+    for (const item of equipped) {
+      for (const [slot, count] of Object.entries(item.slotCost) as [SlotType, number][]) {
+        used[slot] += count;
+      }
     }
-
-    return slot;
+    return used;
   }
 
-  private createBagSlot(item: ItemDefinition | null, index: number): HTMLDivElement {
+  private createItemSlot(
+    item: ItemDefinition,
+    onClick: (() => void) | null,
+    actionLabel: string,
+    dimmed = false,
+  ): HTMLDivElement {
     const slot = document.createElement("div");
+    const borderColor = RARITY_COLORS[item.rarity] ?? "#8b8b7a";
     Object.assign(slot.style, {
       width: `${SLOT_SIZE}px`,
       height: `${SLOT_SIZE}px`,
-      background: item ? "#d4c4a8" : "rgba(180, 168, 136, 0.3)",
-      border: item ? `1.5px solid ${RARITY_COLORS[item.rarity] ?? "#8b8b7a"}` : "1.5px solid rgba(184, 168, 136, 0.5)",
+      background: dimmed ? "rgba(180, 168, 136, 0.4)" : "#d4c4a8",
+      border: `1.5px solid ${borderColor}`,
       borderRadius: "6px",
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
       justifyContent: "center",
-      cursor: item ? "pointer" : "default",
+      cursor: onClick ? "pointer" : "default",
       gap: "2px",
+      opacity: dimmed ? "0.5" : "1",
     });
 
-    if (item) {
-      const name = document.createElement("div");
-      name.textContent = item.name;
-      Object.assign(name.style, {
-        fontSize: "10px",
-        color: "#2a2520",
-        textAlign: "center",
-        lineHeight: "1.2",
-      });
-      slot.appendChild(name);
+    const name = document.createElement("div");
+    name.textContent = item.name;
+    Object.assign(name.style, {
+      fontSize: "10px",
+      color: "#2a2520",
+      textAlign: "center",
+      lineHeight: "1.2",
+    });
+    slot.appendChild(name);
 
-      const typeBadge = document.createElement("div");
-      typeBadge.textContent = item.type;
-      Object.assign(typeBadge.style, {
-        fontSize: "9px",
-        color: "#6b6358",
-        textTransform: "capitalize",
-      });
-      slot.appendChild(typeBadge);
+    const typeBadge = document.createElement("div");
+    typeBadge.textContent = item.type;
+    Object.assign(typeBadge.style, {
+      fontSize: "9px",
+      color: "#6b6358",
+      textTransform: "capitalize",
+    });
+    slot.appendChild(typeBadge);
 
-      if (item.type === "weapon") {
-        const dmg = document.createElement("div");
-        dmg.textContent = `${item.weapon.damage} dmg`;
-        Object.assign(dmg.style, {
-          fontSize: "9px",
-          color: RARITY_COLORS[item.rarity] ?? "#6b6358",
-        });
-        slot.appendChild(dmg);
-      }
-
-      if (item.type === "weapon") {
-        slot.title = `Click to equip ${item.name}`;
-        slot.addEventListener("click", () => {
-          this.conn.send({ type: "equip", slotIndex: index });
-        });
-      }
-
-      slot.addEventListener("mouseenter", () => {
-        slot.style.background = "#c8b898";
-      });
-      slot.addEventListener("mouseleave", () => {
-        slot.style.background = "#d4c4a8";
-      });
+    if (item.type === "weapon") {
+      const dmg = document.createElement("div");
+      dmg.textContent = `${item.weapon.damage} dmg`;
+      Object.assign(dmg.style, { fontSize: "9px", color: borderColor });
+      slot.appendChild(dmg);
     }
 
+    const slotInfo = document.createElement("div");
+    const costs = Object.entries(item.slotCost)
+      .map(([s, n]) => `${n}${s.slice(0, 3)}`)
+      .join("+");
+    slotInfo.textContent = costs;
+    Object.assign(slotInfo.style, { fontSize: "8px", color: "#a09888" });
+    slot.appendChild(slotInfo);
+
+    if (onClick) {
+      slot.title = `${actionLabel} ${item.name}`;
+      slot.addEventListener("click", onClick);
+      slot.addEventListener("mouseenter", () => { slot.style.background = "#c8b898"; });
+      slot.addEventListener("mouseleave", () => { slot.style.background = dimmed ? "rgba(180, 168, 136, 0.4)" : "#d4c4a8"; });
+    }
+
+    return slot;
+  }
+
+  private createEmptySlot(): HTMLDivElement {
+    const slot = document.createElement("div");
+    Object.assign(slot.style, {
+      width: `${SLOT_SIZE}px`,
+      height: `${SLOT_SIZE}px`,
+      background: "rgba(180, 168, 136, 0.3)",
+      border: "1.5px solid rgba(184, 168, 136, 0.5)",
+      borderRadius: "6px",
+    });
     return slot;
   }
 }
