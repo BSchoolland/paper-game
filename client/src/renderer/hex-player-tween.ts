@@ -21,12 +21,12 @@ export class HexPlayerTween {
   private pendingCallbacks: (() => void)[] = [];
 
   constructor(private hexSize: number) {
-    const idleTex = getSpriteTexture("red", "warrior", "idle");
+    const idleTex = getSpriteTexture("red", "player", "idle");
     this.idleSprite = new Sprite(idleTex);
     this.idleSprite.anchor.set(0.5, 0.75);
     this.idleSprite.scale.set(SPRITE_SCALE);
 
-    const moveTex = getSpriteTexture("red", "warrior", "move");
+    const moveTex = getSpriteTexture("red", "player", "move");
     this.moveSprite = new Sprite(moveTex);
     this.moveSprite.anchor.set(0.5, 0.75);
     this.moveSprite.scale.set(SPRITE_SCALE);

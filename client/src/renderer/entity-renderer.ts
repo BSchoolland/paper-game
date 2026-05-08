@@ -4,7 +4,6 @@ import {
   type AnimState,
   getSpriteTexture,
   getEnemySpriteTexture,
-  weaponToUnitType,
 } from "./sprite-assets.js";
 import { drawRoughEllipse } from "./sketch-utils.js";
 
@@ -51,7 +50,6 @@ export class EntityVisual {
     this.container = new Container();
     this.container.position.set(entity.position.x, entity.position.y);
 
-    const unitType = weaponToUnitType(entity.weapon.id);
     const team = entity.teamId as "red" | "blue";
     const states: AnimState[] = ["idle", "attack", "hit", "move"];
     const sprites: Record<string, Sprite> = {};
@@ -59,7 +57,7 @@ export class EntityVisual {
     for (const state of states) {
       const tex = entity.spriteType
         ? getEnemySpriteTexture(entity.spriteType, state)
-        : getSpriteTexture(team, unitType, state);
+        : getSpriteTexture(team, "player", state);
       const sprite = new Sprite(tex!);
       sprite.anchor.set(0.5, 0.75);
       sprite.scale.set(this.scale);

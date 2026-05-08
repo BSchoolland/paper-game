@@ -42,20 +42,20 @@ function placeEntity(
 
 export function placePvpEntities(grid: GridState): Map<string, Entity> {
   const entities = new Map<string, Entity>();
-  const { warrior } = UNIT_TEMPLATES;
+  const { player } = UNIT_TEMPLATES;
 
-  entities.set("red1", placeEntity("red1", "Warrior", 120, 300, "red", warrior, grid));
+  entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", player, grid));
 
-  entities.set("blue1", placeEntity("blue1", "Warrior", 680, 300, "blue", warrior, grid));
+  entities.set("blue1", placeEntity("blue1", "Player", 680, 300, "blue", player, grid));
 
   return entities;
 }
 
 export function placePveEntities(grid: GridState): Map<string, Entity> {
   const entities = new Map<string, Entity>();
-  const { warrior } = UNIT_TEMPLATES;
+  const { player } = UNIT_TEMPLATES;
 
-  entities.set("red1", placeEntity("red1", "Warrior", 120, 300, "red", warrior, grid));
+  entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", player, grid));
 
   const gs = ENEMY_TEMPLATES["goblin-spear"];
   const ga = ENEMY_TEMPLATES["goblin-archer"];

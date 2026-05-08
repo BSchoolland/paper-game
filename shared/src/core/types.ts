@@ -158,29 +158,13 @@ export interface UnitTemplate {
 }
 
 export const UNIT_TEMPLATES = {
-  warrior: {
+  player: {
     weapon: SHORT_SWORD,
     hp: 120,
     movementBudget: 130,
     collisionRadius: 16,
     canMoveAfterAttack: true,
-    className: "Warrior",
-  },
-  spearman: {
-    weapon: SPEAR,
-    hp: 100,
-    movementBudget: 140,
-    collisionRadius: 16,
-    canMoveAfterAttack: false,
-    className: "Spearman",
-  },
-  archer: {
-    weapon: BOW,
-    hp: 70,
-    movementBudget: 160,
-    collisionRadius: 14,
-    canMoveAfterAttack: true,
-    className: "Archer",
+    className: "Player",
   },
 } as const satisfies Record<string, UnitTemplate>;
 

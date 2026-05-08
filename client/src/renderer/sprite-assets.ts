@@ -1,10 +1,10 @@
 import { Assets, Texture } from "pixi.js";
 
-export type UnitType = "warrior" | "spearman" | "archer";
+export type UnitType = "player";
 export type AnimState = "idle" | "attack" | "hit" | "move";
 export type TeamColor = "red" | "blue";
 
-const UNIT_TYPES: UnitType[] = ["warrior", "spearman", "archer"];
+const UNIT_TYPES: UnitType[] = ["player"];
 const ANIM_STATES: AnimState[] = ["idle", "attack", "hit", "move"];
 const TEAMS: TeamColor[] = ["red", "blue"];
 const ENEMY_SPRITE_TYPES = [
@@ -60,12 +60,3 @@ export function getEnemySpriteTexture(
   return textures.get(enemyKey(spriteType, state)) ?? null;
 }
 
-const WEAPON_TO_UNIT: Record<string, UnitType> = {
-  "short-sword": "warrior",
-  spear: "spearman",
-  bow: "archer",
-};
-
-export function weaponToUnitType(weaponId: string): UnitType {
-  return WEAPON_TO_UNIT[weaponId] ?? "warrior";
-}

@@ -1,4 +1,4 @@
-import type { Entity, GameState, GridState } from "shared";
+import type { Entity, GameState, GridState, WeaponDefinition } from "shared";
 import { UNIT_TEMPLATES, makeEntity, findWalkablePosition } from "shared";
 import { createCombatGrid } from "shared";
 import type { GeneratedEncounter } from "shared";
@@ -18,11 +18,13 @@ export function buildEncounterMap(encounter: GeneratedEncounter): EncounterMap {
   return { grid, mapDefinition };
 }
 
-export function placeEncounterEntities(encounter: GeneratedEncounter, grid: GridState): Map<string, Entity> {
+export function placeEncounterEntities(encounter: GeneratedEncounter, grid: GridState, equippedWeapon?: WeaponDefinition): Map<string, Entity> {
   const entities = new Map<string, Entity>();
-  const { warrior } = UNIT_TEMPLATES;
+  const playerTemplate = equippedWeapon
+    ? { ...UNIT_TEMPLATES.player, weapon: equippedWeapon }
+    : UNIT_TEMPLATES.player;
 
-  entities.set("red1", placeEntity("red1", "Warrior", 120, 300, "red", warrior, grid));
+  entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", playerTemplate, grid));
 
   const enemyStartX = 500;
   const enemySpreadX = 200;
