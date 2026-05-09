@@ -21,9 +21,15 @@ interface ItemPosition {
   rotation: number;
 }
 
+type InteractionMode =
+  | { type: "idle" }
+  | { type: "dragging"; offsetX: number; offsetY: number }
+  | { type: "rotating"; startAngle: number; startRotation: number };
+
 const REGIONS: Region[] = regionsData.regions;
 const PANEL_W = 806;
 const PANEL_H = 895;
+const UI_SCALE = 1.25;
 
 const SLOT_REGIONS = REGIONS.filter((r) => r.name.startsWith("slot-"));
 const CLOSE_REGION = REGIONS.find((r) => r.name === "close-button")!;
@@ -68,9 +74,7 @@ export class InventoryScreen implements Screen {
 
   private positions = new Map<string, ItemPosition>();
   private selectedItemId: string | null = null;
-  private dragging = false;
-  private dragOffX = 0;
-  private dragOffY = 0;
+  private mode: InteractionMode = { type: "idle" };
 
   private hoveredSlot = -1;
   private hoveredClose = false;
@@ -153,10 +157,10 @@ export class InventoryScreen implements Screen {
     });
 
     this.canvas = document.createElement("canvas");
-    this.canvas.width = PANEL_W;
-    this.canvas.height = PANEL_H;
+    this.canvas.width = Math.round(PANEL_W * UI_SCALE);
+    this.canvas.height = Math.round(PANEL_H * UI_SCALE);
     Object.assign(this.canvas.style, {
-      maxWidth: "min(90vw, 500px)",
+      maxWidth: "min(90vw, 625px)",
       maxHeight: "90vh",
       cursor: "default",
     });
@@ -168,9 +172,11 @@ export class InventoryScreen implements Screen {
 
   private canvasToPanel(e: MouseEvent): { x: number; y: number } {
     const rect = this.canvas.getBoundingClientRect();
+    const canvasW = PANEL_W * UI_SCALE;
+    const canvasH = PANEL_H * UI_SCALE;
     return {
-      x: (e.clientX - rect.left) * (PANEL_W / rect.width),
-      y: (e.clientY - rect.top) * (PANEL_H / rect.height),
+      x: ((e.clientX - rect.left) * (canvasW / rect.width)) / UI_SCALE,
+      y: ((e.clientY - rect.top) * (canvasH / rect.height)) / UI_SCALE,
     };
   }
 
@@ -192,6 +198,30 @@ export class InventoryScreen implements Screen {
     return { w: TARGET_SIZE * baseScale * pos.scale, h: TARGET_SIZE * baseScale * pos.scale };
   }
 
+  private readonly HANDLE_STEM = 28;
+  private readonly HANDLE_RADIUS = 11;
+
+  private getRotateHandlePos(pos: ItemPosition, item: ItemDefinition): { x: number; y: number } {
+    const { h } = this.getItemSize(pos, item);
+    const dist = h / 2 + 3 + this.HANDLE_STEM + this.HANDLE_RADIUS;
+    const rad = pos.rotation * (Math.PI / 180);
+    return {
+      x: pos.x - Math.sin(rad) * dist,
+      y: pos.y - Math.cos(rad) * dist,
+    };
+  }
+
+  private hitRotateHandle(mx: number, my: number, pos: ItemPosition, item: ItemDefinition): boolean {
+    const hp = this.getRotateHandlePos(pos, item);
+    const dx = mx - hp.x;
+    const dy = my - hp.y;
+    return dx * dx + dy * dy <= (this.HANDLE_RADIUS + 4) ** 2;
+  }
+
+  private itemOverlapsCharArea(pos: ItemPosition): boolean {
+    return this.hitRegion(pos.x, pos.y, CHAR_REGION);
+  }
+
   private hitTestItem(x: number, y: number, pos: ItemPosition, item: ItemDefinition): boolean {
     const { w, h } = this.getItemSize(pos, item);
     const dx = x - pos.x;
@@ -203,119 +233,11 @@ export class InventoryScreen implements Screen {
   }
 
   private attachEvents() {
-    this.canvas.addEventListener("mousedown", (e) => {
-      if (!this.inventory) return;
-      const pos = this.canvasToPanel(e);
-
-      for (let i = this.inventory.equipped.length - 1; i >= 0; i--) {
-        const item = this.inventory.equipped[i]!;
-        const itemPos = this.getPosition(item, i);
-        if (this.hitTestItem(pos.x, pos.y, itemPos, item)) {
-          this.selectedItemId = item.id;
-          this.dragging = true;
-          this.dragOffX = pos.x - itemPos.x;
-          this.dragOffY = pos.y - itemPos.y;
-          this.draw();
-          return;
-        }
-      }
-
-      this.selectedItemId = null;
-      this.draw();
-    });
-
-    this.canvas.addEventListener("mousemove", (e) => {
-      const pos = this.canvasToPanel(e);
-
-      if (this.dragging && this.selectedItemId !== null) {
-        const itemPos = this.positions.get(this.selectedItemId);
-        if (itemPos) {
-          itemPos.x = pos.x - this.dragOffX;
-          itemPos.y = pos.y - this.dragOffY;
-          this.draw();
-        }
-        return;
-      }
-
-      this.hoveredClose = this.hitRegion(pos.x, pos.y, CLOSE_REGION);
-
-      let newHovered = -1;
-      for (let i = 0; i < SLOT_REGIONS.length; i++) {
-        if (this.hitRegion(pos.x, pos.y, SLOT_REGIONS[i]!)) {
-          newHovered = i;
-          break;
-        }
-      }
-
-      let cursor = "default";
-      if (this.hoveredClose) cursor = "pointer";
-      else if (newHovered >= 0 && this.getBagItemForSlot(newHovered)) cursor = "pointer";
-
-      if (this.inventory) {
-        for (let i = this.inventory.equipped.length - 1; i >= 0; i--) {
-          const item = this.inventory.equipped[i]!;
-          const itemPos = this.getPosition(item, i);
-          if (this.hitTestItem(pos.x, pos.y, itemPos, item)) {
-            cursor = "grab";
-            break;
-          }
-        }
-      }
-
-      this.canvas.style.cursor = cursor;
-
-      if (newHovered !== this.hoveredSlot) {
-        this.hoveredSlot = newHovered;
-        this.draw();
-      }
-    });
-
-    this.canvas.addEventListener("mouseup", () => {
-      this.dragging = false;
-    });
-
-    this.canvas.addEventListener("mouseleave", () => {
-      this.dragging = false;
-      this.hoveredSlot = -1;
-      this.hoveredClose = false;
-      this.draw();
-    });
-
-    this.canvas.addEventListener("click", (e) => {
-      const pos = this.canvasToPanel(e);
-
-      if (this.hitRegion(pos.x, pos.y, CLOSE_REGION)) {
-        this.onCloseCallback?.();
-        return;
-      }
-
-      if (!this.inventory) return;
-
-      for (let i = 0; i < SLOT_REGIONS.length; i++) {
-        if (!this.hitRegion(pos.x, pos.y, SLOT_REGIONS[i]!)) continue;
-        const bagItem = this.getBagItemForSlot(i);
-        if (bagItem !== null) {
-          this.conn.send({ type: "equip", bagIndex: bagItem.bagIndex });
-          return;
-        }
-      }
-    });
-
-    this.canvas.addEventListener("dblclick", (e) => {
-      if (!this.inventory) return;
-      const pos = this.canvasToPanel(e);
-
-      for (let i = this.inventory.equipped.length - 1; i >= 0; i--) {
-        const item = this.inventory.equipped[i]!;
-        const itemPos = this.getPosition(item, i);
-        if (this.hitTestItem(pos.x, pos.y, itemPos, item)) {
-          this.conn.send({ type: "unequip", equippedIndex: i });
-          this.selectedItemId = null;
-          return;
-        }
-      }
-    });
-
+    this.canvas.addEventListener("mousedown", (e) => this.onMouseDown(this.canvasToPanel(e)));
+    this.canvas.addEventListener("mousemove", (e) => this.onMouseMove(this.canvasToPanel(e)));
+    this.canvas.addEventListener("mouseup", () => this.onMouseUp());
+    this.canvas.addEventListener("mouseleave", () => this.onMouseLeave());
+    this.canvas.addEventListener("click", (e) => this.onClick(this.canvasToPanel(e)));
     this.canvas.addEventListener("wheel", (e) => {
       if (this.selectedItemId === null) return;
       const itemPos = this.positions.get(this.selectedItemId);
@@ -325,6 +247,153 @@ export class InventoryScreen implements Screen {
       itemPos.scale = Math.max(0.75, Math.min(1.25, itemPos.scale + delta));
       this.draw();
     }, { passive: false });
+  }
+
+  private onMouseDown(pos: { x: number; y: number }) {
+    if (!this.inventory) return;
+
+    if (this.selectedItemId !== null) {
+      const idx = this.inventory.equipped.findIndex((it) => it.id === this.selectedItemId);
+      if (idx >= 0) {
+        const item = this.inventory.equipped[idx]!;
+        const itemPos = this.getPosition(item, idx);
+        if (this.hitRotateHandle(pos.x, pos.y, itemPos, item)) {
+          this.mode = {
+            type: "rotating",
+            startAngle: Math.atan2(pos.x - itemPos.x, -(pos.y - itemPos.y)),
+            startRotation: itemPos.rotation,
+          };
+          return;
+        }
+      }
+    }
+
+    for (let i = this.inventory.equipped.length - 1; i >= 0; i--) {
+      const item = this.inventory.equipped[i]!;
+      const itemPos = this.getPosition(item, i);
+      if (this.hitTestItem(pos.x, pos.y, itemPos, item)) {
+        this.selectedItemId = item.id;
+        this.mode = {
+          type: "dragging",
+          offsetX: pos.x - itemPos.x,
+          offsetY: pos.y - itemPos.y,
+        };
+        this.draw();
+        return;
+      }
+    }
+
+    this.selectedItemId = null;
+    this.draw();
+  }
+
+  private onMouseMove(pos: { x: number; y: number }) {
+    if (this.selectedItemId !== null) {
+      const itemPos = this.positions.get(this.selectedItemId);
+      if (itemPos) {
+        if (this.mode.type === "rotating") {
+          const angle = Math.atan2(pos.x - itemPos.x, -(pos.y - itemPos.y));
+          const delta = (angle - this.mode.startAngle) * (180 / Math.PI);
+          itemPos.rotation = this.mode.startRotation + delta;
+          this.draw();
+          return;
+        }
+        if (this.mode.type === "dragging") {
+          itemPos.x = pos.x - this.mode.offsetX;
+          itemPos.y = pos.y - this.mode.offsetY;
+          this.draw();
+          return;
+        }
+      }
+    }
+
+    this.updateHover(pos);
+  }
+
+  private onMouseUp() {
+    if (this.mode.type === "dragging" && this.selectedItemId !== null && this.inventory) {
+      const idx = this.inventory.equipped.findIndex((it) => it.id === this.selectedItemId);
+      if (idx >= 0) {
+        const itemPos = this.getPosition(this.inventory.equipped[idx]!, idx);
+        if (!this.itemOverlapsCharArea(itemPos)) {
+          this.conn.send({ type: "unequip", equippedIndex: idx });
+          this.positions.delete(this.selectedItemId);
+          this.selectedItemId = null;
+        }
+      }
+    }
+    this.mode = { type: "idle" };
+    this.draw();
+  }
+
+  private onMouseLeave() {
+    this.mode = { type: "idle" };
+    this.hoveredSlot = -1;
+    this.hoveredClose = false;
+    this.draw();
+  }
+
+  private onClick(pos: { x: number; y: number }) {
+    if (this.hitRegion(pos.x, pos.y, CLOSE_REGION)) {
+      this.onCloseCallback?.();
+      return;
+    }
+
+    if (!this.inventory) return;
+
+    for (let i = 0; i < SLOT_REGIONS.length; i++) {
+      if (!this.hitRegion(pos.x, pos.y, SLOT_REGIONS[i]!)) continue;
+      const bagItem = this.getBagItemForSlot(i);
+      if (bagItem !== null) {
+        this.conn.send({ type: "equip", bagIndex: bagItem.bagIndex });
+        return;
+      }
+    }
+  }
+
+  private updateHover(pos: { x: number; y: number }) {
+    this.hoveredClose = this.hitRegion(pos.x, pos.y, CLOSE_REGION);
+
+    let newHovered = -1;
+    for (let i = 0; i < SLOT_REGIONS.length; i++) {
+      if (this.hitRegion(pos.x, pos.y, SLOT_REGIONS[i]!)) {
+        newHovered = i;
+        break;
+      }
+    }
+
+    let cursor = "default";
+    if (this.hoveredClose) cursor = "pointer";
+    else if (newHovered >= 0 && this.getBagItemForSlot(newHovered)) cursor = "pointer";
+
+    if (this.selectedItemId !== null && this.inventory) {
+      const idx = this.inventory.equipped.findIndex((it) => it.id === this.selectedItemId);
+      if (idx >= 0) {
+        const item = this.inventory.equipped[idx]!;
+        const itemPos = this.getPosition(item, idx);
+        if (this.hitRotateHandle(pos.x, pos.y, itemPos, item)) {
+          cursor = "grab";
+        }
+      }
+    }
+
+    if (cursor === "default" && this.inventory) {
+      for (let i = this.inventory.equipped.length - 1; i >= 0; i--) {
+        const item = this.inventory.equipped[i]!;
+        const itemPos = this.getPosition(item, i);
+        if (this.hitTestItem(pos.x, pos.y, itemPos, item)) {
+          cursor = "grab";
+          break;
+        }
+      }
+    }
+
+    this.canvas.style.cursor = cursor;
+
+    if (newHovered !== this.hoveredSlot) {
+      this.hoveredSlot = newHovered;
+      this.draw();
+    }
   }
 
   private getBagItemForSlot(slotIdx: number): { item: ItemDefinition; bagIndex: number } | null {
@@ -352,7 +421,9 @@ export class InventoryScreen implements Screen {
 
   private draw() {
     const ctx = this.ctx;
-    ctx.clearRect(0, 0, PANEL_W, PANEL_H);
+    ctx.resetTransform();
+    ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    ctx.scale(UI_SCALE, UI_SCALE);
 
     if (this.panelImage) {
       ctx.drawImage(this.panelImage, 0, 0);
@@ -405,6 +476,8 @@ export class InventoryScreen implements Screen {
       const pos = this.getPosition(item, i);
       const { w, h } = this.getItemSize(pos, item);
       const img = this.loadSprite(item.sprite);
+      const wouldUnequip =
+        this.mode.type === "dragging" && item.id === this.selectedItemId && !this.itemOverlapsCharArea(pos);
 
       ctx.save();
       ctx.translate(pos.x, pos.y);
@@ -427,6 +500,11 @@ export class InventoryScreen implements Screen {
         ctx.fillText(item.name, 0, 0);
       }
 
+      if (wouldUnequip) {
+        ctx.fillStyle = "rgba(200, 40, 40, 0.35)";
+        ctx.fillRect(-w / 2, -h / 2, w, h);
+      }
+
       ctx.restore();
     }
   }
@@ -438,11 +516,46 @@ export class InventoryScreen implements Screen {
     ctx.save();
     ctx.translate(pos.x, pos.y);
     ctx.rotate(pos.rotation * (Math.PI / 180));
+
     ctx.strokeStyle = "rgba(196, 112, 48, 0.8)";
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);
     ctx.strokeRect(-w / 2 - 3, -h / 2 - 3, w + 6, h + 6);
     ctx.setLineDash([]);
+
+    const stemStart = -h / 2 - 3;
+    const stemEnd = stemStart - this.HANDLE_STEM;
+    const handleY = stemEnd - this.HANDLE_RADIUS;
+
+    ctx.strokeStyle = "rgba(196, 112, 48, 0.8)";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, stemStart);
+    ctx.lineTo(0, stemEnd);
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, handleY, this.HANDLE_RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255, 255, 255, 0.9)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(196, 112, 48, 0.9)";
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(0, handleY, 5, -Math.PI * 0.75, Math.PI * 0.5);
+    ctx.strokeStyle = "rgba(196, 112, 48, 0.7)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    const tipAngle = Math.PI * 0.5;
+    const tipX = Math.cos(tipAngle) * 5;
+    const tipY = handleY + Math.sin(tipAngle) * 5;
+    ctx.beginPath();
+    ctx.moveTo(tipX - 3, tipY - 3.5);
+    ctx.lineTo(tipX, tipY);
+    ctx.lineTo(tipX + 3.5, tipY - 2);
+    ctx.stroke();
+
     ctx.restore();
   }
 
