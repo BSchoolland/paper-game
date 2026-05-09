@@ -1,0 +1,18 @@
+{
+  "short-sword": "short-sword.webp",
+  "long-sword": "long-sword.webp",
+  "spear": "spear.webp",
+  "axe": "axe.webp",
+  "bow": "bow.webp",
+  "broadsword": "broadsword.webp",
+  "battle-axe": "battle-axe.webp",
+  "mace": "mace.webp",
+  "round-shield": "round-shield.webp",
+  "kite-shield": "kite-shield.webp",
+  "buckler": "buckler.webp",
+  "quiver": "quiver.webp",
+  "staff": "staff.webp",
+  "spellbook": "spellbook.webp",
+  "potion": "potion.webp",
+  "bomb": "bomb.webp"
+}
