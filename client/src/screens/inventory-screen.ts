@@ -14,9 +14,7 @@ interface Region {
   h: number;
 }
 
-interface PlacedItem {
-  equippedIndex: number;
-  item: ItemDefinition;
+interface ItemPosition {
   x: number;
   y: number;
   scale: number;
@@ -39,6 +37,15 @@ const RARITY_COLORS: Record<string, string> = {
   legendary: "#c47030",
 };
 
+const TARGET_SIZE = 64;
+
+const TYPE_BASE_SCALE: Record<string, number> = {
+  weapon: 2.5,
+  shield: 2.5,
+  consumable: 0.7,
+  accessory: 0.8,
+};
+
 const SLOT_LABELS: { type: SlotType; label: string }[] = [
   { type: "hand", label: "Hand" },
   { type: "hat", label: "Hat" },
@@ -59,8 +66,8 @@ export class InventoryScreen implements Screen {
   private charImage: HTMLImageElement | null = null;
   private spriteImages = new Map<string, HTMLImageElement>();
 
-  private placed: PlacedItem[] = [];
-  private selectedIdx = -1;
+  private positions = new Map<string, ItemPosition>();
+  private selectedItemId: string | null = null;
   private dragging = false;
   private dragOffX = 0;
   private dragOffY = 0;
@@ -75,7 +82,6 @@ export class InventoryScreen implements Screen {
 
     conn.on("inventory", (msg) => {
       this.inventory = msg.inventory;
-      this.syncPlaced();
       if (this.container.style.display !== "none") {
         this.draw();
       }
@@ -88,7 +94,6 @@ export class InventoryScreen implements Screen {
 
   setInventory(inv: InventoryState) {
     this.inventory = inv;
-    this.syncPlaced();
   }
 
   enter() {
@@ -110,7 +115,6 @@ export class InventoryScreen implements Screen {
       };
     }
     this.container.style.display = "flex";
-    this.syncPlaced();
     this.draw();
   }
 
@@ -118,32 +122,21 @@ export class InventoryScreen implements Screen {
     this.container.style.display = "none";
   }
 
-  private syncPlaced() {
-    if (!this.inventory) return;
-    const equipped = this.inventory.equipped;
-
-    const newPlaced: PlacedItem[] = [];
-    for (let i = 0; i < equipped.length; i++) {
-      const existing = this.placed.find(
-        (p) => p.item.id === equipped[i]!.id && p.equippedIndex === i,
-      );
-      if (existing) {
-        newPlaced.push({ ...existing, equippedIndex: i, item: equipped[i]! });
-      } else {
-        const cx = CHAR_REGION.x + CHAR_REGION.w / 2;
-        const cy = CHAR_REGION.y + CHAR_REGION.h / 2;
-        newPlaced.push({
-          equippedIndex: i,
-          item: equipped[i]!,
-          x: cx + (i - equipped.length / 2) * 40,
-          y: cy,
-          scale: 1,
-          rotation: 0,
-        });
-      }
+  private getPosition(item: ItemDefinition, index: number): ItemPosition {
+    let pos = this.positions.get(item.id);
+    if (!pos) {
+      const cx = CHAR_REGION.x + CHAR_REGION.w / 2;
+      const cy = CHAR_REGION.y + CHAR_REGION.h / 2;
+      const equipped = this.inventory!.equipped;
+      pos = {
+        x: cx + (index - equipped.length / 2) * 40,
+        y: cy,
+        scale: 1,
+        rotation: 0,
+      };
+      this.positions.set(item.id, pos);
     }
-    this.placed = newPlaced;
-    if (this.selectedIdx >= this.placed.length) this.selectedIdx = -1;
+    return pos;
   }
 
   private buildUI() {
@@ -185,23 +178,25 @@ export class InventoryScreen implements Screen {
     return px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
   }
 
-  private getItemSize(p: PlacedItem): { w: number; h: number } {
-    const img = this.loadSprite(p.item.sprite);
+  private getItemSize(pos: ItemPosition, item: ItemDefinition): { w: number; h: number } {
+    const baseScale = item.visualScale ?? TYPE_BASE_SCALE[item.type] ?? 1;
+    const img = this.loadSprite(item.sprite);
     if (img) {
-      const baseScale = 0.4;
+      const maxDim = Math.max(img.naturalWidth, img.naturalHeight);
+      const normalize = TARGET_SIZE / maxDim;
       return {
-        w: img.naturalWidth * baseScale * p.scale,
-        h: img.naturalHeight * baseScale * p.scale,
+        w: img.naturalWidth * normalize * baseScale * pos.scale,
+        h: img.naturalHeight * normalize * baseScale * pos.scale,
       };
     }
-    return { w: 48 * p.scale, h: 48 * p.scale };
+    return { w: TARGET_SIZE * baseScale * pos.scale, h: TARGET_SIZE * baseScale * pos.scale };
   }
 
-  private hitTestPlaced(x: number, y: number, p: PlacedItem): boolean {
-    const { w, h } = this.getItemSize(p);
-    const dx = x - p.x;
-    const dy = y - p.y;
-    const angle = -p.rotation * (Math.PI / 180);
+  private hitTestItem(x: number, y: number, pos: ItemPosition, item: ItemDefinition): boolean {
+    const { w, h } = this.getItemSize(pos, item);
+    const dx = x - pos.x;
+    const dy = y - pos.y;
+    const angle = -pos.rotation * (Math.PI / 180);
     const lx = dx * Math.cos(angle) - dy * Math.sin(angle);
     const ly = dx * Math.sin(angle) + dy * Math.cos(angle);
     return Math.abs(lx) < w / 2 + 5 && Math.abs(ly) < h / 2 + 5;
@@ -209,35 +204,39 @@ export class InventoryScreen implements Screen {
 
   private attachEvents() {
     this.canvas.addEventListener("mousedown", (e) => {
+      if (!this.inventory) return;
       const pos = this.canvasToPanel(e);
 
-      // Check placed items (paper doll) first
-      for (let i = this.placed.length - 1; i >= 0; i--) {
-        if (this.hitTestPlaced(pos.x, pos.y, this.placed[i]!)) {
-          this.selectedIdx = i;
+      for (let i = this.inventory.equipped.length - 1; i >= 0; i--) {
+        const item = this.inventory.equipped[i]!;
+        const itemPos = this.getPosition(item, i);
+        if (this.hitTestItem(pos.x, pos.y, itemPos, item)) {
+          this.selectedItemId = item.id;
           this.dragging = true;
-          this.dragOffX = pos.x - this.placed[i]!.x;
-          this.dragOffY = pos.y - this.placed[i]!.y;
+          this.dragOffX = pos.x - itemPos.x;
+          this.dragOffY = pos.y - itemPos.y;
           this.draw();
           return;
         }
       }
 
-      this.selectedIdx = -1;
+      this.selectedItemId = null;
       this.draw();
     });
 
     this.canvas.addEventListener("mousemove", (e) => {
       const pos = this.canvasToPanel(e);
 
-      if (this.dragging && this.selectedIdx >= 0) {
-        this.placed[this.selectedIdx]!.x = pos.x - this.dragOffX;
-        this.placed[this.selectedIdx]!.y = pos.y - this.dragOffY;
-        this.draw();
+      if (this.dragging && this.selectedItemId !== null) {
+        const itemPos = this.positions.get(this.selectedItemId);
+        if (itemPos) {
+          itemPos.x = pos.x - this.dragOffX;
+          itemPos.y = pos.y - this.dragOffY;
+          this.draw();
+        }
         return;
       }
 
-      // Hover detection
       this.hoveredClose = this.hitRegion(pos.x, pos.y, CLOSE_REGION);
 
       let newHovered = -1;
@@ -252,11 +251,14 @@ export class InventoryScreen implements Screen {
       if (this.hoveredClose) cursor = "pointer";
       else if (newHovered >= 0 && this.getBagItemForSlot(newHovered)) cursor = "pointer";
 
-      // Check if hovering a placed item
-      for (let i = this.placed.length - 1; i >= 0; i--) {
-        if (this.hitTestPlaced(pos.x, pos.y, this.placed[i]!)) {
-          cursor = "grab";
-          break;
+      if (this.inventory) {
+        for (let i = this.inventory.equipped.length - 1; i >= 0; i--) {
+          const item = this.inventory.equipped[i]!;
+          const itemPos = this.getPosition(item, i);
+          if (this.hitTestItem(pos.x, pos.y, itemPos, item)) {
+            cursor = "grab";
+            break;
+          }
         }
       }
 
@@ -289,7 +291,6 @@ export class InventoryScreen implements Screen {
 
       if (!this.inventory) return;
 
-      // Click on bag slot to equip
       for (let i = 0; i < SLOT_REGIONS.length; i++) {
         if (!this.hitRegion(pos.x, pos.y, SLOT_REGIONS[i]!)) continue;
         const bagItem = this.getBagItemForSlot(i);
@@ -301,23 +302,27 @@ export class InventoryScreen implements Screen {
     });
 
     this.canvas.addEventListener("dblclick", (e) => {
+      if (!this.inventory) return;
       const pos = this.canvasToPanel(e);
-      // Double-click a placed item to unequip
-      for (let i = this.placed.length - 1; i >= 0; i--) {
-        if (this.hitTestPlaced(pos.x, pos.y, this.placed[i]!)) {
-          this.conn.send({ type: "unequip", equippedIndex: this.placed[i]!.equippedIndex });
-          this.selectedIdx = -1;
+
+      for (let i = this.inventory.equipped.length - 1; i >= 0; i--) {
+        const item = this.inventory.equipped[i]!;
+        const itemPos = this.getPosition(item, i);
+        if (this.hitTestItem(pos.x, pos.y, itemPos, item)) {
+          this.conn.send({ type: "unequip", equippedIndex: i });
+          this.selectedItemId = null;
           return;
         }
       }
     });
 
     this.canvas.addEventListener("wheel", (e) => {
-      if (this.selectedIdx < 0) return;
+      if (this.selectedItemId === null) return;
+      const itemPos = this.positions.get(this.selectedItemId);
+      if (!itemPos) return;
       e.preventDefault();
-      const p = this.placed[this.selectedIdx]!;
       const delta = e.deltaY > 0 ? -0.05 : 0.05;
-      p.scale = Math.max(0.2, Math.min(3, p.scale + delta));
+      itemPos.scale = Math.max(0.75, Math.min(1.25, itemPos.scale + delta));
       this.draw();
     }, { passive: false });
   }
@@ -365,8 +370,13 @@ export class InventoryScreen implements Screen {
       this.drawSlotHighlight(CLOSE_REGION);
     }
 
-    if (this.selectedIdx >= 0 && this.selectedIdx < this.placed.length) {
-      this.drawSelection(this.placed[this.selectedIdx]!);
+    if (this.selectedItemId !== null && this.inventory) {
+      const idx = this.inventory.equipped.findIndex((it) => it.id === this.selectedItemId);
+      if (idx >= 0) {
+        const item = this.inventory.equipped[idx]!;
+        const pos = this.getPosition(item, idx);
+        this.drawSelection(pos, item);
+      }
     }
   }
 
@@ -387,43 +397,47 @@ export class InventoryScreen implements Screen {
   }
 
   private drawPlacedItems() {
+    if (!this.inventory) return;
     const ctx = this.ctx;
-    for (const p of this.placed) {
-      const { w, h } = this.getItemSize(p);
-      const img = this.loadSprite(p.item.sprite);
+
+    for (let i = 0; i < this.inventory.equipped.length; i++) {
+      const item = this.inventory.equipped[i]!;
+      const pos = this.getPosition(item, i);
+      const { w, h } = this.getItemSize(pos, item);
+      const img = this.loadSprite(item.sprite);
 
       ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.rotation * (Math.PI / 180));
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(pos.rotation * (Math.PI / 180));
 
       if (img) {
         ctx.drawImage(img, -w / 2, -h / 2, w, h);
       } else {
         ctx.fillStyle = "#d4c4a8";
-        ctx.strokeStyle = RARITY_COLORS[p.item.rarity] ?? "#8b8b7a";
+        ctx.strokeStyle = RARITY_COLORS[item.rarity] ?? "#8b8b7a";
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.roundRect(-w / 2, -h / 2, w, h, 6 * p.scale);
+        ctx.roundRect(-w / 2, -h / 2, w, h, 6 * pos.scale);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = "#2a2520";
         ctx.font = "14px sans-serif";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(p.item.name, 0, 0);
+        ctx.fillText(item.name, 0, 0);
       }
 
       ctx.restore();
     }
   }
 
-  private drawSelection(p: PlacedItem) {
+  private drawSelection(pos: ItemPosition, item: ItemDefinition) {
     const ctx = this.ctx;
-    const { w, h } = this.getItemSize(p);
+    const { w, h } = this.getItemSize(pos, item);
 
     ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(p.rotation * (Math.PI / 180));
+    ctx.translate(pos.x, pos.y);
+    ctx.rotate(pos.rotation * (Math.PI / 180));
     ctx.strokeStyle = "rgba(196, 112, 48, 0.8)";
     ctx.lineWidth = 2;
     ctx.setLineDash([4, 4]);

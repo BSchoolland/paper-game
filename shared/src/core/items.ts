@@ -18,6 +18,7 @@ interface ItemBase {
   readonly rarity: ItemRarity;
   readonly sprite: string;
   readonly slotCost: SlotCost;
+  readonly visualScale?: number;
 }
 
 export interface WeaponItem extends ItemBase {
@@ -65,6 +66,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     slotCost: { hand: 1 },
     weapon: SHORT_SWORD,
     animSet: "sword",
+    visualScale: 2.0,
   },
   "long-sword": {
     type: "weapon",
@@ -112,6 +114,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       onHit: [{ type: "knockback", distance: 40 }],
     },
     animSet: "sword",
+    visualScale: 4,
   },
 
   // ---- Row 1: bow, broadsword, battle-axe, mace ----
