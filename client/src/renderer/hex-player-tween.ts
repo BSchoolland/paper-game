@@ -1,10 +1,11 @@
 import { Sprite } from "pixi.js";
-import type { HexCoord } from "shared";
+import type { HexCoord, AnimSet } from "shared";
 import { hexToPixel } from "shared";
-import { getSpriteTexture } from "./sprite-assets.js";
+import { getPlayerTexture } from "./sprite-assets.js";
 
-const SPRITE_SCALE = 0.27;
+const TARGET_MAP_HEIGHT = 50;
 const MOVE_SPEED = 1.2;
+const DEFAULT_ANIM_SET: AnimSet = "sword";
 
 function easeInOutQuad(t: number): number {
   return t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2;
@@ -19,18 +20,29 @@ export class HexPlayerTween {
   private tweenProgress = 1;
   private _animating = false;
   private pendingCallbacks: (() => void)[] = [];
+  private animSet: AnimSet = DEFAULT_ANIM_SET;
+
+  private scale: number;
 
   constructor(private hexSize: number) {
-    const idleTex = getSpriteTexture("red", "player", "idle");
+    const idleTex = getPlayerTexture(DEFAULT_ANIM_SET, "idle");
+    this.scale = TARGET_MAP_HEIGHT / idleTex.height;
     this.idleSprite = new Sprite(idleTex);
     this.idleSprite.anchor.set(0.5, 0.75);
-    this.idleSprite.scale.set(SPRITE_SCALE);
+    this.idleSprite.scale.set(this.scale);
 
-    const moveTex = getSpriteTexture("red", "player", "move");
+    const moveTex = getPlayerTexture(DEFAULT_ANIM_SET, "move");
     this.moveSprite = new Sprite(moveTex);
     this.moveSprite.anchor.set(0.5, 0.75);
-    this.moveSprite.scale.set(SPRITE_SCALE);
+    this.moveSprite.scale.set(this.scale);
     this.moveSprite.visible = false;
+  }
+
+  setAnimSet(animSet: AnimSet) {
+    if (animSet === this.animSet) return;
+    this.animSet = animSet;
+    this.idleSprite.texture = getPlayerTexture(animSet, "idle");
+    this.moveSprite.texture = getPlayerTexture(animSet, "move");
   }
 
   get animating(): boolean {
@@ -47,9 +59,9 @@ export class HexPlayerTween {
     this._animating = true;
 
     if (to.x < from.x) {
-      this.moveSprite.scale.x = -SPRITE_SCALE;
+      this.moveSprite.scale.x = -this.scale;
     } else {
-      this.moveSprite.scale.x = SPRITE_SCALE;
+      this.moveSprite.scale.x = this.scale;
     }
 
     this.idleSprite.visible = false;

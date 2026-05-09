@@ -9,6 +9,8 @@ export type SlotType = "hand" | "hat" | "utility" | "accessory";
 
 export type SlotCost = Partial<Record<SlotType, number>>;
 
+export type AnimSet = "sword" | "spear" | "bow" | "staff" | "two-handed" | "dual-wield";
+
 interface ItemBase {
   readonly id: string;
   readonly name: string;
@@ -21,6 +23,7 @@ interface ItemBase {
 export interface WeaponItem extends ItemBase {
   readonly type: "weapon";
   readonly weapon: WeaponDefinition;
+  readonly animSet: AnimSet;
 }
 
 export interface ShieldItem extends ItemBase {
@@ -61,6 +64,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     sprite: "short-sword",
     slotCost: { hand: 1 },
     weapon: SHORT_SWORD,
+    animSet: "sword",
   },
   "long-sword": {
     type: "weapon",
@@ -78,6 +82,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       actionCost: 1,
       onHit: [{ type: "knockback", distance: 35 }],
     },
+    animSet: "sword",
   },
   "spear": {
     type: "weapon",
@@ -88,6 +93,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     sprite: "spear",
     slotCost: { hand: 1 },
     weapon: SPEAR,
+    animSet: "spear",
   },
   "axe": {
     type: "weapon",
@@ -105,6 +111,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       actionCost: 1,
       onHit: [{ type: "knockback", distance: 40 }],
     },
+    animSet: "sword",
   },
 
   // ---- Row 1: bow, broadsword, battle-axe, mace ----
@@ -117,6 +124,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     sprite: "bow",
     slotCost: { hand: 2 },
     weapon: BOW,
+    animSet: "bow",
   },
   "broadsword": {
     type: "weapon",
@@ -134,6 +142,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       actionCost: 1,
       onHit: [{ type: "knockback", distance: 35 }],
     },
+    animSet: "two-handed",
   },
   "battle-axe": {
     type: "weapon",
@@ -151,6 +160,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       actionCost: 1,
       onHit: [{ type: "knockback", distance: 50 }],
     },
+    animSet: "two-handed",
   },
   "mace": {
     type: "weapon",
@@ -168,6 +178,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       actionCost: 1,
       onHit: [{ type: "knockback", distance: 55 }],
     },
+    animSet: "sword",
   },
 
   // ---- Row 2: shields, quiver ----
@@ -228,6 +239,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       damage: 25,
       actionCost: 1,
     },
+    animSet: "staff",
   },
   "spellbook": {
     type: "accessory",

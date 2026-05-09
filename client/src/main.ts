@@ -13,7 +13,7 @@ import { MapScreen } from "./screens/map-screen.js";
 import { CombatScreen } from "./screens/combat-screen.js";
 import { InventoryScreen } from "./screens/inventory-screen.js";
 import type { HexCoord, HexMapState } from "shared";
-import { hexKey, isAdjacent } from "shared";
+import { hexKey, isAdjacent, getAnimSet } from "shared";
 
 async function init() {
   const app = new Application();
@@ -69,6 +69,10 @@ async function init() {
   screens.register("inventory", inventoryScreen, true);
 
   inventoryScreen.onClose(() => screens.switchTo("map"));
+
+  conn.on("inventory", (msg) => {
+    hexRenderer.setPlayerAnimSet(getAnimSet(msg.inventory.equipped));
+  });
 
   let moveLocked = false;
 

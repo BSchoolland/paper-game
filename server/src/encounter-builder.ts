@@ -1,4 +1,4 @@
-import type { Entity, GameState, GridState, WeaponDefinition } from "shared";
+import type { AnimSet, Entity, GameState, GridState, WeaponDefinition } from "shared";
 import { UNIT_TEMPLATES, makeEntity, findWalkablePosition } from "shared";
 import { createCombatGrid } from "shared";
 import type { GeneratedEncounter } from "shared";
@@ -18,11 +18,12 @@ export function buildEncounterMap(encounter: GeneratedEncounter): EncounterMap {
   return { grid, mapDefinition };
 }
 
-export function placeEncounterEntities(encounter: GeneratedEncounter, grid: GridState, equippedWeapon?: WeaponDefinition): Map<string, Entity> {
+export function placeEncounterEntities(encounter: GeneratedEncounter, grid: GridState, equippedWeapon?: WeaponDefinition, animSet?: AnimSet): Map<string, Entity> {
   const entities = new Map<string, Entity>();
+  const spriteType = animSet ? `char1-${animSet}` : "char1-sword";
   const playerTemplate = equippedWeapon
-    ? { ...UNIT_TEMPLATES.player, weapon: equippedWeapon }
-    : UNIT_TEMPLATES.player;
+    ? { ...UNIT_TEMPLATES.player, weapon: equippedWeapon, spriteType }
+    : { ...UNIT_TEMPLATES.player, spriteType };
 
   entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", playerTemplate, grid));
 

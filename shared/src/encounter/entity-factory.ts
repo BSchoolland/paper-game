@@ -24,6 +24,7 @@ export function makeEntity(
     weapon: template.weapon,
     spriteType: template.spriteType,
     spriteScale: template.spriteScale,
+    heightMeters: template.heightMeters,
     strategy: template.strategy,
     effects: template.effects,
   };

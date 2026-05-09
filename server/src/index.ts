@@ -11,6 +11,7 @@ import {
   equipFromBag,
   unequipItem,
   getEquippedWeapon,
+  getAnimSet,
   ITEMS,
 } from "shared";
 import type { HexCoord, HexMapState, HexIconType, InventoryState } from "shared";
@@ -30,9 +31,15 @@ type Phase = "map" | "combat";
 
 const DEFAULT_INVENTORY = createInventory([
   ITEMS["short-sword"]!,
+  ITEMS["long-sword"]!,
   ITEMS["spear"]!,
+  ITEMS["axe"]!,
   ITEMS["bow"]!,
+  ITEMS["broadsword"]!,
+  ITEMS["mace"]!,
+  ITEMS["round-shield"]!,
   ITEMS["potion"]!,
+  ITEMS["bomb"]!,
 ]);
 
 interface SocketData {
@@ -266,7 +273,8 @@ Bun.serve({
             ?? (isDecorationHex(target) ? "dense-wilderness" : "wilderness");
           const eqWeapon = getEquippedWeapon(ws.data.inventory);
           const weapon = eqWeapon?.type === "weapon" ? eqWeapon.weapon : undefined;
-          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId, weapon);
+          const animSet = getAnimSet(ws.data.inventory.equipped);
+          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId, weapon, animSet);
           console.log(`encounter run=${ws.data.runId} hex=(${target.q},${target.r}) type=${hexType}`);
           sendTo(ws, { type: "hexCombatStart" });
           sendTo(ws, {

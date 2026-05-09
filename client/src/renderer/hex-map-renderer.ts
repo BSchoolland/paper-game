@@ -146,6 +146,10 @@ export class HexMapRenderer {
     this.camera.setEnabled(val);
   }
 
+  setPlayerAnimSet(animSet: import("shared").AnimSet) {
+    this.playerTween.setAnimSet(animSet);
+  }
+
   isMoving(): boolean {
     return this.playerTween.animating;
   }

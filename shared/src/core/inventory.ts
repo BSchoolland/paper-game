@@ -1,4 +1,4 @@
-import type { ItemDefinition, SlotType, SlotCost } from "./items.js";
+import type { AnimSet, ItemDefinition, SlotType, SlotCost } from "./items.js";
 
 export const BAG_SIZE = 12;
 
@@ -64,4 +64,26 @@ export function unequipItem(inv: InventoryState, equippedIndex: number): Invento
 
 export function getEquippedWeapon(inv: InventoryState): ItemDefinition | null {
   return inv.equipped.find((item) => item.type === "weapon") ?? null;
+}
+
+export function getAnimSet(equipped: readonly ItemDefinition[]): AnimSet {
+  const handItems = equipped.filter(
+    (item) => item.slotCost.hand && item.slotCost.hand > 0,
+  );
+  const weapons = handItems.filter((item) => item.type === "weapon");
+
+  if (weapons.length >= 2) return "dual-wield";
+
+  if (weapons.length === 1) {
+    const w = weapons[0]!;
+    if (w.type === "weapon") {
+      const hasOffhand = handItems.length > 1;
+      if (hasOffhand) return w.animSet;
+      return w.animSet;
+    }
+  }
+
+  if (handItems.length >= 2) return "dual-wield";
+
+  return "sword";
 }

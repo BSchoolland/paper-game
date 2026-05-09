@@ -2,15 +2,16 @@ import { Container, Graphics, Sprite, Text } from "pixi.js";
 import type { Entity } from "shared";
 import {
   type AnimState,
-  getSpriteTexture,
+  getPlayerTexture,
   getEnemySpriteTexture,
 } from "./sprite-assets.js";
+import type { AnimSet } from "shared";
 import { drawRoughEllipse } from "./sketch-utils.js";
 
 const HP_BAR_W = 40;
 const HP_BAR_H = 5;
 const HP_BAR_Y = -42;
-const SPRITE_SCALE = 0.2;
+const PX_PER_METER = 22.5;
 
 function easeOutQuad(t: number): number {
   return t * (2 - t);
@@ -28,7 +29,7 @@ export class EntityVisual {
   private animTimer = 0;
   readonly entityId: string;
   readonly spriteType: string | undefined;
-  readonly spriteScale: number;
+  readonly heightMeters: number;
   private lastHp: number;
   private tweenFrom: { x: number; y: number } | null = null;
   private tweenProgress = 1;
@@ -42,22 +43,34 @@ export class EntityVisual {
   constructor(entity: Entity) {
     this.entityId = entity.id;
     this.spriteType = entity.spriteType;
-    this.spriteScale = entity.spriteScale ?? 1;
-    this.scale = SPRITE_SCALE * this.spriteScale;
+    this.heightMeters = entity.heightMeters ?? 2;
     this.lastHp = entity.hp;
     this.facingLeft = entity.teamId === "blue";
 
     this.container = new Container();
     this.container.position.set(entity.position.x, entity.position.y);
 
-    const team = entity.teamId as "red" | "blue";
     const states: AnimState[] = ["idle", "attack", "hit", "move"];
     const sprites: Record<string, Sprite> = {};
+    const isPlayer = entity.spriteType?.startsWith("char1-");
+    const playerAnimSet = isPlayer
+      ? entity.spriteType!.slice("char1-".length) as AnimSet
+      : null;
+
+    const idleTex = playerAnimSet
+      ? getPlayerTexture(playerAnimSet, "idle")
+      : entity.spriteType
+        ? getEnemySpriteTexture(entity.spriteType, "idle")
+        : getPlayerTexture("sword", "idle");
+    const heightM = entity.heightMeters ?? 2;
+    this.scale = (heightM * PX_PER_METER) / idleTex!.height;
 
     for (const state of states) {
-      const tex = entity.spriteType
-        ? getEnemySpriteTexture(entity.spriteType, state)
-        : getSpriteTexture(team, "player", state);
+      const tex = playerAnimSet
+        ? getPlayerTexture(playerAnimSet, state)
+        : entity.spriteType
+          ? getEnemySpriteTexture(entity.spriteType, state)
+          : getPlayerTexture("sword", state);
       const sprite = new Sprite(tex!);
       sprite.anchor.set(0.5, 0.75);
       sprite.scale.set(this.scale);

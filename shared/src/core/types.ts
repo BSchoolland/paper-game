@@ -48,6 +48,7 @@ export interface Entity {
   readonly weapon: WeaponDefinition;
   readonly spriteType?: string;
   readonly spriteScale?: number;
+  readonly heightMeters?: number;
   readonly strategy?: AiStrategyType;
   readonly effects?: readonly EntityEffect[];
   readonly dead?: boolean;
@@ -151,6 +152,7 @@ export interface UnitTemplate {
   readonly className: string;
   readonly spriteType?: string;
   readonly spriteScale?: number;
+  readonly heightMeters?: number;
   readonly strategy?: AiStrategyType;
   readonly effects?: readonly EntityEffect[];
   readonly cost?: number;
@@ -165,6 +167,7 @@ export const UNIT_TEMPLATES = {
     collisionRadius: 16,
     canMoveAfterAttack: true,
     className: "Player",
+    heightMeters: 2,
   },
 } as const satisfies Record<string, UnitTemplate>;
 
@@ -247,6 +250,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Goblin Spearman",
     spriteType: "goblin-spear",
+    heightMeters: 1.5,
     strategy: "rush",
     cost: 3,
     tags: ["melee"],
@@ -259,6 +263,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Goblin Archer",
     spriteType: "goblin-archer",
+    heightMeters: 1.5,
     strategy: "kite",
     cost: 3,
     tags: ["ranged"],
@@ -271,6 +276,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Goblin Shield",
     spriteType: "goblin-shield",
+    heightMeters: 1.5,
     strategy: "rush",
     cost: 4,
     tags: ["melee", "tank"],
@@ -283,6 +289,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Goblin Brute",
     spriteType: "goblin-brute",
+    heightMeters: 1.75,
     strategy: "rush",
     cost: 6,
     tags: ["melee", "elite"],
@@ -295,6 +302,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Stone Golem",
     spriteType: "stone-golem",
+    heightMeters: 3,
     strategy: "threat",
     cost: 10,
     tags: ["melee", "tank", "boss"],
@@ -307,6 +315,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Slime",
     spriteType: "slime",
+    heightMeters: 0.75,
     strategy: "kite",
     cost: 1,
     tags: ["ranged", "swarm"],
@@ -319,7 +328,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: true,
     className: "Big Slime",
     spriteType: "slime",
-    spriteScale: 1.5,
+    heightMeters: 1.25,
     strategy: "rush",
     effects: [{ trigger: "onDeath", action: { type: "spawn", templateKey: "slime", count: 2 } }],
     cost: 6,
@@ -333,7 +342,7 @@ export const ENEMY_TEMPLATES = {
     canMoveAfterAttack: false,
     className: "Massive Slime",
     spriteType: "slime",
-    spriteScale: 3,
+    heightMeters: 2.5,
     strategy: "threat",
     effects: [{ trigger: "onDeath", action: { type: "spawn", templateKey: "big-slime", count: 2 } }],
     cost: 14,
