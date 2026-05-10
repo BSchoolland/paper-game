@@ -52,6 +52,8 @@ export interface Entity {
   readonly strategy?: AiStrategyType;
   readonly effects?: readonly EntityEffect[];
   readonly dead?: boolean;
+  readonly equipped?: readonly import("./items.js").ItemDefinition[];
+  readonly attachments?: Record<string, import("../core/inventory.js").AttachmentData>;
 }
 
 export interface GameState {

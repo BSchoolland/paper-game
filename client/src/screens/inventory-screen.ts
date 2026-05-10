@@ -17,6 +17,8 @@ import {
   CHAR_REGION,
   type InfoTarget,
   RARITY_COLORS,
+  TARGET_SIZE,
+  TYPE_BASE_SCALE,
 } from "./inventory-layout.js";
 import { InventoryRenderer } from "./inventory-renderer.js";
 import { InventoryInput } from "./inventory-input.js";
@@ -175,13 +177,13 @@ export class InventoryScreen implements Screen {
       sendEquip: (bagIndex) => this.conn.send({ type: "equip", bagIndex }),
       sendUnequip: (idx) => this.conn.send({ type: "unequip", equippedIndex: idx }),
       deletePosition: (id) => this.positions.delete(id),
-      updateAttachment: (id, pos) => this.updateAttachment(id, pos),
+      updateAttachment: (id, pos, item) => this.updateAttachment(id, pos, item),
       close: () => this.onCloseCallback?.(),
       draw: () => this.draw(),
     });
   }
 
-  private updateAttachment(itemId: string, panelPos: ItemPosition) {
+  private updateAttachment(itemId: string, panelPos: ItemPosition, item: ItemDefinition) {
     if (!this.characterAnchors || !this.charImage) return;
 
     const anchors = getFrameAnchors(this.characterAnchors, "inventory-idle");
@@ -196,13 +198,23 @@ export class InventoryScreen implements Screen {
     const spriteX = (panelPos.x - charX) / scale;
     const spriteY = (panelPos.y - charY) / scale;
 
+    const spriteImg = this.renderer.loadSprite(item.sprite);
+    const baseScale = item.visualScale ?? TYPE_BASE_SCALE[item.type] ?? 1;
+    const charDrawH = charH * scale;
+    let itemDrawH = TARGET_SIZE * baseScale * panelPos.scale;
+    if (spriteImg && spriteImg.naturalWidth > 0) {
+      const maxDim = Math.max(spriteImg.naturalWidth, spriteImg.naturalHeight);
+      itemDrawH = spriteImg.naturalHeight * (TARGET_SIZE / maxDim) * baseScale * panelPos.scale;
+    }
+    const proportionalScale = itemDrawH / charDrawH;
+
     const attachment = computeAttachment(
       spriteX,
       spriteY,
       anchors as Partial<AnchorSet>,
       "inventory-idle",
       charH,
-      panelPos.scale,
+      proportionalScale,
       panelPos.rotation,
     );
 

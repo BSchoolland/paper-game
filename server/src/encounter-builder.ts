@@ -1,4 +1,4 @@
-import type { AnimSet, Entity, GameState, GridState, WeaponDefinition } from "shared";
+import type { AnimSet, Entity, GameState, GridState, WeaponDefinition, ItemDefinition, AttachmentData } from "shared";
 import { UNIT_TEMPLATES, makeEntity, findWalkablePosition } from "shared";
 import { createCombatGrid } from "shared";
 import type { GeneratedEncounter } from "shared";
@@ -18,14 +18,21 @@ export function buildEncounterMap(encounter: GeneratedEncounter): EncounterMap {
   return { grid, mapDefinition };
 }
 
-export function placeEncounterEntities(encounter: GeneratedEncounter, grid: GridState, equippedWeapon?: WeaponDefinition, animSet?: AnimSet): Map<string, Entity> {
+export function placeEncounterEntities(
+  encounter: GeneratedEncounter,
+  grid: GridState,
+  equippedWeapon?: WeaponDefinition,
+  animSet?: AnimSet,
+  equipped?: readonly ItemDefinition[],
+  attachments?: Record<string, AttachmentData>,
+): Map<string, Entity> {
   const entities = new Map<string, Entity>();
   const spriteType = animSet ? `char1-${animSet}` : "char1-sword";
   const playerTemplate = equippedWeapon
     ? { ...UNIT_TEMPLATES.player, weapon: equippedWeapon, spriteType }
     : { ...UNIT_TEMPLATES.player, spriteType };
 
-  entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", playerTemplate, grid));
+  entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", playerTemplate, grid, equipped, attachments));
 
   const enemyStartX = 500;
   const enemySpreadX = 200;
@@ -53,10 +60,12 @@ function placeEntity(
   y: number,
   teamId: "red" | "blue",
   template: Parameters<typeof makeEntity>[5],
-  grid: GridState
+  grid: GridState,
+  equipped?: readonly ItemDefinition[],
+  attachments?: Record<string, AttachmentData>,
 ): Entity {
   const pos = findWalkablePosition(grid, { x, y }, template.collisionRadius);
-  return makeEntity(id, name, pos.x, pos.y, teamId, template);
+  return makeEntity(id, name, pos.x, pos.y, teamId, template, equipped, attachments);
 }
 
 export function assembleGameState(map: EncounterMap, entities: Map<string, Entity>): GameState {

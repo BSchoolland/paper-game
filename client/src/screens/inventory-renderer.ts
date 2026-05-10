@@ -36,6 +36,7 @@ export interface RenderState {
 export class InventoryRenderer {
   private spriteImages = new Map<string, HTMLImageElement>();
   private onSpriteLoad: () => void;
+  private _lastLogTime = 0;
 
   constructor(onSpriteLoad: () => void) {
     this.onSpriteLoad = onSpriteLoad;
@@ -109,6 +110,19 @@ export class InventoryRenderer {
       if (!pos) continue;
       const sprite = this.loadSprite(item.sprite);
       const { w, h } = getItemSize(pos, item, sprite);
+      const now = performance.now();
+      if (now - this._lastLogTime > 2000) {
+        this._lastLogTime = now;
+        const charH = state.charImage?.naturalHeight ?? 0;
+        const charDrawH = state.charImage ? (() => {
+          const r = CHAR_REGION;
+          const aspect = state.charImage!.naturalWidth / state.charImage!.naturalHeight;
+          let dh = r.w / aspect;
+          if (dh > r.h) dh = r.h;
+          return dh;
+        })() : 0;
+        console.log(`[INV] item=${item.id} drawSize=${w.toFixed(1)}x${h.toFixed(1)} pos.scale=${pos.scale} visualScale=${item.visualScale ?? 'none'} sprite=${sprite?.naturalWidth}x${sprite?.naturalHeight} charNatural=${state.charImage?.naturalWidth}x${charH} charDraw=${charDrawH.toFixed(1)}`);
+      }
       const wouldUnequip =
         state.mode.type === "dragging" &&
         item.id === state.selectedItemId &&

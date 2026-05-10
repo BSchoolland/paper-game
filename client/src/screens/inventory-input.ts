@@ -27,7 +27,7 @@ export interface InputCallbacks {
   sendEquip(bagIndex: number): void;
   sendUnequip(equippedIndex: number): void;
   deletePosition(id: string): void;
-  updateAttachment(id: string, pos: ItemPosition): void;
+  updateAttachment(id: string, pos: ItemPosition, item: ItemDefinition): void;
   close(): void;
   draw(): void;
 }
@@ -254,7 +254,7 @@ export class InventoryInput {
             this.cb.setSelectedItemId(null);
             this._infoTarget = null;
           } else {
-            this.cb.updateAttachment(selectedId, itemPos);
+            this.cb.updateAttachment(selectedId, itemPos, inventory.equipped[idx]!);
           }
         }
       }
@@ -265,7 +265,7 @@ export class InventoryInput {
         const idx = inventory.equipped.findIndex((it) => it.id === selectedId);
         if (idx >= 0) {
           const itemPos = this.cb.getPosition(inventory.equipped[idx]!, idx);
-          this.cb.updateAttachment(selectedId, itemPos);
+          this.cb.updateAttachment(selectedId, itemPos, inventory.equipped[idx]!);
         }
       }
     }

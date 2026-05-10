@@ -1,4 +1,6 @@
 import type { Entity, TeamId, UnitTemplate } from "../core/types.js";
+import type { ItemDefinition } from "../core/items.js";
+import type { AttachmentData } from "../core/inventory.js";
 
 export function makeEntity(
   id: string,
@@ -6,7 +8,9 @@ export function makeEntity(
   x: number,
   y: number,
   teamId: TeamId,
-  template: UnitTemplate
+  template: UnitTemplate,
+  equipped?: readonly ItemDefinition[],
+  attachments?: Record<string, AttachmentData>,
 ): Entity {
   return {
     id,
@@ -27,5 +31,7 @@ export function makeEntity(
     heightMeters: template.heightMeters,
     strategy: template.strategy,
     effects: template.effects,
+    equipped,
+    attachments,
   };
 }

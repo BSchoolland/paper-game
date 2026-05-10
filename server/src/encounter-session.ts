@@ -1,4 +1,4 @@
-import type { AnimSet, GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord, WeaponDefinition } from "shared";
+import type { AnimSet, GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord, WeaponDefinition, ItemDefinition, AttachmentData } from "shared";
 import {
   resolveAction,
   serializeGameState,
@@ -32,7 +32,9 @@ export class EncounterSession {
     hexCoord?: HexCoord,
     runId?: number,
     equippedWeapon?: WeaponDefinition,
-    animSet?: AnimSet
+    animSet?: AnimSet,
+    equipped?: readonly ItemDefinition[],
+    attachments?: Record<string, AttachmentData>,
   ): Promise<EncounterSession> {
     resetSpawnCounter();
 
@@ -40,7 +42,7 @@ export class EncounterSession {
       const encounter = generateEncounter(hexType, GREENLANDS_BIOME, hexCoord.q, hexCoord.r, runId);
       const map = buildEncounterMap(encounter);
       await loadCollisionGrid(map.grid, map.mapDefinition.objects);
-      const entities = placeEncounterEntities(encounter, map.grid, equippedWeapon, animSet);
+      const entities = placeEncounterEntities(encounter, map.grid, equippedWeapon, animSet, equipped, attachments);
       return new EncounterSession(assembleEncounterState(map, entities));
     }
 
