@@ -1,12 +1,15 @@
 import { Container, Graphics, Sprite, Text } from "pixi.js";
-import type { Entity } from "shared";
+import type { Entity, AttachmentData } from "shared";
 import {
   type AnimState,
   getPlayerTexture,
   getEnemySpriteTexture,
+  getItemTexture,
 } from "./sprite-assets.js";
 import type { AnimSet } from "shared";
 import { drawRoughEllipse } from "./sketch-utils.js";
+import { loadCharacterAnchors, getFrameAnchors } from "./anchor-loader.js";
+import { transformAttachment, type CharacterAnchors, type AnchorSet } from "./bone-transform.js";
 
 const HP_BAR_W = 40;
 const HP_BAR_H = 5;
@@ -39,6 +42,10 @@ export class EntityVisual {
   private deathTimer = 0;
   private isDead = false;
   private isKnockback = false;
+  private characterAnchors: CharacterAnchors | null = null;
+  private equipmentSprites = new Map<string, Sprite>();
+  private equipmentAttachments = new Map<string, AttachmentData>();
+  private readonly animSet: AnimSet | null;
 
   constructor(entity: Entity) {
     this.entityId = entity.id;
@@ -56,6 +63,14 @@ export class EntityVisual {
     const playerAnimSet = isPlayer
       ? entity.spriteType!.slice("char1-".length) as AnimSet
       : null;
+    this.animSet = playerAnimSet;
+
+    if (isPlayer) {
+      loadCharacterAnchors("char1").then((data) => {
+        this.characterAnchors = data;
+        this.repositionEquipment();
+      });
+    }
 
     const idleTex = playerAnimSet
       ? getPlayerTexture(playerAnimSet, "idle")
@@ -248,11 +263,79 @@ export class EntityVisual {
     }
   }
 
+  setEquipment(attachments: Record<string, AttachmentData>): void {
+    for (const [id, sprite] of this.equipmentSprites) {
+      if (!(id in attachments)) {
+        this.container.removeChild(sprite);
+        sprite.destroy();
+        this.equipmentSprites.delete(id);
+      }
+    }
+
+    this.equipmentAttachments.clear();
+    for (const [itemId, attachment] of Object.entries(attachments)) {
+      this.equipmentAttachments.set(itemId, attachment);
+      if (!this.equipmentSprites.has(itemId)) {
+        const tex = getItemTexture(itemId);
+        if (tex) {
+          const sprite = new Sprite(tex);
+          sprite.anchor.set(0.5, 0.5);
+          sprite.zIndex = 10;
+          this.container.addChild(sprite);
+          this.equipmentSprites.set(itemId, sprite);
+        }
+      }
+    }
+
+    this.repositionEquipment();
+  }
+
+  private repositionEquipment(): void {
+    if (!this.characterAnchors || !this.animSet) return;
+
+    const frameKey = `${this.animSet}-${this.animState}`;
+    const targetAnchors = getFrameAnchors(this.characterAnchors, frameKey);
+    if (!targetAnchors) return;
+
+    const currentSprite = this.sprites[this.animState];
+    const texW = currentSprite.texture.width;
+    const texH = currentSprite.texture.height;
+
+    const targetH = this.characterAnchors.frames[frameKey]?.height ?? texH;
+
+    for (const [itemId, attachment] of this.equipmentAttachments) {
+      const sprite = this.equipmentSprites.get(itemId);
+      if (!sprite) continue;
+
+      const refFrameData = this.characterAnchors.frames[attachment.referenceFrame];
+      const refAnchors = refFrameData?.anchors;
+      if (!refAnchors) continue;
+      const refH = refFrameData.height || 1;
+
+      const result = transformAttachment(attachment, refAnchors, targetAnchors, targetH);
+
+      const localX = (result.x - texW * 0.5) * this.scale;
+      const localY = (result.y - texH * 0.75) * this.scale;
+
+      const itemScale = this.scale * attachment.scale * (targetH / refH);
+      sprite.position.set(localX, localY);
+      sprite.rotation = result.rotation * (Math.PI / 180);
+      sprite.scale.set(itemScale);
+      sprite.visible = currentSprite.visible;
+
+      if (this.facingLeft) {
+        sprite.position.x = -localX;
+        sprite.scale.x = -itemScale;
+      }
+    }
+  }
+
   private setAnimState(state: AnimState): void {
     if (this.animState === state) return;
     this.sprites[this.animState].visible = false;
     this.sprites[state].visible = true;
     this.animState = state;
+    this.repositionEquipment();
   }
 
   private drawHpBar(entity: Entity): void {

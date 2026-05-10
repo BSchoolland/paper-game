@@ -9,9 +9,20 @@ export const PLAYER_SLOTS: Record<SlotType, number> = {
   accessory: 3,
 };
 
+export interface AttachmentData {
+  readonly boneName: string;
+  readonly attachEnd: "from" | "to";
+  readonly localOffsetAlong: number;
+  readonly localOffsetPerp: number;
+  readonly scale: number;
+  readonly rotation: number;
+  readonly referenceFrame: string;
+}
+
 export interface InventoryState {
   readonly bag: readonly (ItemDefinition | null)[];
   readonly equipped: readonly ItemDefinition[];
+  readonly attachments: Record<string, AttachmentData>;
 }
 
 export function createInventory(startingItems: ItemDefinition[]): InventoryState {
@@ -19,7 +30,7 @@ export function createInventory(startingItems: ItemDefinition[]): InventoryState
   for (let i = 0; i < startingItems.length && i < BAG_SIZE; i++) {
     bag[i] = startingItems[i]!;
   }
-  return { bag, equipped: [] };
+  return { bag, equipped: [], attachments: {} };
 }
 
 function usedSlots(equipped: readonly ItemDefinition[]): Record<SlotType, number> {
@@ -47,7 +58,7 @@ export function equipFromBag(inv: InventoryState, bagIndex: number): InventorySt
 
   const newBag = [...inv.bag];
   newBag[bagIndex] = null;
-  return { bag: newBag, equipped: [...inv.equipped, item] };
+  return { bag: newBag, equipped: [...inv.equipped, item], attachments: { ...inv.attachments } };
 }
 
 export function unequipItem(inv: InventoryState, equippedIndex: number): InventoryState {
@@ -56,10 +67,13 @@ export function unequipItem(inv: InventoryState, equippedIndex: number): Invento
   const emptySlot = inv.bag.indexOf(null);
   if (emptySlot === -1) return inv;
 
+  const removedItem = inv.equipped[equippedIndex]!;
   const newBag = [...inv.bag];
-  newBag[emptySlot] = inv.equipped[equippedIndex]!;
+  newBag[emptySlot] = removedItem;
   const newEquipped = inv.equipped.filter((_, i) => i !== equippedIndex);
-  return { bag: newBag, equipped: newEquipped };
+  const newAttachments = { ...inv.attachments };
+  delete newAttachments[removedItem.id];
+  return { bag: newBag, equipped: newEquipped, attachments: newAttachments };
 }
 
 export function getEquippedWeapon(inv: InventoryState): ItemDefinition | null {

@@ -1,5 +1,6 @@
 import { Assets, Texture } from "pixi.js";
 import type { AnimSet } from "shared";
+import { loadCharacterAnchors } from "./anchor-loader.js";
 
 export type AnimState = "idle" | "attack" | "hit" | "move";
 
@@ -12,8 +13,15 @@ const PLAYER_ANIM_SETS: AnimSet[] = [
   "sword", "dual-wield", "spear", "bow", "staff", "two-handed",
 ];
 
+const ITEM_SPRITES = [
+  "short-sword", "long-sword", "spear", "axe", "bow", "broadsword",
+  "battle-axe", "mace", "round-shield", "kite-shield", "buckler",
+  "quiver", "staff", "spellbook", "potion", "bomb",
+];
+
 const enemyTextures = new Map<string, Texture>();
 const playerTextures = new Map<string, Texture>();
+const itemTextures = new Map<string, Texture>();
 
 function playerKey(animSet: AnimSet, state: AnimState): string {
   return `${animSet}-${state}`;
@@ -39,7 +47,14 @@ export async function loadSpriteAssets(): Promise<void> {
     }
   }
 
-  await Assets.load(entries);
+  for (const itemId of ITEM_SPRITES) {
+    entries.push({ alias: `item-${itemId}`, src: `sprites/items/${itemId}.webp` });
+  }
+
+  await Promise.all([
+    Assets.load(entries),
+    loadCharacterAnchors("char1"),
+  ]);
 
   for (const spriteType of ENEMY_SPRITE_TYPES) {
     for (const state of ANIM_STATES) {
@@ -53,6 +68,14 @@ export async function loadSpriteAssets(): Promise<void> {
       playerTextures.set(k, Assets.get(k));
     }
   }
+  for (const itemId of ITEM_SPRITES) {
+    const tex = Assets.get<Texture>(`item-${itemId}`);
+    if (tex) itemTextures.set(itemId, tex);
+  }
+}
+
+export function getItemTexture(itemId: string): Texture | null {
+  return itemTextures.get(itemId) ?? null;
 }
 
 export function getPlayerTexture(

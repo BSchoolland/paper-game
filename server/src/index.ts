@@ -316,6 +316,18 @@ Bun.serve({
         return;
       }
 
+      if (msg.type === "updateAttachment" && typeof msg.itemId === "string" && msg.attachment) {
+        ws.data.inventory = {
+          ...ws.data.inventory,
+          attachments: {
+            ...ws.data.inventory.attachments,
+            [msg.itemId]: msg.attachment,
+          },
+        };
+        sendInventory(ws);
+        return;
+      }
+
       if (msg.type === "reset") {
         if (gameMode === "pve" && ws.data.phase === "combat") {
           resetToOrigin(ws.data);

@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite } from "pixi.js";
-import type { GameEvent, GridState, Vec2 } from "shared";
+import type { GameEvent, GridState, Vec2, AttachmentData } from "shared";
 import { CELL_WALL, CELL_COVER } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
@@ -130,6 +130,10 @@ export class GameRenderer {
       x: (screenPos.x - this.offsetX) / this.scale,
       y: (screenPos.y - this.offsetY) / this.scale,
     };
+  }
+
+  setPlayerEquipment(entityId: string, attachments: Record<string, AttachmentData>): void {
+    if (this.entities) this.entities.setPlayerEquipment(entityId, attachments);
   }
 
   pushEvents(events: readonly GameEvent[]) {
