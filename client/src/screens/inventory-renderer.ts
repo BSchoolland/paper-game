@@ -121,7 +121,6 @@ export class InventoryRenderer {
           if (dh > r.h) dh = r.h;
           return dh;
         })() : 0;
-        console.log(`[INV] item=${item.id} drawSize=${w.toFixed(1)}x${h.toFixed(1)} pos.scale=${pos.scale} visualScale=${item.visualScale ?? 'none'} sprite=${sprite?.naturalWidth}x${sprite?.naturalHeight} charNatural=${state.charImage?.naturalWidth}x${charH} charDraw=${charDrawH.toFixed(1)}`);
       }
       const wouldUnequip =
         state.mode.type === "dragging" &&

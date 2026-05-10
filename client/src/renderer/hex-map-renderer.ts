@@ -84,8 +84,7 @@ export class HexMapRenderer {
     this.worldContainer.addChild(this.decorationContainer);
     this.worldContainer.addChild(this.iconContainer);
     this.worldContainer.addChild(this.hoverGfx);
-    this.worldContainer.addChild(this.playerTween.idleSprite);
-    this.worldContainer.addChild(this.playerTween.moveSprite);
+    this.worldContainer.addChild(this.playerTween.charSprite.container);
 
     let tweenToken: PacerToken | null = null;
     this.app.ticker.add((ticker) => {
@@ -148,6 +147,13 @@ export class HexMapRenderer {
 
   setPlayerAnimSet(animSet: import("shared").AnimSet) {
     this.playerTween.setAnimSet(animSet);
+  }
+
+  setPlayerEquipment(
+    equipped: readonly import("shared").ItemDefinition[],
+    attachments: Record<string, import("shared").AttachmentData>,
+  ) {
+    this.playerTween.setEquipment(equipped, attachments);
   }
 
   isMoving(): boolean {

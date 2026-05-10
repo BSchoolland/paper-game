@@ -1,15 +1,13 @@
 import { Container, Graphics, Sprite, Text } from "pixi.js";
-import type { Entity, ItemDefinition, AttachmentData } from "shared";
+import type { Entity } from "shared";
+import type { AnimSet } from "shared";
 import {
   type AnimState,
   getPlayerTexture,
   getEnemySpriteTexture,
-  getItemTexture,
 } from "./sprite-assets.js";
-import type { AnimSet } from "shared";
 import { drawRoughEllipse } from "./sketch-utils.js";
-import { loadCharacterAnchors } from "./anchor-loader.js";
-import { transformAttachment, type CharacterAnchors, type AnchorSet } from "./bone-transform.js";
+import { CharacterSprite } from "./character-sprite.js";
 
 const HP_BAR_W = 40;
 const HP_BAR_H = 5;
@@ -21,6 +19,7 @@ function easeOutQuad(t: number): number {
 }
 
 const DEATH_DURATION = 0.5;
+const COMBAT_STATES: AnimState[] = ["idle", "attack", "hit", "move"];
 
 export class EntityVisual {
   readonly container: Container;
@@ -42,12 +41,7 @@ export class EntityVisual {
   private deathTimer = 0;
   private isDead = false;
   private isKnockback = false;
-  private itemSprites: Sprite[] = [];
-  private equipped: readonly ItemDefinition[] = [];
-  private attachments: Record<string, AttachmentData> = {};
-  private characterAnchors: CharacterAnchors | null = null;
-  private playerAnimSet: AnimSet | null = null;
-  private _lastLogTime = 0;
+  private charSprite: CharacterSprite | null = null;
 
   constructor(entity: Entity) {
     this.entityId = entity.id;
@@ -59,49 +53,47 @@ export class EntityVisual {
     this.container = new Container();
     this.container.position.set(entity.position.x, entity.position.y);
 
-    const states: AnimState[] = ["idle", "attack", "hit", "move"];
-    const sprites: Record<string, Sprite> = {};
     const isPlayer = entity.spriteType?.startsWith("char1-");
     const playerAnimSet = isPlayer
       ? entity.spriteType!.slice("char1-".length) as AnimSet
       : null;
 
-    const idleTex = playerAnimSet
-      ? getPlayerTexture(playerAnimSet, "idle")
-      : entity.spriteType
+    const heightM = entity.heightMeters ?? 2;
+
+    if (playerAnimSet) {
+      const charSprite = new CharacterSprite(
+        playerAnimSet,
+        COMBAT_STATES,
+        heightM * PX_PER_METER,
+        this.facingLeft,
+      );
+      this.charSprite = charSprite;
+      this.scale = charSprite.scale;
+      this.sprites = charSprite.sprites as Record<AnimState, Sprite>;
+      this.container.addChild(charSprite.container);
+
+      if (entity.equipped && entity.attachments) {
+        charSprite.setEquipment(entity.equipped, entity.attachments);
+      }
+    } else {
+      const idleTex = entity.spriteType
         ? getEnemySpriteTexture(entity.spriteType, "idle")
         : getPlayerTexture("sword", "idle");
-    const heightM = entity.heightMeters ?? 2;
-    this.scale = (heightM * PX_PER_METER) / idleTex!.height;
+      this.scale = (heightM * PX_PER_METER) / idleTex!.height;
 
-    for (const state of states) {
-      const tex = playerAnimSet
-        ? getPlayerTexture(playerAnimSet, state)
-        : entity.spriteType
+      const sprites: Record<string, Sprite> = {};
+      for (const state of COMBAT_STATES) {
+        const tex = entity.spriteType
           ? getEnemySpriteTexture(entity.spriteType, state)
           : getPlayerTexture("sword", state);
-      const sprite = new Sprite(tex!);
-      sprite.anchor.set(0.5, 0.75);
-      sprite.scale.set(this.scale);
-      sprite.position.set(0, 0);
-      sprite.visible = state === "idle";
-      this.container.addChild(sprite);
-      sprites[state] = sprite;
-    }
-
-    if (this.facingLeft) {
-      for (const s of Object.values(sprites)) {
-        s.scale.x = -this.scale;
+        const sprite = new Sprite(tex!);
+        sprite.anchor.set(0.5, 0.75);
+        sprite.scale.set(this.facingLeft ? -this.scale : this.scale, this.scale);
+        sprite.visible = state === "idle";
+        this.container.addChild(sprite);
+        sprites[state] = sprite;
       }
-    }
-
-    this.sprites = sprites as Record<AnimState, Sprite>;
-
-    this.playerAnimSet = playerAnimSet;
-    if (entity.equipped && entity.attachments) {
-      this.equipped = entity.equipped;
-      this.attachments = entity.attachments;
-      this.initItemSprites();
+      this.sprites = sprites as Record<AnimState, Sprite>;
     }
 
     this.selectionRing = new Graphics();
@@ -256,95 +248,27 @@ export class EntityVisual {
     this.animTimer = 0.6;
   }
 
-  private initItemSprites(): void {
-    loadCharacterAnchors("char1").then((data) => {
-      if (!data) return;
-      this.characterAnchors = data;
-      for (const item of this.equipped) {
-        const tex = getItemTexture(item.sprite);
-        const sprite = new Sprite(tex ?? undefined);
-        sprite.anchor.set(0.5, 0.5);
-        sprite.visible = false;
-        this.container.addChild(sprite);
-        this.itemSprites.push(sprite);
-      }
-      this.positionItemSprites();
-    });
-  }
-
-  private positionItemSprites(): void {
-    if (!this.characterAnchors || !this.playerAnimSet) return;
-
-    const frameKey = `${this.playerAnimSet}-${this.animState}`;
-    const frameData = this.characterAnchors.frames[frameKey];
-    if (!frameData) return;
-
-    const targetAnchors = frameData.anchors;
-    const targetHeight = frameData.height;
-
-    for (let i = 0; i < this.equipped.length; i++) {
-      const item = this.equipped[i]!;
-      const sprite = this.itemSprites[i];
-      if (!sprite) continue;
-
-      const attachment = this.attachments[item.id];
-      if (!attachment) {
-        sprite.visible = false;
-        continue;
-      }
-
-      const refFrameData = this.characterAnchors.frames[attachment.referenceFrame];
-      if (!refFrameData) {
-        sprite.visible = false;
-        continue;
-      }
-
-      const result = transformAttachment(
-        attachment,
-        refFrameData.anchors as Partial<AnchorSet>,
-        targetAnchors as Partial<AnchorSet>,
-        targetHeight,
-      );
-
-      const tex = sprite.texture;
-      const charDrawH = this.sprites.idle.texture.height * this.scale;
-      const itemDrawH = (attachment.scale ?? 1) * charDrawH;
-      const itemScale = itemDrawH / tex.height;
-      const flipSign = this.facingLeft ? -1 : 1;
-
-      const now = performance.now();
-      if (now - this._lastLogTime > 2000) {
-        this._lastLogTime = now;
-        const drawW = tex.width * Math.abs(itemScale);
-        const drawH = tex.height * Math.abs(itemScale);
-        console.log(`[COMBAT] item=${item.id} drawSize=${drawW.toFixed(1)}x${drawH.toFixed(1)} attachment.scale=${attachment.scale} charDrawH=${charDrawH.toFixed(1)} itemDrawH=${itemDrawH.toFixed(1)} itemScale=${itemScale.toFixed(4)} texSize=${tex.width}x${tex.height}`);
-      }
-
-      sprite.position.set(
-        (result.x - frameData.width / 2) * this.scale * flipSign,
-        (result.y - frameData.height * 0.75) * this.scale,
-      );
-      sprite.scale.set(itemScale * flipSign, itemScale);
-      sprite.rotation = result.rotation * (Math.PI / 180) * flipSign;
-      sprite.visible = true;
-    }
-  }
-
   private setFacing(left: boolean): void {
     if (left === this.facingLeft) return;
     this.facingLeft = left;
-    for (const s of Object.values(this.sprites)) {
-      s.scale.x = left ? -this.scale : this.scale;
+    if (this.charSprite) {
+      this.charSprite.setFacing(left);
+    } else {
+      for (const s of Object.values(this.sprites)) {
+        s.scale.x = left ? -this.scale : this.scale;
+      }
     }
-    this.positionItemSprites();
   }
 
   private setAnimState(state: AnimState): void {
     if (this.animState === state) return;
-    this.sprites[this.animState].visible = false;
-    this.sprites[state].visible = true;
+    if (this.charSprite) {
+      this.charSprite.setAnimState(state);
+    } else {
+      this.sprites[this.animState].visible = false;
+      this.sprites[state].visible = true;
+    }
     this.animState = state;
-    this.positionItemSprites();
   }
 
   private drawHpBar(entity: Entity): void {

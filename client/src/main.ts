@@ -72,6 +72,7 @@ async function init() {
 
   conn.on("inventory", (msg) => {
     hexRenderer.setPlayerAnimSet(getAnimSet(msg.inventory.equipped));
+    hexRenderer.setPlayerEquipment(msg.inventory.equipped, msg.inventory.attachments);
   });
 
   let moveLocked = false;
