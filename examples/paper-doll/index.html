@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sticker Gear Editor</title>
+<style>
+  :root {
+    --parchment: #e8dcc8;
+    --parchment-dark: #d4c4a8;
+    --ink: #2a2520;
+    --ink-muted: #6b6358;
+    --accent: #5a7a3a;
+    --accent-light: #8aaa5a;
+    --selected: #c47030;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background: #3a3530;
+    color: var(--ink);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .header {
+    background: var(--parchment-dark);
+    padding: 8px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    border-bottom: 2px solid #b8a888;
+    flex-shrink: 0;
+  }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--ink);
+  }
+  .header .hint {
+    font-size: 12px;
+    color: var(--ink-muted);
+  }
+  .main {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+  .palette {
+    width: 200px;
+    background: var(--parchment);
+    border-right: 2px solid #b8a888;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    border-bottom: 1px solid #b8a888;
+  }
+  .tab {
+    flex: 1 1 33%;
+    padding: 6px 4px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    background: var(--parchment-dark);
+    color: var(--ink-muted);
+    border: none;
+    border-bottom: 1px solid #b8a888;
+    transition: all 0.15s;
+  }
+  .tab.active {
+    background: var(--parchment);
+    color: var(--ink);
+  }
+  .items {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    align-content: start;
+  }
+  .item-btn {
+    background: var(--parchment-dark);
+    border: 1.5px solid #b8a888;
+    border-radius: 6px;
+    padding: 6px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    transition: all 0.15s;
+  }
+  .item-btn:hover {
+    border-color: var(--accent);
+    background: #ddd0b8;
+  }
+  .item-btn img {
+    width: 64px;
+    height: 64px;
+    object-fit: contain;
+    image-rendering: pixelated;
+  }
+  .item-btn span {
+    font-size: 9px;
+    color: var(--ink-muted);
+    text-align: center;
+    line-height: 1.2;
+  }
+  .editor-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: #4a4540;
+    min-width: 0;
+  }
+  .canvas-row {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    min-height: 0;
+  }
+  .main-canvas-wrap {
+    position: relative;
+    background: var(--parchment);
+    border-radius: 12px;
+    border: 3px solid #b8a888;
+    overflow: hidden;
+  }
+  #mainCanvas {
+    display: block;
+    cursor: default;
+    image-rendering: auto;
+  }
+  .controls {
+    background: var(--parchment-dark);
+    padding: 10px 16px;
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    border-top: 2px solid #b8a888;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .ctrl-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .ctrl-group label {
+    font-size: 12px;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  .ctrl-group input[type=range] {
+    width: 90px;
+    accent-color: var(--accent);
+  }
+  .ctrl-group .val {
+    font-size: 11px;
+    color: var(--ink);
+    font-weight: 500;
+    min-width: 30px;
+  }
+  .ctrl-btn {
+    background: var(--parchment);
+    border: 1px solid #b8a888;
+    border-radius: 5px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--ink);
+    transition: all 0.1s;
+  }
+  .ctrl-btn:hover { background: #ddd0b8; }
+  .ctrl-btn.danger { color: #a03020; }
+  .ctrl-btn.danger:hover { background: #e8c0b0; }
+  .previews {
+    width: 180px;
+    background: var(--parchment);
+    border-left: 2px solid #b8a888;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    gap: 6px;
+    flex-shrink: 0;
+  }
+  .preview-label {
+    font-size: 11px;
+    color: var(--ink-muted);
+    text-align: center;
+    font-weight: 500;
+  }
+  .preview-wrap {
+    background: var(--parchment-dark);
+    border-radius: 6px;
+    border: 1px solid #b8a888;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .preview-wrap canvas {
+    image-rendering: auto;
+  }
+  .no-selection {
+    font-size: 12px;
+    color: var(--ink-muted);
+    font-style: italic;
+  }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>Sticker Gear Editor</h1>
+  <span class="hint">Click an item to add it. Drag to position. Use controls below to adjust.</span>
+</div>
+<div class="main">
+  <div class="palette">
+    <div class="tabs">
+      <button class="tab active" data-tab="hat">Hats</button>
+      <button class="tab" data-tab="face">Face</button>
+      <button class="tab" data-tab="neck">Neck</button>
+      <button class="tab" data-tab="weap">Weapons</button>
+      <button class="tab" data-tab="gear">Armor</button>
+      <button class="tab" data-tab="trinket">Trinkets</button>
+    </div>
+    <div class="items" id="itemGrid"></div>
+  </div>
+  <div class="editor-area">
+    <div class="canvas-row">
+      <div class="main-canvas-wrap">
+        <canvas id="mainCanvas" width="400" height="500"></canvas>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="ctrl-group">
+        <label>Scale</label>
+        <input type="range" id="scaleSlider" min="10" max="200" value="100" />
+        <span class="val" id="scaleVal">100%</span>
+      </div>
+      <div class="ctrl-group">
+        <label>Rotate</label>
+        <input type="range" id="rotateSlider" min="-180" max="180" value="0" />
+        <span class="val" id="rotateVal">0°</span>
+      </div>
+      <div class="ctrl-group">
+        <label>Opacity</label>
+        <input type="range" id="opacitySlider" min="10" max="100" value="100" />
+        <span class="val" id="opacityVal">100%</span>
+      </div>
+      <button class="ctrl-btn" id="flipBtn">Flip ↔</button>
+      <button class="ctrl-btn" id="layerUpBtn">Layer ↑</button>
+      <button class="ctrl-btn" id="layerDownBtn">Layer ↓</button>
+      <button class="ctrl-btn danger" id="deleteBtn">Delete</button>
+      <button class="ctrl-btn" id="clearBtn">Clear all</button>
+    </div>
+  </div>
+  <div class="previews">
+    <div class="preview-label">Idle</div>
+    <div class="preview-wrap"><canvas id="prev0" width="160" height="100"></canvas></div>
+    <div class="preview-label">Attack</div>
+    <div class="preview-wrap"><canvas id="prev1" width="160" height="100"></canvas></div>
+    <div class="preview-label">Hurt</div>
+    <div class="preview-wrap"><canvas id="prev2" width="160" height="100"></canvas></div>
+    <div class="preview-label">Run</div>
+    <div class="preview-wrap"><canvas id="prev3" width="160" height="100"></canvas></div>
+  </div>
+</div>
+
+<script>
+// Sprite data will be loaded here
+const SPRITES = {
+  "char_0": "sprites/char_0.png",
+  "char_1": "sprites/char_1.png",
+  "char_2": "sprites/char_2.png",
+  "char_3": "sprites/char_3.png",
+  "char_4": "sprites/char_4.png",
+  "face_bandaid": "sprites/face_bandaid.png",
+  "face_bandana": "sprites/face_bandana.png",
+  "face_beard": "sprites/face_beard.png",
+  "face_earring_chain": "sprites/face_earring_chain.png",
+  "face_earring_feather": "sprites/face_earring_feather.png",
+  "face_earring_feathers": "sprites/face_earring_feathers.png",
+  "face_earring_gem": "sprites/face_earring_gem.png",
+  "face_earring_skull": "sprites/face_earring_skull.png",
+  "face_eyepatch": "sprites/face_eyepatch.png",
+  "face_glasses": "sprites/face_glasses.png",
+  "face_goggles": "sprites/face_goggles.png",
+  "face_horns": "sprites/face_horns.png",
+  "face_monocle": "sprites/face_monocle.png",
+  "face_mustache": "sprites/face_mustache.png",
+  "face_nosering": "sprites/face_nosering.png",
+  "face_ring": "sprites/face_ring.png",
+  "face_scars": "sprites/face_scars.png",
+  "face_scars_red": "sprites/face_scars_red.png",
+  "face_stud": "sprites/face_stud.png",
+  "face_warpaint_blue": "sprites/face_warpaint_blue.png",
+  "gear_backpack": "sprites/gear_backpack.png",
+  "gear_belt": "sprites/gear_belt.png",
+  "gear_boots": "sprites/gear_boots.png",
+  "gear_bracers": "sprites/gear_bracers.png",
+  "gear_cap": "sprites/gear_cap.png",
+  "gear_cape": "sprites/gear_cape.png",
+  "gear_crown": "sprites/gear_crown.png",
+  "gear_gloves": "sprites/gear_gloves.png",
+  "gear_greaves": "sprites/gear_greaves.png",
+  "gear_helm": "sprites/gear_helm.png",
+  "gear_hood": "sprites/gear_hood.png",
+  "gear_leather_armor": "sprites/gear_leather_armor.png",
+  "gear_necklace": "sprites/gear_necklace.png",
+  "gear_pauldrons": "sprites/gear_pauldrons.png",
+  "gear_plate_armor": "sprites/gear_plate_armor.png",
+  "gear_ring": "sprites/gear_ring.png",
+  "hat_antlers": "sprites/hat_antlers.png",
+  "hat_bandana": "sprites/hat_bandana.png",
+  "hat_beret": "sprites/hat_beret.png",
+  "hat_beret2": "sprites/hat_beret2.png",
+  "hat_circlet": "sprites/hat_circlet.png",
+  "hat_crown": "sprites/hat_crown.png",
+  "hat_feathered_cap": "sprites/hat_feathered_cap.png",
+  "hat_flower_crown": "sprites/hat_flower_crown.png",
+  "hat_hood": "sprites/hat_hood.png",
+  "hat_iron_dome": "sprites/hat_iron_dome.png",
+  "hat_laurel": "sprites/hat_laurel.png",
+  "hat_leather_helm": "sprites/hat_leather_helm.png",
+  "hat_roman_helm": "sprites/hat_roman_helm.png",
+  "hat_skullcap": "sprites/hat_skullcap.png",
+  "hat_viking_helm": "sprites/hat_viking_helm.png",
+  "hat_wizard_hat": "sprites/hat_wizard_hat.png",
+  "neck_bone": "sprites/neck_bone.png",
+  "neck_bowtie": "sprites/neck_bowtie.png",
+  "neck_brooch": "sprites/neck_brooch.png",
+  "neck_chain": "sprites/neck_chain.png",
+  "neck_charm": "sprites/neck_charm.png",
+  "neck_collar": "sprites/neck_collar.png",
+  "neck_crystal": "sprites/neck_crystal.png",
+  "neck_fangs": "sprites/neck_fangs.png",
+  "neck_medal": "sprites/neck_medal.png",
+  "neck_pendant": "sprites/neck_pendant.png",
+  "neck_pouch": "sprites/neck_pouch.png",
+  "neck_rope": "sprites/neck_rope.png",
+  "neck_rune": "sprites/neck_rune.png",
+  "neck_scarf": "sprites/neck_scarf.png",
+  "neck_shield_pin": "sprites/neck_shield_pin.png",
+  "neck_star": "sprites/neck_star.png",
+  "trinket_banner": "sprites/trinket_banner.png",
+  "trinket_belt_pouch": "sprites/trinket_belt_pouch.png",
+  "trinket_bone_charm": "sprites/trinket_bone_charm.png",
+  "trinket_buckle": "sprites/trinket_buckle.png",
+  "trinket_clasp": "sprites/trinket_clasp.png",
+  "trinket_crest": "sprites/trinket_crest.png",
+  "trinket_feather_quill": "sprites/trinket_feather_quill.png",
+  "trinket_flower": "sprites/trinket_flower.png",
+  "trinket_gem": "sprites/trinket_gem.png",
+  "trinket_lantern": "sprites/trinket_lantern.png",
+  "trinket_lucky_coin": "sprites/trinket_lucky_coin.png",
+  "trinket_ribbon": "sprites/trinket_ribbon.png",
+  "trinket_satchel": "sprites/trinket_satchel.png",
+  "trinket_skull": "sprites/trinket_skull.png",
+  "trinket_tome": "sprites/trinket_tome.png",
+  "trinket_trophy": "sprites/trinket_trophy.png",
+  "weap_axe": "sprites/weap_axe.png",
+  "weap_battleaxe": "sprites/weap_battleaxe.png",
+  "weap_bomb": "sprites/weap_bomb.png",
+  "weap_bow": "sprites/weap_bow.png",
+  "weap_buckler": "sprites/weap_buckler.png",
+  "weap_dagger": "sprites/weap_dagger.png",
+  "weap_kite_shield": "sprites/weap_kite_shield.png",
+  "weap_longsword": "sprites/weap_longsword.png",
+  "weap_mace": "sprites/weap_mace.png",
+  "weap_potion": "sprites/weap_potion.png",
+  "weap_quiver": "sprites/weap_quiver.png",
+  "weap_round_shield": "sprites/weap_round_shield.png",
+  "weap_shortsword": "sprites/weap_shortsword.png",
+  "weap_spear": "sprites/weap_spear.png",
+  "weap_spellbook": "sprites/weap_spellbook.png",
+  "weap_staff": "sprites/weap_staff.png"
+};
+const CHAR_SCALE = 0.7;
+const CANVAS_W = 400, CANVAS_H = 500;
+
+// Item metadata
+const GEAR_ITEMS = [
+  {id:'gear_cap', name:'Cap'}, {id:'gear_helm', name:'Helm'},
+  {id:'gear_hood', name:'Hood'}, {id:'gear_crown', name:'Crown'},
+  {id:'gear_leather_armor', name:'Leather'}, {id:'gear_plate_armor', name:'Plate'},
+  {id:'gear_cape', name:'Cape'}, {id:'gear_pauldrons', name:'Pauldrons'},
+  {id:'gear_gloves', name:'Gloves'}, {id:'gear_bracers', name:'Bracers'},
+  {id:'gear_belt', name:'Belt'}, {id:'gear_necklace', name:'Necklace'},
+  {id:'gear_boots', name:'Boots'}, {id:'gear_greaves', name:'Greaves'},
+  {id:'gear_backpack', name:'Backpack'}, {id:'gear_ring', name:'Ring'}
+];
+const WEAP_ITEMS = [
+  {id:'weap_dagger', name:'Dagger'}, {id:'weap_shortsword', name:'Short Sword'},
+  {id:'weap_spear', name:'Spear'}, {id:'weap_axe', name:'Axe'},
+  {id:'weap_bow', name:'Bow'}, {id:'weap_longsword', name:'Long Sword'},
+  {id:'weap_battleaxe', name:'Battle Axe'}, {id:'weap_mace', name:'Mace'},
+  {id:'weap_round_shield', name:'Round Shield'}, {id:'weap_kite_shield', name:'Kite Shield'},
+  {id:'weap_buckler', name:'Buckler'}, {id:'weap_quiver', name:'Quiver'},
+  {id:'weap_staff', name:'Staff'}, {id:'weap_spellbook', name:'Spellbook'},
+  {id:'weap_potion', name:'Potion'}, {id:'weap_bomb', name:'Bomb'}
+];
+const HAT_ITEMS = [
+  {id:'hat_beret', name:'Beret'}, {id:'hat_skullcap', name:'Skullcap'},
+  {id:'hat_leather_helm', name:'Leather Helm'}, {id:'hat_circlet', name:'Circlet'},
+  {id:'hat_crown', name:'Crown'}, {id:'hat_laurel', name:'Laurel'},
+  {id:'hat_viking_helm', name:'Viking Helm'}, {id:'hat_feathered_cap', name:'Feathered Cap'},
+  {id:'hat_bandana', name:'Bandana'}, {id:'hat_beret2', name:'Flat Cap'},
+  {id:'hat_iron_dome', name:'Iron Dome'}, {id:'hat_roman_helm', name:'Roman Helm'},
+  {id:'hat_hood', name:'Hood'}, {id:'hat_flower_crown', name:'Flower Crown'},
+  {id:'hat_wizard_hat', name:'Wizard Hat'}, {id:'hat_antlers', name:'Antlers'}
+];
+const NECK_ITEMS = [
+  {id:'neck_rope', name:'Rope'}, {id:'neck_pendant', name:'Pendant'},
+  {id:'neck_crystal', name:'Crystal'}, {id:'neck_fangs', name:'Fangs'},
+  {id:'neck_star', name:'Star'}, {id:'neck_medal', name:'Medal'},
+  {id:'neck_collar', name:'Collar'}, {id:'neck_scarf', name:'Scarf'},
+  {id:'neck_bowtie', name:'Bowtie'}, {id:'neck_brooch', name:'Brooch'},
+  {id:'neck_charm', name:'Charm'}, {id:'neck_chain', name:'Chain'},
+  {id:'neck_rune', name:'Rune'}, {id:'neck_bone', name:'Bone'},
+  {id:'neck_pouch', name:'Pouch'}, {id:'neck_shield_pin', name:'Shield Pin'}
+];
+const FACE_ITEMS = [
+  {id:'face_eyepatch', name:'Eyepatch'}, {id:'face_monocle', name:'Monocle'},
+  {id:'face_glasses', name:'Glasses'}, {id:'face_goggles', name:'Goggles'},
+  {id:'face_bandaid', name:'Band-Aid'}, {id:'face_mustache', name:'Mustache'},
+  {id:'face_beard', name:'Beard'}, {id:'face_horns', name:'Horns'},
+  {id:'face_bandana', name:'Bandana'}, {id:'face_warpaint_blue', name:'Blue Paint'},
+  {id:'face_scars', name:'Scars'}, {id:'face_scars_red', name:'Red Scars'},
+  {id:'face_stud', name:'Stud'}, {id:'face_nosering', name:'Nose Ring'},
+  {id:'face_ring', name:'Ring'}, {id:'face_earring_feather', name:'Feather'},
+  {id:'face_earring_skull', name:'Skull Drop'}, {id:'face_earring_gem', name:'Gem Drop'},
+  {id:'face_earring_feathers', name:'Feathers'}, {id:'face_earring_chain', name:'Chain Drop'}
+];
+const TRINKET_ITEMS = [
+  {id:'trinket_crest', name:'Crest'}, {id:'trinket_clasp', name:'Clasp'},
+  {id:'trinket_flower', name:'Flower'}, {id:'trinket_ribbon', name:'Ribbon'},
+  {id:'trinket_satchel', name:'Satchel'}, {id:'trinket_belt_pouch', name:'Belt Pouch'},
+  {id:'trinket_buckle', name:'Buckle'}, {id:'trinket_feather_quill', name:'Quill'},
+  {id:'trinket_tome', name:'Tome'}, {id:'trinket_lantern', name:'Lantern'},
+  {id:'trinket_lucky_coin', name:'Lucky Coin'}, {id:'trinket_bone_charm', name:'Bone'},
+  {id:'trinket_banner', name:'Banner'}, {id:'trinket_skull', name:'Skull'},
+  {id:'trinket_gem', name:'Gem'}, {id:'trinket_trophy', name:'Trophy'}
+];
+
+// Simple anchor offsets for each frame relative to idle (frame 0)
+// These shift sticker positions to account for the character's pose change
+const FRAME_OFFSETS = [
+  {x: 0, y: 0},    // idle - reference
+  {x: 10, y: -5},   // attack - slight forward lean
+  {x: -5, y: 5},    // hurt - slight backward lean
+  {x: 15, y: -8}    // run - forward motion
+];
+
+// Anchor-based skeleton system
+// Frames: 0=idle, 1=attack, 2=hurt, 3=move, 4=sticker(editing pose)
+const ANCHORS = {"idle": {"head": [82.5, 76.1], "r_shoulder": [102.6, 142.6], "l_shoulder": [59.3, 143.1], "r_hip": [101.2, 212.2], "r_hand": [128.6, 214.0], "l_hip": [52.3, 214.5], "l_hand": [23.0, 217.2], "r_foot": [114.1, 293.8], "l_foot": [44.5, 302.5]}, "attack": {"head": [113.2, 79.2], "r_shoulder": [123.9, 139.2], "r_hand": [181.8, 138.8], "l_shoulder": [88.4, 145.5], "r_hip": [168.3, 169.8], "l_hand": [82.5, 197.0], "l_hip": [120.0, 198.7], "r_foot": [151.7, 290.0], "l_foot": [35.3, 290.8]}, "hurt": {"head": [115.3, 158.9], "r_shoulder": [137.8, 201.0], "l_shoulder": [104.6, 202.2], "r_hand": [194.4, 211.5], "l_hand": [101.6, 228.2], "r_hip": [151.1, 250.6], "l_hip": [113.3, 253.3], "l_foot": [90.2, 315.3], "r_foot": [176.0, 319.0]}, "move": {"head": [142.2, 77.3], "l_shoulder": [97.0, 120.8], "r_shoulder": [138.1, 133.0], "r_hand": [199.2, 149.1], "l_hand": [32.5, 159.3], "l_hip": [79.0, 181.9], "r_hip": [111.7, 187.0], "l_foot": [13.6, 251.5], "r_foot": [147.1, 281.6]}, "sticker": {"head": [118.3, 75.7], "l_shoulder": [99.2, 139.3], "r_shoulder": [138.2, 139.7], "r_hand": [202.5, 197.1], "l_hand": [34.2, 198.5], "r_hip": [139.1, 209.3], "l_hip": [94.0, 212.3], "l_foot": [83.5, 289.7], "r_foot": [153.1, 296.3]}};
+const ANCHOR_NAMES = Object.keys(ANCHORS.sticker);
+const PREVIEW_FRAMES = ['idle', 'attack', 'hurt', 'move'];
+const EDIT_FRAME = 4; // sticker pose index
+
+// Frame widths for centering (all 400px tall)
+const FRAME_WIDTHS = {"0": 143, "1": 202, "2": 342, "3": 214, "4": 227};
+
+function nearestAnchors(x, y){
+  const ref = ANCHORS.sticker;
+  let dists = [];
+  for(const name of ANCHOR_NAMES){
+    const [ax, ay] = ref[name];
+    const d = Math.sqrt((x - ax) ** 2 + (y - ay) ** 2);
+    dists.push({name, d});
+  }
+  dists.sort((a, b) => a.d - b.d);
+  const d0 = Math.max(dists[0].d, 0.1);
+  const d1 = Math.max(dists[1].d, 0.1);
+  const w0 = 1 / d0;
+  const w1 = 1 / d1;
+  const total = w0 + w1;
+  return [
+    {name: dists[0].name, weight: w0 / total},
+    {name: dists[1].name, weight: w1 / total}
+  ];
+}
+
+// Bone definitions: each anchor belongs to a bone
+// The bone angle determines how stickers rotate between poses
+const BONE_MAP = {
+  'head':       {from: 'head', to: null},         // uses spine
+  'l_shoulder': {from: 'l_shoulder', to: 'l_hand'},
+  'r_shoulder': {from: 'r_shoulder', to: 'r_hand'},
+  'l_hand':     {from: 'l_shoulder', to: 'l_hand'},
+  'r_hand':     {from: 'r_shoulder', to: 'r_hand'},
+  'l_hip':      {from: 'l_hip', to: 'l_foot'},
+  'r_hip':      {from: 'r_hip', to: 'r_foot'},
+  'l_foot':     {from: 'l_hip', to: 'l_foot'},
+  'r_foot':     {from: 'r_hip', to: 'r_foot'},
+};
+
+function boneAngle(frameAnchors, fromName, toName){
+  if(!toName){
+    // Spine: head to midpoint of hips
+    const [hx, hy] = frameAnchors['head'];
+    const mx = (frameAnchors['l_hip'][0] + frameAnchors['r_hip'][0]) / 2;
+    const my = (frameAnchors['l_hip'][1] + frameAnchors['r_hip'][1]) / 2;
+    return Math.atan2(my - hy, mx - hx);
+  }
+  const [fx, fy] = frameAnchors[fromName];
+  const [tx, ty] = frameAnchors[toName];
+  return Math.atan2(ty - fy, tx - fx);
+}
+
+function transformStickerPos(sx, sy, frameName){
+  const ref = ANCHORS.sticker;
+  const target = ANCHORS[frameName];
+  if(!target) return {x: sx, y: sy, rotation: 0};
+  
+  const near = nearestAnchors(sx, sy);
+  let nx = 0, ny = 0, totalRot = 0;
+  
+  for(const {name, weight} of near){
+    const [rx, ry] = ref[name];
+    const [tx, ty] = target[name];
+    
+    // Offset from reference anchor to sticker
+    const offX = sx - rx;
+    const offY = sy - ry;
+    
+    // Compute bone rotation delta
+    const bone = BONE_MAP[name];
+    let rotDelta = 0;
+    if(bone){
+      const refAngle = boneAngle(ref, bone.from, bone.to);
+      const targetAngle = boneAngle(target, bone.from, bone.to);
+      rotDelta = targetAngle - refAngle;
+    }
+    
+    // Rotate the offset vector around the anchor point by the bone delta
+    const cosR = Math.cos(rotDelta);
+    const sinR = Math.sin(rotDelta);
+    const rotOffX = offX * cosR - offY * sinR;
+    const rotOffY = offX * sinR + offY * cosR;
+    
+    // New position = target anchor + rotated offset
+    nx += (tx + rotOffX) * weight;
+    ny += (ty + rotOffY) * weight;
+    totalRot += rotDelta * weight;
+  }
+  
+  return {x: nx, y: ny, rotation: totalRot * (180 / Math.PI)};
+}
+
+// State
+let images = {};
+let charImages = [null, null, null, null, null];
+let stickers = []; // {id, img, x, y, scale, rotation, opacity, flipped}
+let selectedIdx = -1;
+let dragging = false;
+let dragOffX = 0, dragOffY = 0;
+let currentTab = 'hat';
+
+const mainCanvas = document.getElementById('mainCanvas');
+const ctx = mainCanvas.getContext('2d');
+const prevCanvases = [0,1,2,3].map(i => document.getElementById('prev'+i));
+const prevCtxs = prevCanvases.map(c => c.getContext('2d'));
+
+// Load all images
+function loadImages(callback){
+  let remaining = Object.keys(SPRITES).length;
+  for(const [name, src] of Object.entries(SPRITES)){
+    const img = new Image();
+    img.onload = () => {
+      images[name] = img;
+      if(name.startsWith('char_')){
+        charImages[parseInt(name.split('_')[1])] = img;
+      }
+      remaining--;
+      if(remaining === 0) callback();
+    };
+    img.src = src;
+  }
+}
+
+function buildPalette(){
+  const grid = document.getElementById('itemGrid');
+  const tabMap = {gear: GEAR_ITEMS, weap: WEAP_ITEMS, hat: HAT_ITEMS, neck: NECK_ITEMS, face: FACE_ITEMS, trinket: TRINKET_ITEMS};
+  const items = tabMap[currentTab] || GEAR_ITEMS;
+  grid.innerHTML = '';
+  for(const item of items){
+    const btn = document.createElement('div');
+    btn.className = 'item-btn';
+    btn.innerHTML = `<img src="${SPRITES[item.id]}" /><span>${item.name}</span>`;
+    btn.addEventListener('click', () => addSticker(item.id));
+    grid.appendChild(btn);
+  }
+}
+
+function addSticker(id){
+  const img = images[id];
+  if(!img) return;
+  // Default scale: gear items at 35%, weapons at 25%
+  let defaultScale = 0.40;
+  stickers.push({
+    id, img,
+    x: CANVAS_W/2, y: CANVAS_H/2,
+    scale: defaultScale,
+    rotation: 0,
+    opacity: 1.0,
+    flipped: false
+  });
+  selectedIdx = stickers.length - 1;
+  updateControls();
+  draw();
+}
+
+// Offscreen canvas for creating silhouettes
+const offCanvas = document.createElement('canvas');
+const offCtx = offCanvas.getContext('2d');
+
+function getSilhouette(img, color){
+  offCanvas.width = img.width;
+  offCanvas.height = img.height;
+  offCtx.clearRect(0, 0, img.width, img.height);
+  offCtx.drawImage(img, 0, 0);
+  offCtx.globalCompositeOperation = 'source-in';
+  offCtx.fillStyle = color;
+  offCtx.fillRect(0, 0, img.width, img.height);
+  offCtx.globalCompositeOperation = 'source-over';
+  return offCanvas;
+}
+
+const OUTLINE_OFFSETS = [
+  [-1,-1],[0,-1],[1,-1],
+  [-1, 0],       [1, 0],
+  [-1, 1],[0, 1],[1, 1]
+];
+
+function drawStickerAt(context, s, px, py, baseScale, extraRotation){
+  const scale = s.scale * baseScale;
+  const totalRotation = s.rotation + (extraRotation || 0);
+  context.save();
+  context.globalAlpha = s.opacity;
+  context.translate(px, py);
+  context.rotate(totalRotation * Math.PI / 180);
+  if(s.flipped) context.scale(-1, 1);
+  const w = s.img.width * scale;
+  const h = s.img.height * scale;
+
+  // Draw dark outline: silhouette offset in 8 directions
+  const outlineWeight = Math.max(1, Math.round(scale * 3));
+  const silhouette = getSilhouette(s.img, 'rgba(30, 25, 20, 0.7)');
+  for(const [ox, oy] of OUTLINE_OFFSETS){
+    context.drawImage(silhouette, -w/2 + ox * outlineWeight, -h/2 + oy * outlineWeight, w, h);
+  }
+
+  // Draw actual sticker on top
+  context.drawImage(s.img, -w/2, -h/2, w, h);
+  context.restore();
+}
+
+function drawSelectionBox(s){
+  const scale = s.scale;
+  const w = s.img.width * scale;
+  const h = s.img.height * scale;
+  ctx.save();
+  ctx.translate(s.x, s.y);
+  ctx.rotate(s.rotation * Math.PI / 180);
+  ctx.strokeStyle = 'rgba(196, 112, 48, 0.8)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeRect(-w/2 - 3, -h/2 - 3, w + 6, h + 6);
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function draw(){
+  // Main canvas — sticker pose (frame 4)
+  ctx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+  const charImg = charImages[EDIT_FRAME];
+  if(charImg){
+    const cw = charImg.width * CHAR_SCALE;
+    const ch = charImg.height * CHAR_SCALE;
+    const cx = (CANVAS_W - cw) / 2;
+    const cy = (CANVAS_H - ch) / 2;
+
+    ctx.drawImage(charImg, cx, cy, cw, ch);
+
+    for(let i = 0; i < stickers.length; i++){
+      drawStickerAt(ctx, stickers[i], stickers[i].x, stickers[i].y, 1.0);
+    }
+
+    if(selectedIdx >= 0 && selectedIdx < stickers.length){
+      drawSelectionBox(stickers[selectedIdx]);
+    }
+  }
+
+  // Preview canvases — frames 0-3 with anchor-based sticker positions
+  for(let f = 0; f < 4; f++){
+    const pc = prevCanvases[f];
+    const pctx = prevCtxs[f];
+    const cimg = charImages[f];
+    if(!cimg) continue;
+
+    const frameName = PREVIEW_FRAMES[f];
+
+    const wrap = pc.parentElement;
+    const wrapW = wrap.clientWidth;
+    const wrapH = wrap.clientHeight;
+    pc.width = wrapW;
+    pc.height = wrapH;
+
+    pctx.clearRect(0, 0, pc.width, pc.height);
+
+    const prevScale = Math.min(pc.width / CANVAS_W, pc.height / CANVAS_H) * 0.9;
+    const offX = (pc.width - CANVAS_W * prevScale) / 2;
+    const offY = (pc.height - CANVAS_H * prevScale) / 2;
+
+    pctx.save();
+    pctx.translate(offX, offY);
+    pctx.scale(prevScale, prevScale);
+
+    // Center character in the CANVAS_W x CANVAS_H space
+    const cw = cimg.width * CHAR_SCALE;
+    const ch = cimg.height * CHAR_SCALE;
+    const cx = (CANVAS_W - cw) / 2;
+    const cy = (CANVAS_H - ch) / 2;
+    pctx.drawImage(cimg, cx, cy, cw, ch);
+
+    // Draw stickers with anchor-transformed positions
+    // Sticker positions are in the sticker-pose coordinate space.
+    // We need to map them to this frame's coordinate space.
+    // The sticker pose character is centered at (CANVAS_W/2, CANVAS_H/2) with CHAR_SCALE.
+    // Anchors are in raw frame pixel coords. On the main canvas, they're at:
+    //   canvas_x = cx + anchor_x * CHAR_SCALE
+    //   canvas_y = cy + anchor_y * CHAR_SCALE
+    // Similarly for preview frames (different cx due to different frame width).
+
+    const editCharW = (FRAME_WIDTHS[EDIT_FRAME] || 227);
+    const editCx = (CANVAS_W - editCharW * CHAR_SCALE) / 2;
+    const editCy = (CANVAS_H - 400 * CHAR_SCALE) / 2;
+
+    const prevCharCx = cx;
+    const prevCharCy = cy;
+
+    for(const s of stickers){
+      const localX = (s.x - editCx) / CHAR_SCALE;
+      const localY = (s.y - editCy) / CHAR_SCALE;
+      const transformed = transformStickerPos(localX, localY, frameName);
+      const canvasX = prevCharCx + transformed.x * CHAR_SCALE;
+      const canvasY = prevCharCy + transformed.y * CHAR_SCALE;
+      drawStickerAt(pctx, s, canvasX, canvasY, 1.0, transformed.rotation);
+    }
+
+    pctx.restore();
+  }
+}
+
+function hitTest(x, y, s){
+  const w = s.img.width * s.scale;
+  const h = s.img.height * s.scale;
+  // Simple rectangular hit test (ignoring rotation for simplicity)
+  const dx = x - s.x;
+  const dy = y - s.y;
+  // Rotate point into sticker's local space
+  const angle = -s.rotation * Math.PI / 180;
+  const lx = dx * Math.cos(angle) - dy * Math.sin(angle);
+  const ly = dx * Math.sin(angle) + dy * Math.cos(angle);
+  return Math.abs(lx) < w/2 + 5 && Math.abs(ly) < h/2 + 5;
+}
+
+function getCanvasPos(e){
+  const rect = mainCanvas.getBoundingClientRect();
+  const scaleX = CANVAS_W / rect.width;
+  const scaleY = CANVAS_H / rect.height;
+  return {
+    x: (e.clientX - rect.left) * scaleX,
+    y: (e.clientY - rect.top) * scaleY
+  };
+}
+
+mainCanvas.addEventListener('mousedown', e => {
+  const pos = getCanvasPos(e);
+  // Check stickers in reverse order (top first)
+  selectedIdx = -1;
+  for(let i = stickers.length - 1; i >= 0; i--){
+    if(hitTest(pos.x, pos.y, stickers[i])){
+      selectedIdx = i;
+      dragging = true;
+      dragOffX = pos.x - stickers[i].x;
+      dragOffY = pos.y - stickers[i].y;
+      break;
+    }
+  }
+  updateControls();
+  draw();
+});
+
+mainCanvas.addEventListener('mousemove', e => {
+  if(!dragging || selectedIdx < 0) return;
+  const pos = getCanvasPos(e);
+  stickers[selectedIdx].x = pos.x - dragOffX;
+  stickers[selectedIdx].y = pos.y - dragOffY;
+  draw();
+});
+
+mainCanvas.addEventListener('mouseup', () => { dragging = false; });
+mainCanvas.addEventListener('mouseleave', () => { dragging = false; });
+
+// Touch support
+mainCanvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  const touch = e.touches[0];
+  const rect = mainCanvas.getBoundingClientRect();
+  const scaleX = CANVAS_W / rect.width;
+  const scaleY = CANVAS_H / rect.height;
+  const pos = {
+    x: (touch.clientX - rect.left) * scaleX,
+    y: (touch.clientY - rect.top) * scaleY
+  };
+  selectedIdx = -1;
+  for(let i = stickers.length - 1; i >= 0; i--){
+    if(hitTest(pos.x, pos.y, stickers[i])){
+      selectedIdx = i;
+      dragging = true;
+      dragOffX = pos.x - stickers[i].x;
+      dragOffY = pos.y - stickers[i].y;
+      break;
+    }
+  }
+  updateControls();
+  draw();
+}, {passive: false});
+
+mainCanvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if(!dragging || selectedIdx < 0) return;
+  const touch = e.touches[0];
+  const rect = mainCanvas.getBoundingClientRect();
+  const scaleX = CANVAS_W / rect.width;
+  const scaleY = CANVAS_H / rect.height;
+  stickers[selectedIdx].x = (touch.clientX - rect.left) * scaleX - dragOffX;
+  stickers[selectedIdx].y = (touch.clientY - rect.top) * scaleY - dragOffY;
+  draw();
+}, {passive: false});
+
+mainCanvas.addEventListener('touchend', () => { dragging = false; });
+
+// Controls
+const scaleSlider = document.getElementById('scaleSlider');
+const rotateSlider = document.getElementById('rotateSlider');
+const opacitySlider = document.getElementById('opacitySlider');
+const scaleVal = document.getElementById('scaleVal');
+const rotateVal = document.getElementById('rotateVal');
+const opacityVal = document.getElementById('opacityVal');
+
+function updateControls(){
+  if(selectedIdx >= 0 && selectedIdx < stickers.length){
+    const s = stickers[selectedIdx];
+    scaleSlider.value = Math.round(s.scale * 100);
+    rotateSlider.value = Math.round(s.rotation);
+    opacitySlider.value = Math.round(s.opacity * 100);
+    scaleVal.textContent = Math.round(s.scale * 100) + '%';
+    rotateVal.textContent = Math.round(s.rotation) + '°';
+    opacityVal.textContent = Math.round(s.opacity * 100) + '%';
+  }
+}
+
+scaleSlider.addEventListener('input', () => {
+  if(selectedIdx < 0) return;
+  stickers[selectedIdx].scale = parseInt(scaleSlider.value) / 100;
+  scaleVal.textContent = scaleSlider.value + '%';
+  draw();
+});
+
+rotateSlider.addEventListener('input', () => {
+  if(selectedIdx < 0) return;
+  stickers[selectedIdx].rotation = parseInt(rotateSlider.value);
+  rotateVal.textContent = rotateSlider.value + '°';
+  draw();
+});
+
+opacitySlider.addEventListener('input', () => {
+  if(selectedIdx < 0) return;
+  stickers[selectedIdx].opacity = parseInt(opacitySlider.value) / 100;
+  opacityVal.textContent = opacitySlider.value + '%';
+  draw();
+});
+
+document.getElementById('flipBtn').addEventListener('click', () => {
+  if(selectedIdx < 0) return;
+  stickers[selectedIdx].flipped = !stickers[selectedIdx].flipped;
+  draw();
+});
+
+document.getElementById('layerUpBtn').addEventListener('click', () => {
+  if(selectedIdx < 0 || selectedIdx >= stickers.length - 1) return;
+  [stickers[selectedIdx], stickers[selectedIdx+1]] = [stickers[selectedIdx+1], stickers[selectedIdx]];
+  selectedIdx++;
+  draw();
+});
+
+document.getElementById('layerDownBtn').addEventListener('click', () => {
+  if(selectedIdx <= 0) return;
+  [stickers[selectedIdx], stickers[selectedIdx-1]] = [stickers[selectedIdx-1], stickers[selectedIdx]];
+  selectedIdx--;
+  draw();
+});
+
+document.getElementById('deleteBtn').addEventListener('click', () => {
+  if(selectedIdx < 0) return;
+  stickers.splice(selectedIdx, 1);
+  selectedIdx = -1;
+  updateControls();
+  draw();
+});
+
+document.getElementById('clearBtn').addEventListener('click', () => {
+  stickers = [];
+  selectedIdx = -1;
+  updateControls();
+  draw();
+});
+
+// Tabs
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentTab = tab.dataset.tab;
+    buildPalette();
+  });
+});
+
+// Scroll wheel for scale
+mainCanvas.addEventListener('wheel', e => {
+  if(selectedIdx < 0) return;
+  e.preventDefault();
+  const s = stickers[selectedIdx];
+  const delta = e.deltaY > 0 ? -0.02 : 0.02;
+  s.scale = Math.max(0.05, Math.min(3, s.scale + delta));
+  updateControls();
+  draw();
+}, {passive: false});
+
+// Init
+loadImages(() => {
+  buildPalette();
+  draw();
+  // Resize previews on window resize
+  window.addEventListener('resize', draw);
+});
+</script>
+</body>
+</html>
