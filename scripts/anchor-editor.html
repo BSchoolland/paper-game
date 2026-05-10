@@ -316,6 +316,8 @@
   <button class="header-btn primary" id="saveBtn">Save JSON</button>
   <button class="header-btn" id="downloadBtn">Download</button>
   <button class="header-btn" id="downloadAllBtn">Download All</button>
+  <button class="header-btn" id="uploadBtn">Upload JSON</button>
+  <input type="file" id="uploadInput" accept="application/json,.json" style="display:none" />
 </div>
 
 <div class="main">
@@ -1485,6 +1487,45 @@ document.getElementById('downloadBtn').addEventListener('click', () => {
   a.click();
   URL.revokeObjectURL(url);
   markSaved();
+});
+
+document.getElementById('uploadBtn').addEventListener('click', () => {
+  document.getElementById('uploadInput').click();
+});
+
+document.getElementById('uploadInput').addEventListener('change', async (e) => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    if (!data.frames || typeof data.frames !== 'object') {
+      alert('Invalid anchors JSON: missing "frames" object.');
+      return;
+    }
+    const frameCount = Object.keys(data.frames).length;
+    const anchorCount = Object.values(data.frames)
+      .reduce((sum, f) => sum + Object.keys(f.anchors || {}).length, 0);
+    if (!confirm(`Load ${frameCount} frames with ${anchorCount} anchors? This replaces the current data.`)) {
+      e.target.value = '';
+      return;
+    }
+    anchorData = data;
+    anchorData.bones = BONES;
+    anchorData.character = charPath;
+    // Sync frame dimensions from loaded images
+    for (const key of frameKeys) {
+      if (anchorData.frames[key] && frameImages[key]) {
+        anchorData.frames[key].width = frameImages[key].width;
+        anchorData.frames[key].height = frameImages[key].height;
+      }
+    }
+    if (currentFrame) selectFrame(currentFrame);
+    markUnsaved();
+  } catch (err) {
+    alert('Failed to parse JSON: ' + err.message);
+  }
+  e.target.value = '';
 });
 
 document.getElementById('downloadAllBtn').addEventListener('click', () => {
