@@ -257,7 +257,7 @@
         ]
       }
     },
-    "dual-wield-idle": {
+    "spear-idle": {
       "width": 104,
       "height": 138,
       "anchors": {
@@ -307,7 +307,7 @@
         ]
       }
     },
-    "dual-wield-attack-old": {
+    "spear-attack": {
       "width": 116,
       "height": 118,
       "anchors": {
@@ -357,7 +357,7 @@
         ]
       }
     },
-    "dual-wield-hit": {
+    "spear-hit": {
       "width": 124,
       "height": 120,
       "anchors": {
@@ -407,7 +407,7 @@
         ]
       }
     },
-    "dual-wield-move": {
+    "spear-move": {
       "width": 124,
       "height": 128,
       "anchors": {
@@ -657,7 +657,7 @@
         ]
       }
     },
-    "bow-idle-old": {
+    "staff-idle": {
       "width": 113,
       "height": 140,
       "anchors": {
@@ -757,7 +757,7 @@
         ]
       }
     },
-    "bow-hit-old": {
+    "staff-hit": {
       "width": 115,
       "height": 117,
       "anchors": {
@@ -807,7 +807,7 @@
         ]
       }
     },
-    "bow-move-old": {
+    "staff-move": {
       "width": 119,
       "height": 127,
       "anchors": {
@@ -857,7 +857,7 @@
         ]
       }
     },
-    "staff-idle": {
+    "two-handed-idle": {
       "width": 112,
       "height": 138,
       "anchors": {
@@ -957,7 +957,7 @@
         ]
       }
     },
-    "staff-hit": {
+    "two-handed-hit": {
       "width": 116,
       "height": 117,
       "anchors": {
@@ -1007,7 +1007,7 @@
         ]
       }
     },
-    "staff-move": {
+    "two-handed-move": {
       "width": 125,
       "height": 127,
       "anchors": {
@@ -1057,7 +1057,7 @@
         ]
       }
     },
-    "two-handed-idle": {
+    "dual-wield-idle": {
       "width": 111,
       "height": 138,
       "anchors": {
@@ -1157,7 +1157,7 @@
         ]
       }
     },
-    "two-handed-hit": {
+    "dual-wield-hit": {
       "width": 118,
       "height": 114,
       "anchors": {
@@ -1207,7 +1207,7 @@
         ]
       }
     },
-    "two-handed-move": {
+    "dual-wield-move": {
       "width": 132,
       "height": 125,
       "anchors": {
