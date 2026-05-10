@@ -72,9 +72,6 @@ async function init() {
 
   conn.on("inventory", (msg) => {
     hexRenderer.setPlayerAnimSet(getAnimSet(msg.inventory.equipped));
-    if (msg.inventory.attachments) {
-      combatRenderer.setPlayerEquipment("red1", msg.inventory.attachments);
-    }
   });
 
   let moveLocked = false;

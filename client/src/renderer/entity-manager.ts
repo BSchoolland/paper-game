@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import type { Entity, GameEvent, GameState, Vec2, WeaponDefinition, AttachmentData } from "shared";
+import type { Entity, GameEvent, GameState, Vec2, WeaponDefinition } from "shared";
 import { normalize, raycast } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark } from "./sketch-utils.js";
@@ -26,19 +26,7 @@ export class EntityManager {
   private attackFlashes: AttackFlash[] = [];
   private delayedHits: DelayedHit[] = [];
 
-  private playerAttachments: Record<string, AttachmentData> = {};
-  private playerEntityId: string | null = null;
-
   constructor(private layer: Container) {}
-
-  setPlayerEquipment(entityId: string, attachments: Record<string, AttachmentData>): void {
-    this.playerEntityId = entityId;
-    this.playerAttachments = attachments;
-    const visual = this.visuals.get(entityId);
-    if (visual) {
-      visual.setEquipment(attachments);
-    }
-  }
 
   pushEvents(events: readonly GameEvent[]) {
     this.pendingEvents.push(...events);
@@ -68,9 +56,6 @@ export class EntityManager {
         visual = new EntityVisual(entity);
         this.visuals.set(id, visual);
         this.layer.addChild(visual.container);
-        if (id === this.playerEntityId) {
-          visual.setEquipment(this.playerAttachments);
-        }
       }
 
       visual.update(entity, entity.id === selectedEntityId && !entity.dead, 0);

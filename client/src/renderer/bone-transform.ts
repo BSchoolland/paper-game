@@ -72,7 +72,7 @@ export interface CharacterAnchors {
 function boneAngle(anchors: Partial<AnchorSet>, bone: BoneDef): number {
   const from = anchors[bone.from];
   const to = anchors[bone.to];
-  if (!from || !to) return Math.PI / 2;
+  if (!from || !to) return 0;
   return Math.atan2(to[1] - from[1], to[0] - from[0]);
 }
 
