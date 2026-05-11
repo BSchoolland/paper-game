@@ -121,26 +121,29 @@ export class AbilityBar {
 
     this.container.innerHTML = "";
 
-    const allCards: HTMLDivElement[] = [];
+    const allCards: { el: HTMLDivElement; selected: boolean }[] = [];
     for (const ability of entity.abilities) {
       const sourceItem = this.findSourceItem(ability, entity);
-      allCards.push(this.createCard(ability, entity, sourceItem));
+      const selected = this.clientState.selectedAbilityId === ability.id;
+      allCards.push({ el: this.createCard(ability, entity, sourceItem), selected });
     }
 
     this.renderEndTurnButton();
 
     const count = allCards.length;
     const fanRadius = 2400;
+    const liftAmount = 30;
     const minStep = (this.cardWidth / fanRadius) * (180 / Math.PI);
     for (let i = 0; i < count; i++) {
-      const card = allCards[i]!;
+      const { el: card, selected } = allCards[i]!;
       const t = count > 1 ? (i / (count - 1)) - 0.5 : 0;
       const angle = t * minStep * (count - 1);
+      const lift = selected ? -liftAmount : 0;
       card.style.position = "absolute";
       card.style.left = `${-this.cardWidth / 2}px`;
       card.style.bottom = "0";
       card.style.transformOrigin = `center ${CARD_HEIGHT + fanRadius}px`;
-      card.style.transform = `rotate(${angle}deg)`;
+      card.style.transform = `rotate(${angle}deg) translateY(${lift}px)`;
       this.container.appendChild(card);
     }
   }

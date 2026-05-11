@@ -41,81 +41,90 @@ export class InputManager {
       if (!this.enabled) return;
       const pos = this.screenToWorld(e);
       const state = this.clientState.getState();
-      if (!state) return;
+      if (!state || state.winner) return;
 
-      if (state.winner) return;
-
-      if (this.clientState.selectedEntityId) {
-        const selectedAbility = this.clientState.getSelectedAbility();
-        if (selectedAbility?.kind === "attack") {
-          this.doAttack(pos);
-          return;
-        }
-        if (selectedAbility?.kind === "move") {
-          const entity = state.entities.get(this.clientState.selectedEntityId);
-          if (entity) {
-            const clamped = clampToMovementRange(entity, pos);
-            this.clientState.dispatch({
-              type: "ability",
-              entityId: this.clientState.selectedEntityId,
-              abilityId: selectedAbility.id,
-              destination: clamped,
-            });
-          }
-          return;
-        }
+      const selectedAbility = this.clientState.getSelectedAbility();
+      if (selectedAbility?.kind === "attack") {
+        this.doAttack(pos);
+        return;
       }
-
-      const clicked = this.findEntityAt(pos);
-      if (clicked && clicked.teamId === state.activeTeam) {
-        this.clientState.selectEntity(clicked.id);
+      if (selectedAbility?.kind === "move" && this.clientState.selectedEntityId) {
+        const entity = state.entities.get(this.clientState.selectedEntityId);
+        if (entity) {
+          const clamped = clampToMovementRange(entity, pos);
+          this.clientState.dispatch({
+            type: "ability",
+            entityId: this.clientState.selectedEntityId,
+            abilityId: selectedAbility.id,
+            destination: clamped,
+          });
+        }
       }
     });
 
     this.canvas.addEventListener("contextmenu", (e) => {
       e.preventDefault();
-      if (!this.enabled) return;
-      const state = this.clientState.getState();
-      if (!state || state.winner) return;
-      if (!this.clientState.selectedEntityId) return;
-
-      const entity = state.entities.get(this.clientState.selectedEntityId);
-      if (!entity) return;
-
-      const pos = this.screenToWorld(e);
-      const clamped = clampToMovementRange(entity, pos);
-
-      this.clientState.dispatch({
-        type: "ability",
-        entityId: this.clientState.selectedEntityId,
-        abilityId: "move",
-        destination: clamped,
-      });
     });
+
+    this.canvas.addEventListener("wheel", (e) => {
+      if (!this.enabled) return;
+      e.preventDefault();
+      const dir = e.deltaY > 0 ? 1 : -1;
+      this.cycleAbility(dir);
+    }, { passive: false });
 
     document.addEventListener("keydown", (e) => {
       if (!this.enabled) return;
       if (e.key === "e" || e.key === "E") this.clientState.endTurn();
-      if (e.key === "a" || e.key === "A") this.clientState.toggleAttackMode();
       if (e.key === "r" || e.key === "R") this.clientState.reset();
-      if (e.key === "Escape") this.clientState.selectEntity(null);
+      if (e.key === "Escape") this.clientState.selectAbility(null);
       if (e.key === "F3") {
         e.preventDefault();
         this.clientState.toggleDebugWalls();
       }
+
+      const numKey = parseInt(e.key);
+      if (numKey >= 1 && numKey <= 9) {
+        this.selectAbilityByIndex(numKey - 1);
+      }
     });
   }
 
-  private findEntityAt(pos: Vec2) {
+  private getPlayerAbilities() {
     const state = this.clientState.getState();
-    if (!state) return undefined;
-    for (const entity of state.entities.values()) {
-      if (entity.dead) continue;
-      if (distance(pos, entity.position) <= entity.collisionRadius) {
-        return entity;
+    if (!state || !this.clientState.selectedEntityId) return [];
+    const entity = state.entities.get(this.clientState.selectedEntityId);
+    return entity?.abilities ?? [];
+  }
+
+  private selectAbilityByIndex(index: number) {
+    const abilities = this.getPlayerAbilities();
+    if (index < abilities.length) {
+      const ability = abilities[index]!;
+      if (ability.kind === "buff") {
+        this.clientState.dispatch({
+          type: "ability",
+          entityId: this.clientState.selectedEntityId!,
+          abilityId: ability.id,
+        });
+      } else {
+        this.clientState.selectAbility(ability.id);
       }
     }
-    return undefined;
+  }
+
+  private cycleAbility(dir: number) {
+    const abilities = this.getPlayerAbilities();
+    if (abilities.length === 0) return;
+
+    const currentId = this.clientState.selectedAbilityId;
+    let currentIndex = abilities.findIndex(a => a.id === currentId);
+    if (currentIndex === -1) {
+      currentIndex = dir > 0 ? 0 : abilities.length - 1;
+    } else {
+      currentIndex = (currentIndex + dir + abilities.length) % abilities.length;
+    }
+    this.clientState.selectAbility(abilities[currentIndex]!.id);
   }
 
   private doAttack(mousePos: Vec2) {
@@ -135,11 +144,5 @@ export class InputManager {
       abilityId: this.clientState.selectedAbilityId ?? "punch",
       aimDirection,
     });
-
-    if (!state.entities.has(entityId)) {
-      this.clientState.selectEntity(null);
-    } else {
-      this.clientState.selectEntity(entityId);
-    }
   }
 }

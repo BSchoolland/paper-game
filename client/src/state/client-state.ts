@@ -69,30 +69,22 @@ export class ClientState {
     this.notify();
   }
 
-  toggleAttackMode() {
-    if (!this.selectedEntityId) return;
-    if (this.inputMode === "attack") {
-      this.selectedAbilityId = null;
-      this.inputMode = "select";
-    } else {
-      const state = this.getState();
-      if (!state) return;
-      const entity = state.entities.get(this.selectedEntityId);
-      if (!entity) return;
-      const firstAttack = entity.abilities.find(a => a.kind === "attack");
-      if (firstAttack) {
-        this.selectedAbilityId = firstAttack.id;
-        this.inputMode = "attack";
-      }
-    }
-    this.notify();
-  }
-
   endTurn() {
     this.dispatch({ type: "endTurn" });
-    this.selectedEntityId = null;
     this.selectedAbilityId = null;
     this.inputMode = "select";
+  }
+
+  autoSelectPlayer() {
+    const state = this.getState();
+    if (!state) return;
+    const player = [...state.entities.values()].find(e => e.teamId === "red");
+    if (player) {
+      this.selectedEntityId = player.id;
+      this.selectedAbilityId = null;
+      this.inputMode = "select";
+      this.notify();
+    }
   }
 
   reset() {

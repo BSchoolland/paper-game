@@ -184,7 +184,7 @@ export class GameRenderer {
     if (selectedAbility?.kind === "attack" && entity.energy.red > 0) {
       drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state, selectedAbility as AttackAbility);
     } else if (
-      (selectedAbility?.kind === "move" || this.clientState.inputMode === "select") &&
+      selectedAbility?.kind === "move" &&
       entity.energy.blue > 0
     ) {
       drawMovePreview(this.moveGfx, entity, mouseWorld, state);

@@ -21,8 +21,8 @@ export class CombatScreen implements Screen {
   }
 
   enter() {
-    this.clientState.resetSelection();
     this.combatStore.waitForState().then(() => {
+      this.clientState.autoSelectPlayer();
       this.combatRenderer.enter();
       this.inputManager.setEnabled(true);
       this.abilityBar.show();
