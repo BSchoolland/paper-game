@@ -14,25 +14,25 @@ const ENCOUNTER_PROFILES: Record<EncounterType, EncounterProfile> = {
   "wilderness": {
     enemyBudget: 6,
     tagWeights: { swarm: 2, melee: 1 },
-    structureBudget: 10,
+    structureBudget: 30,
     structureStyle: "natural",
   },
   "dense-wilderness": {
     enemyBudget: 8,
     tagWeights: { swarm: 3, melee: 2 },
-    structureBudget: 42,
+    structureBudget: 60,
     structureStyle: "natural",
   },
   "enemy-camp": {
     enemyBudget: 18,
     tagWeights: { melee: 3, ranged: 2 },
-    structureBudget: 30,
+    structureBudget: 40,
     structureStyle: "natural",
   },
   "elite-encounter": {
       enemyBudget: 25,
       tagWeights: { elite: 4, melee: 2, tank: 1 },
-      structureBudget: 18,
+      structureBudget: 30,
       structureStyle: "arena",
   },
   "boss": {
@@ -44,31 +44,31 @@ const ENCOUNTER_PROFILES: Record<EncounterType, EncounterProfile> = {
   "calamity": {
     enemyBudget: 50,
     tagWeights: { boss: 4, elite: 3, tank: 2 },
-    structureBudget: 10,
+    structureBudget: 20,
     structureStyle: "arena",
   },
   "town": {
     enemyBudget: 8,
     tagWeights: { melee: 2, ranged: 1 },
-    structureBudget: 20,
+    structureBudget: 30,
     structureStyle: "fortified",
   },
   "city": {
     enemyBudget: 16,
     tagWeights: { ranged: 3, tank: 2, melee: 1 },
-    structureBudget: 28,
+    structureBudget: 50,
     structureStyle: "fortified",
   },
   "gateway-city": {
     enemyBudget: 16,
     tagWeights: { tank: 3, elite: 2, ranged: 2 },
-    structureBudget: 30,
+    structureBudget: 60,
     structureStyle: "fortified",
   },
   "gateway": {
     enemyBudget: 16,
     tagWeights: { tank: 3, melee: 2, ranged: 1 },
-    structureBudget: 22,
+    structureBudget: 40,
     structureStyle: "fortified",
   },
   "ruins": {
@@ -86,13 +86,13 @@ const ENCOUNTER_PROFILES: Record<EncounterType, EncounterProfile> = {
   "treasure": {
     enemyBudget: 10,
     tagWeights: { swarm: 3, ranged: 1 },
-    structureBudget: 12,
+    structureBudget: 30,
     structureStyle: "natural",
   },
   "great-treasure": {
     enemyBudget: 18,
     tagWeights: { elite: 3, ranged: 2, swarm: 1 },
-    structureBudget: 15,
+    structureBudget: 30,
     structureStyle: "natural",
   },
 };
