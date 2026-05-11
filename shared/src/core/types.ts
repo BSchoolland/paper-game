@@ -29,8 +29,25 @@ export type CombatShapeDefinition =
   | { kind: ShapeKind.Circle; radius: number; range: number }
   | { kind: ShapeKind.Point; range: number };
 
+export type StatusEffectType =
+  | "slowed"
+  | "weak"
+  | "vulnerable"
+  | "confused"
+  | "burning"
+  | "bleeding"
+  | "poisoned";
+
+export interface StatusEffect {
+  readonly type: StatusEffectType;
+  readonly duration: number;
+  readonly value: number;
+}
+
 export type WeaponEffect =
-  | { type: "knockback"; distance: number };
+  | { type: "knockback"; distance: number }
+  | { type: "pull"; distance: number }
+  | { type: "applyStatus"; status: StatusEffectType; duration: number; value: number };
 
 // --- Attack Visuals (client-side rendering hints, fully JSON-serializable) ---
 
@@ -101,6 +118,7 @@ export interface Entity {
   readonly heightMeters?: number;
   readonly strategy?: AiStrategyType;
   readonly effects?: readonly EntityEffect[];
+  readonly statusEffects?: readonly StatusEffect[];
   readonly dead?: boolean;
   readonly equipped?: readonly import("./items.js").ItemDefinition[];
   readonly attachments?: Record<string, import("../core/inventory.js").AttachmentData>;
@@ -113,6 +131,8 @@ export interface GameState {
   readonly activeTeam: TeamId;
   readonly turnNumber: number;
   readonly winner: TeamId | null;
+  readonly nextSpawnId: number;
+  readonly actionCount: number;
 }
 
 export type PlayerAction =
@@ -131,8 +151,12 @@ export type GameEvent =
     }
   | { type: "barrier"; entityId: EntityId; barrierHp: number }
   | { type: "endTurn"; nextTeam: TeamId }
+  | { type: "turnStart"; team: TeamId }
   | { type: "spawn"; entityId: EntityId; position: Vec2; templateKey: string }
-  | { type: "knockback"; entityId: EntityId; from: Vec2; to: Vec2 };
+  | { type: "knockback"; entityId: EntityId; from: Vec2; to: Vec2 }
+  | { type: "pull"; entityId: EntityId; from: Vec2; to: Vec2 }
+  | { type: "statusApplied"; entityId: EntityId; status: StatusEffect }
+  | { type: "dotTick"; entityId: EntityId; status: StatusEffectType; damage: number };
 
 export interface AttackHit {
   readonly targetId: EntityId;

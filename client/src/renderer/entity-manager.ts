@@ -199,6 +199,19 @@ export class EntityManager {
       }
       case "spawn":
         break;
+      case "pull": {
+        const pullVisual = this.visuals.get(event.entityId);
+        if (pullVisual) {
+          pullVisual.triggerKnockback(event.from.x, event.from.y, event.to.x, event.to.y);
+        }
+        break;
+      }
+      case "turnStart":
+        break;
+      case "statusApplied":
+        break;
+      case "dotTick":
+        break;
     }
   }
 

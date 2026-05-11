@@ -1,4 +1,4 @@
-import type { AimDirection, AttackAbility, AttackHit, CombatShapeDefinition, Entity, GameState, GridState } from "../core/types.js";
+import type { AimDirection, AttackAbility, AttackHit, CombatShapeDefinition, Entity, GameState, GridState, StatusEffectType } from "../core/types.js";
 import { entitiesInShape } from "../geometry/index.js";
 
 export interface DamageResult {
@@ -25,20 +25,38 @@ export function resolveWeaponAttack(
   return hits.filter((e) => e.teamId !== attacker.teamId);
 }
 
+function hasStatus(entity: Entity, type: StatusEffectType): boolean {
+  return entity.statusEffects?.some(s => s.type === type) ?? false;
+}
+
+function getStatusValue(entity: Entity, type: StatusEffectType): number {
+  return entity.statusEffects?.find(s => s.type === type)?.value ?? 0;
+}
+
 export function applyDamage(
   state: GameState,
   targets: Entity[],
-  damage: number
+  damage: number,
+  attackerId?: string
 ): DamageResult {
   const entities = new Map(state.entities);
+  const attacker = attackerId ? state.entities.get(attackerId) : undefined;
+  const weakMultiplier = attacker && hasStatus(attacker, "weak")
+    ? 1 - getStatusValue(attacker, "weak")
+    : 1;
+
   const hits: AttackHit[] = [];
   for (const target of targets) {
-    const barrierAbsorbed = Math.min(target.barrier, damage);
-    const remainingDamage = damage - barrierAbsorbed;
+    let effectiveDamage = Math.round(damage * weakMultiplier);
+    if (hasStatus(target, "vulnerable")) {
+      effectiveDamage = Math.round(effectiveDamage * (1 + getStatusValue(target, "vulnerable")));
+    }
+    const barrierAbsorbed = Math.min(target.barrier, effectiveDamage);
+    const remainingDamage = effectiveDamage - barrierAbsorbed;
     const newBarrier = target.barrier - barrierAbsorbed;
     const newHp = target.hp - remainingDamage;
     const killed = newHp <= 0;
-    hits.push({ targetId: target.id, damage, killed });
+    hits.push({ targetId: target.id, damage: effectiveDamage, killed });
     if (killed) {
       entities.set(target.id, { ...target, hp: 0, barrier: 0, dead: true });
     } else {

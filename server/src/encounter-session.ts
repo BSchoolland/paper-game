@@ -5,7 +5,6 @@ import {
   AiController,
   generateEncounter,
   GREENLANDS_BIOME,
-  resetSpawnCounter,
   buildScenarioMap,
   placePvpEntities,
   placePveEntities,
@@ -36,8 +35,6 @@ export class EncounterSession {
     equipped?: readonly ItemDefinition[],
     attachments?: Record<string, AttachmentData>,
   ): Promise<EncounterSession> {
-    resetSpawnCounter();
-
     if (mode === "pve" && hexType && hexCoord && runId !== undefined) {
       const encounter = generateEncounter(hexType, GREENLANDS_BIOME, hexCoord.q, hexCoord.r, runId);
       const map = buildEncounterMap(encounter);

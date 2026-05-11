@@ -75,5 +75,7 @@ export function assembleGameState(map: EncounterMap, entities: Map<string, Entit
     activeTeam: "red",
     turnNumber: 1,
     winner: null,
+    nextSpawnId: 0,
+    actionCount: 0,
   };
 }

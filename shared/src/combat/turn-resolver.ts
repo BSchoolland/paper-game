@@ -1,9 +1,11 @@
-import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
+import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, StatusEffectType, TeamId, Vec2 } from "../core/types.js";
 import { distance } from "../core/vec2.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { processEffects } from "../encounter/effects.js";
+
+const DOT_TYPES: readonly StatusEffectType[] = ["burning", "bleeding", "poisoned"];
 
 function checkWinner(state: GameState): TeamId | null {
   let hasRed = false;
@@ -54,8 +56,12 @@ function resolveMove(
   destination: { x: number; y: number }
 ): ActionResult {
   const entityId = entity.id;
+  const slowEffect = entity.statusEffects?.find(s => s.type === "slowed");
+  const maxDistance = slowEffect
+    ? ability.distance * (1 - slowEffect.value)
+    : ability.distance;
   const dist = distance(entity.position, destination);
-  if (dist > ability.distance + 0.01) return NO_CHANGE(state);
+  if (dist > maxDistance + 0.01) return NO_CHANGE(state);
   if (!isPositionWalkable(state.grid, destination, entity.collisionRadius))
     return NO_CHANGE(state);
   if (!isWithinBounds(state.grid, destination, entity.collisionRadius))
@@ -105,7 +111,7 @@ function resolveAttack(
 
   let hits: readonly AttackHit[] = [];
   if (targets.length > 0) {
-    const result = applyDamage(newState, targets, ability.damage);
+    const result = applyDamage(newState, targets, ability.damage, entityId);
     newState = result.state;
     hits = result.hits;
   }
@@ -149,6 +155,31 @@ function resolveBarrier(
   };
 }
 
+function simpleHash(s: string): number {
+  let h = 5381;
+  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) & 0x7fffffff;
+  return h;
+}
+
+function isConfused(entity: Entity, turnNumber: number, actionIndex: number): boolean {
+  const effect = entity.statusEffects?.find(s => s.type === "confused");
+  if (!effect) return false;
+  const hash = simpleHash(`${entity.id}-${turnNumber}-${actionIndex}`);
+  return (hash % 100) / 100 < effect.value;
+}
+
+function flipDirection(dir: Vec2): Vec2 {
+  return { x: -dir.x, y: -dir.y };
+}
+
+function flipDestination(entity: Entity, dest: Vec2): Vec2 {
+  return {
+    x: entity.position.x - (dest.x - entity.position.x),
+    y: entity.position.y - (dest.y - entity.position.y),
+  };
+}
+
+
 function resolveAbility(
   state: GameState,
   entityId: string,
@@ -164,25 +195,94 @@ function resolveAbility(
   if (!ability) return NO_CHANGE(state);
   if (!canAffordAbility(entity, ability)) return NO_CHANGE(state);
 
+  const nextCount = state.actionCount + 1;
+  const confused = isConfused(entity, state.turnNumber, nextCount);
+
+  let result: ActionResult;
   switch (ability.kind) {
-    case "move":
+    case "move": {
       if (!destination) return NO_CHANGE(state);
-      return resolveMove(state, entity, ability, destination);
-    case "attack":
+      const dest = confused ? flipDestination(entity, destination) : destination;
+      result = resolveMove(state, entity, ability, dest);
+      break;
+    }
+    case "attack": {
       if (!aimDirection) return NO_CHANGE(state);
-      return resolveAttack(state, entity, ability, aimDirection);
+      const aim = confused ? flipDirection(aimDirection) : aimDirection;
+      result = resolveAttack(state, entity, ability, aim);
+      break;
+    }
     case "barrier":
-      return resolveBarrier(state, entity, ability);
+      result = resolveBarrier(state, entity, ability);
+      break;
   }
+
+  if (result.state === state) return result;
+  return { ...result, state: { ...result.state, actionCount: nextCount } };
+}
+
+function tickStatusEffects(
+  entities: Map<string, Entity>,
+  team: TeamId
+): { entities: Map<string, Entity>; events: GameEvent[] } {
+  const events: GameEvent[] = [];
+
+  for (const [id, entity] of entities) {
+    if (entity.dead || entity.teamId !== team) continue;
+    const statuses = entity.statusEffects;
+    if (!statuses || statuses.length === 0) continue;
+
+    let updated = entity;
+
+    for (const s of statuses) {
+      if (DOT_TYPES.includes(s.type)) {
+        const dotDamage = s.value;
+        const newHp = updated.hp - dotDamage;
+        const killed = newHp <= 0;
+        updated = killed
+          ? { ...updated, hp: 0, dead: true }
+          : { ...updated, hp: newHp };
+        events.push({ type: "dotTick", entityId: id, status: s.type, damage: dotDamage });
+      }
+    }
+
+    const remaining = statuses
+      .map(s => ({ ...s, duration: s.duration - 1 }))
+      .filter(s => s.duration > 0);
+
+    updated = { ...updated, statusEffects: remaining.length > 0 ? remaining : undefined };
+    entities.set(id, updated);
+  }
+
+  return { entities, events };
 }
 
 function resolveEndTurn(state: GameState): ActionResult {
   const nextTeam: TeamId = state.activeTeam === "red" ? "blue" : "red";
+
+  const endState: GameState = {
+    ...state,
+    activeTeam: nextTeam,
+    turnNumber: state.turnNumber + 1,
+  };
+
+  const startResult = resolveTurnStart(endState, nextTeam);
+
+  return {
+    state: {
+      ...startResult.state,
+      winner: checkWinner(startResult.state),
+    },
+    events: [{ type: "endTurn", nextTeam }, ...startResult.events],
+  };
+}
+
+function resolveTurnStart(state: GameState, team: TeamId): ActionResult {
   const entities = new Map<string, Entity>();
   for (const [id, entity] of state.entities) {
     if (entity.dead) {
       entities.set(id, entity);
-    } else if (entity.teamId === nextTeam) {
+    } else if (entity.teamId === team) {
       entities.set(id, {
         ...entity,
         energy: { ...entity.energy, red: entity.energy.maxRed, blue: entity.energy.maxBlue },
@@ -192,14 +292,12 @@ function resolveEndTurn(state: GameState): ActionResult {
       entities.set(id, entity);
     }
   }
+
+  const tick = tickStatusEffects(entities, team);
+
   return {
-    state: {
-      ...state,
-      entities,
-      activeTeam: nextTeam,
-      turnNumber: state.turnNumber + 1,
-    },
-    events: [{ type: "endTurn", nextTeam }],
+    state: { ...state, entities: tick.entities },
+    events: [{ type: "turnStart", team }, ...tick.events],
   };
 }
 

@@ -37,6 +37,8 @@ export function makeState(
     activeTeam: "red",
     turnNumber: 1,
     winner: null,
+    nextSpawnId: 0,
+    actionCount: 0,
     ...overrides,
   };
 }

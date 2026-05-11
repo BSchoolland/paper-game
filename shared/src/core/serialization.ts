@@ -7,6 +7,8 @@ export interface SerializedGameState {
   activeTeam: GameState["activeTeam"];
   turnNumber: number;
   winner: GameState["winner"];
+  nextSpawnId: number;
+  actionCount: number;
 }
 
 export function serializeGameState(state: GameState): SerializedGameState {
@@ -32,6 +34,8 @@ export function serializeGameState(state: GameState): SerializedGameState {
     activeTeam: state.activeTeam,
     turnNumber: state.turnNumber,
     winner: state.winner,
+    nextSpawnId: state.nextSpawnId,
+    actionCount: state.actionCount,
   };
 }
 
@@ -54,5 +58,7 @@ export function deserializeGameState(data: SerializedGameState): GameState {
     activeTeam: data.activeTeam,
     turnNumber: data.turnNumber,
     winner: data.winner,
+    nextSpawnId: data.nextSpawnId ?? 0,
+    actionCount: data.actionCount ?? 0,
   };
 }

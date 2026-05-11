@@ -82,6 +82,8 @@ export function assembleGameState(map: ScenarioMap, entities: Map<string, Entity
     activeTeam: "red",
     turnNumber: 1,
     winner: null,
+    nextSpawnId: 0,
+    actionCount: 0,
   };
 }
 
