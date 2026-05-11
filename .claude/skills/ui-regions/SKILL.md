@@ -10,6 +10,10 @@ This skill helps define named interactive regions (buttons, slots, areas) on UI 
 
 The argument should be a sprite image path (e.g. `client/public/sprites/ui/inventory-panel.png`).
 
+## Step 0: Remove background and crop
+
+Read the image. If it has a background or excess transparent padding, use ImageMagick to remove the background and/or trim it. Verify the result visually.
+
 ## Step 1: Launch the editor
 
 Start a local HTTP server from the project root and open the editor with the image pre-loaded.
