@@ -1,4 +1,4 @@
-import type { AttackAbility, AttackHit, CombatShapeDefinition, Entity, GameState, GridState, Vec2 } from "../core/types.js";
+import type { AimDirection, AttackAbility, AttackHit, CombatShapeDefinition, Entity, GameState, GridState } from "../core/types.js";
 import { entitiesInShape } from "../geometry/index.js";
 
 export interface DamageResult {
@@ -8,7 +8,7 @@ export interface DamageResult {
 
 export function resolveWeaponAttack(
   attacker: Entity,
-  aimDirection: Vec2,
+  aimDirection: AimDirection,
   entities: ReadonlyMap<string, Entity>,
   ability: Pick<AttackAbility, "shape" | "ignoreCoverRange">,
   grid: GridState

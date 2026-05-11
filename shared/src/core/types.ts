@@ -3,6 +3,9 @@ export interface Vec2 {
   readonly y: number;
 }
 
+/** Raw (unnormalized) vector from entity to target. Consumers normalize internally. */
+export type AimDirection = Vec2;
+
 export type TeamId = "red" | "blue";
 export type EntityId = string;
 
@@ -122,7 +125,7 @@ export interface GameState {
 }
 
 export type PlayerAction =
-  | { type: "ability"; entityId: EntityId; abilityId: string; aimDirection?: Vec2; destination?: Vec2 }
+  | { type: "ability"; entityId: EntityId; abilityId: string; aimDirection?: AimDirection; destination?: Vec2 }
   | { type: "endTurn" };
 
 export type GameEvent =
@@ -131,7 +134,7 @@ export type GameEvent =
       type: "attack";
       attackerId: EntityId;
       attackerPosition: Vec2;
-      aimDirection: Vec2;
+      aimDirection: AimDirection;
       ability: AttackAbility;
       hits: readonly AttackHit[];
     }
@@ -202,8 +205,8 @@ export const SHORT_SWORD_STAB: AttackAbility = {
   name: "Stab",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: ShapeKind.Rectangle, length: 70, width: 15 },
-  damage: 15,
+  shape: { kind: ShapeKind.Rectangle, length: 90, width: 12 },
+  damage: 11,
   visual: { color: 0xc0c0c0, trailEffect: "thrust" },
 };
 
@@ -213,19 +216,20 @@ export const SPEAR_THRUST: AttackAbility = {
   kind: "attack",
   cost: { red: 2 },
   shape: { kind: ShapeKind.Rectangle, length: 140, width: 20 },
-  damage: 30,
+  damage: 32,
   onHit: [{ type: "knockback", distance: 25 }],
   visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.3 },
 };
 
 export const SPEAR_JAB: AttackAbility = {
   id: "spear-jab",
-  name: "Jab",
+  name: "Shaft Strike",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: ShapeKind.Rectangle, length: 110, width: 15 },
-  damage: 15,
-  visual: { color: 0xa89070, trailEffect: "thrust" },
+  shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 4 },
+  damage: 10,
+  onHit: [{ type: "knockback", distance: 45 }],
+  visual: { color: 0xa89070, trailEffect: "slash", screenShake: 0.2 },
 };
 
 export const BOW_SHOT: AttackAbility = {
@@ -239,14 +243,14 @@ export const BOW_SHOT: AttackAbility = {
   visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.15 },
 };
 
-export const BOW_SNAP_SHOT: AttackAbility = {
-  id: "bow-snap-shot",
-  name: "Snap Shot",
+export const BOW_VOLLEY: AttackAbility = {
+  id: "bow-volley",
+  name: "Volley",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: ShapeKind.Point, range: 180 },
-  damage: 10,
-  visual: { color: 0xd4a857, trailEffect: "projectile" },
+  shape: { kind: ShapeKind.Circle, radius: 40, range: 250 },
+  damage: 12,
+  visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.1 },
 };
 
 // --- Enemy Abilities ---

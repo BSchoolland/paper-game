@@ -1,4 +1,4 @@
-import type { AbilityDefinition, ActionResult, ActiveBuff, AttackAbility, AttackHit, BuffAbility, Entity, EnergyPool, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
+import type { AbilityDefinition, ActionResult, ActiveBuff, AimDirection, AttackAbility, AttackHit, BuffAbility, Entity, EnergyPool, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
 import { distance } from "../core/vec2.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
@@ -84,7 +84,7 @@ function resolveAttack(
   state: GameState,
   entity: Entity,
   ability: AttackAbility,
-  aimDirection: { x: number; y: number }
+  aimDirection: AimDirection
 ): ActionResult {
   const entityId = entity.id;
 
@@ -159,7 +159,7 @@ function resolveAbility(
   state: GameState,
   entityId: string,
   abilityId: string,
-  aimDirection?: { x: number; y: number },
+  aimDirection?: AimDirection,
   destination?: { x: number; y: number }
 ): ActionResult {
   const entity = state.entities.get(entityId);

@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import type { AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, TrailEffect, Vec2 } from "shared";
+import type { AimDirection, AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, TrailEffect, Vec2 } from "shared";
 import { ShapeKind, normalize, length as vecLength, raycast } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark, drawRoughCircle } from "./sketch-utils.js";
@@ -176,14 +176,14 @@ export class EntityManager {
 
   private spawnAttackFlash(
     pos: Vec2,
-    aimDirection: Vec2,
+    aimDirection: AimDirection,
     ability: AttackAbility,
     attackerId: string,
     state: GameState
   ) {
     const gfx = new Graphics();
     const aimLen = vecLength(aimDirection);
-    const norm = aimLen > 0 ? { x: aimDirection.x / aimLen, y: aimDirection.y / aimLen } : { x: 1, y: 0 };
+    const norm = normalize(aimDirection);
     const baseAngle = Math.atan2(norm.y, norm.x);
     const shape = ability.shape;
     const visual = ability.visual;

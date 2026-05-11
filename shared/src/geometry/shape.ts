@@ -1,5 +1,5 @@
 import { ShapeKind } from "../core/types.js";
-import type { CombatShapeDefinition, Entity, GridState, Vec2 } from "../core/types.js";
+import type { AimDirection, CombatShapeDefinition, Entity, GridState, Vec2 } from "../core/types.js";
 import { add, length, normalize, scale } from "../core/vec2.js";
 import { entitiesInSector } from "./sector.js";
 import { entitiesInRectangle } from "./rectangle.js";
@@ -8,7 +8,7 @@ import { raycastToEntity } from "./ray.js";
 
 export function entitiesInShape(
   origin: Vec2,
-  direction: Vec2,
+  direction: AimDirection,
   shape: CombatShapeDefinition,
   entities: ReadonlyMap<string, Entity>,
   grid: GridState,
