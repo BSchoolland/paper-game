@@ -9,6 +9,7 @@ import type {
   ConsumableItem,
   AccessoryItem,
 } from "shared";
+import { ShapeKind } from "shared";
 import {
   type ItemPosition,
   PANEL_W,
@@ -256,10 +257,10 @@ export class InventoryScreen implements Screen {
         const lines = attacks.map(a => {
           const shape = a.shape;
           let rangeText = "";
-          if (shape.kind === "sector") rangeText = `${shape.radius}`;
-          else if (shape.kind === "circle") rangeText = `${shape.range} (${shape.radius} AoE)`;
-          else if (shape.kind === "rectangle") rangeText = `${shape.length}`;
-          else if (shape.kind === "point") rangeText = `${shape.range}`;
+          if (shape.kind === ShapeKind.Sector) rangeText = `${shape.radius}`;
+          else if (shape.kind === ShapeKind.Circle) rangeText = `${shape.range} (${shape.radius} AoE)`;
+          else if (shape.kind === ShapeKind.Rectangle) rangeText = `${shape.length}`;
+          else if (shape.kind === ShapeKind.Point) rangeText = `${shape.range}`;
           const costParts: string[] = [];
           if (a.cost.red) costParts.push(`${a.cost.red} red`);
           if (a.cost.blue) costParts.push(`${a.cost.blue} blue`);

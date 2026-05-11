@@ -1,3 +1,4 @@
+import { ShapeKind } from "../core/types.js";
 import type { CombatShapeDefinition, Entity, GridState, Vec2 } from "../core/types.js";
 import { add, normalize, scale } from "../core/vec2.js";
 import { entitiesInSector } from "./sector.js";
@@ -15,19 +16,23 @@ export function entitiesInShape(
   ignoreCoverRange?: number
 ): Entity[] {
   switch (shape.kind) {
-    case "sector":
+    case ShapeKind.Sector:
       return entitiesInSector(origin, direction, shape.radius, shape.halfAngle, entities, excludeId);
-    case "rectangle":
+    case ShapeKind.Rectangle:
       return entitiesInRectangle(origin, direction, shape.length, shape.width, entities, excludeId);
-    case "circle": {
+    case ShapeKind.Circle: {
       const center = add(origin, scale(normalize(direction), shape.range));
       return entitiesInCircle(center, shape.radius, entities, excludeId);
     }
-    case "point": {
+    case ShapeKind.Point: {
       const hit = raycastToEntity(origin, direction, shape.range, entities, grid, excludeId, ignoreCoverRange);
       if (!hit) return [];
       const target = entities.get(hit.entityId);
       return target ? [target] : [];
+    }
+    default: {
+      const _exhaustive: never = shape;
+      throw new Error(`Unhandled shape kind: ${(_exhaustive as CombatShapeDefinition).kind}`);
     }
   }
 }

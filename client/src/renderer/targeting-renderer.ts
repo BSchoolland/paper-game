@@ -1,6 +1,6 @@
 import type { Graphics } from "pixi.js";
-import type { AttackAbility, Entity, GameState, Vec2 } from "shared";
-import { normalize, sub, length, raycast } from "shared";
+import type { AttackAbility, CombatShapeDefinition, Entity, GameState, Vec2 } from "shared";
+import { ShapeKind, normalize, sub, length, raycast } from "shared";
 import {
   PENCIL,
   PENCIL_HIT,
@@ -34,7 +34,7 @@ export function drawTargetingPreview(
   const shape = ability.shape;
 
   switch (shape.kind) {
-    case "sector": {
+    case ShapeKind.Sector: {
       const segments = 24;
       g.moveTo(entity.position.x, entity.position.y);
       drawRoughArc(
@@ -53,7 +53,7 @@ export function drawTargetingPreview(
       g.stroke({ color: PENCIL, alpha: 0.5, width: 1.2 });
       break;
     }
-    case "rectangle": {
+    case ShapeKind.Rectangle: {
       const perpX = -norm.y;
       const perpY = norm.x;
       const hw = shape.width / 2;
@@ -78,7 +78,19 @@ export function drawTargetingPreview(
       g.stroke({ color: PENCIL, alpha: 0.5, width: 1.2 });
       break;
     }
-    case "point": {
+    case ShapeKind.Circle: {
+      drawRoughCircle(g, entity.position.x, entity.position.y, shape.range, 1.5, 48, 45);
+      g.stroke({ color: PENCIL, alpha: 0.25, width: 1.2 });
+
+      const dist = Math.min(length(dir), shape.range);
+      const targetX = entity.position.x + norm.x * dist;
+      const targetY = entity.position.y + norm.y * dist;
+      drawRoughArc(g, targetX, targetY, shape.radius, 0, Math.PI * 2, 1.5, 24, 47);
+      g.fill({ color: PENCIL, alpha: 0.1 });
+      g.stroke({ color: PENCIL, alpha: 0.5, width: 1.2 });
+      break;
+    }
+    case ShapeKind.Point: {
       const result = raycast(
         entity.position,
         norm,
@@ -120,6 +132,10 @@ export function drawTargetingPreview(
         g.fill({ color: PENCIL, alpha: 0.5 });
       }
       break;
+    }
+    default: {
+      const _exhaustive: never = shape;
+      throw new Error(`Unhandled shape kind: ${(_exhaustive as CombatShapeDefinition).kind}`);
     }
   }
 }

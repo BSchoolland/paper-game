@@ -1,6 +1,6 @@
 import type { AbilityDefinition, ActionResult, ActiveBuff, AttackAbility, AttackHit, BuffAbility, Entity, EnergyPool, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
 import { distance } from "../core/vec2.js";
-import { computeMoveCost } from "./movement.js";
+import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { processEffects } from "../encounter/effects.js";
@@ -35,12 +35,6 @@ function entitiesOverlap(
 
 const NO_CHANGE = (state: GameState): ActionResult => ({ state, events: [] });
 
-function canAfford(energy: EnergyPool, cost: { red?: number; blue?: number }): boolean {
-  if ((cost.red ?? 0) > energy.red) return false;
-  if ((cost.blue ?? 0) > energy.blue) return false;
-  return true;
-}
-
 function spendEnergy(energy: EnergyPool, cost: { red?: number; blue?: number }): EnergyPool {
   return {
     ...energy,
@@ -69,8 +63,9 @@ function resolveMove(
   if (entitiesOverlap(destination, entity.collisionRadius, state.entities, entityId))
     return NO_CHANGE(state);
 
-  const actualCost = computeMoveCost(ability, dist);
-  if (!canAfford(entity.energy, actualCost)) return NO_CHANGE(state);
+  const actualCost = getAbilityCost(ability, { distance: dist });
+  if ((actualCost.red ?? 0) > entity.energy.red || (actualCost.blue ?? 0) > entity.energy.blue)
+    return NO_CHANGE(state);
 
   const from = entity.position;
   const entities = new Map(state.entities);
@@ -173,8 +168,7 @@ function resolveAbility(
 
   const ability = findAbility(entity, abilityId);
   if (!ability) return NO_CHANGE(state);
-  if (!ability.variableCost && !canAfford(entity.energy, ability.cost)) return NO_CHANGE(state);
-  if (ability.variableCost && !canAfford(entity.energy, { red: ability.cost.red ? 1 : 0, blue: ability.cost.blue ? 1 : 0 })) return NO_CHANGE(state);
+  if (!canAffordAbility(entity, ability)) return NO_CHANGE(state);
 
   switch (ability.kind) {
     case "move":

@@ -1,6 +1,8 @@
-import type { AbilityDefinition, AiStrategyType, AttackAbility, Entity, GameState, MoveAbility, PlayerAction, Vec2 } from "../core/types.js";
+import { ShapeKind } from "../core/types.js";
+import type { AiStrategyType, AttackAbility, Entity, GameState, MoveAbility, PlayerAction, Vec2 } from "../core/types.js";
 import { distance, sub, normalize, add, scale } from "../core/vec2.js";
 import { pathfindMove } from "../map/pathfinding.js";
+import { canAffordAbility } from "../combat/ability-cost.js";
 
 export interface AiStrategy {
   planActions(entity: Entity, state: GameState): PlayerAction[];
@@ -33,20 +35,13 @@ function getAttackAbility(entity: Entity): AttackAbility | null {
 function getAttackRange(ability: AttackAbility): number {
   const shape = ability.shape;
   switch (shape.kind) {
-    case "point": return shape.range;
-    case "sector": return shape.radius;
-    case "rectangle": return shape.length;
-    case "circle": return shape.range + shape.radius;
+    case ShapeKind.Point: return shape.range;
+    case ShapeKind.Sector: return shape.radius;
+    case ShapeKind.Rectangle: return shape.length;
+    case ShapeKind.Circle: return shape.range + shape.radius;
   }
 }
 
-function canAfford(entity: Entity, ability: AbilityDefinition): boolean {
-  const minRed = ability.variableCost ? Math.min(ability.cost.red ?? 0, 1) : (ability.cost.red ?? 0);
-  const minBlue = ability.variableCost ? Math.min(ability.cost.blue ?? 0, 1) : (ability.cost.blue ?? 0);
-  if (minRed > entity.energy.red) return false;
-  if (minBlue > entity.energy.blue) return false;
-  return true;
-}
 
 function tryAttack(
   entity: Entity,
@@ -55,7 +50,7 @@ function tryAttack(
   actions: PlayerAction[]
 ): boolean {
   const ability = getAttackAbility(entity);
-  if (!ability || !canAfford(entity, ability)) return false;
+  if (!ability || !canAffordAbility(entity, ability)) return false;
   const attackRange = getAttackRange(ability);
   if (distance(fromPos, target.position) <= attackRange + target.collisionRadius) {
     const dir = normalize(sub(target.position, fromPos));
@@ -72,7 +67,7 @@ function tryMove(
   actions: PlayerAction[]
 ): Vec2 | null {
   const moveAbility = getMoveAbility(entity);
-  if (!moveAbility || !canAfford(entity, moveAbility)) return null;
+  if (!moveAbility || !canAffordAbility(entity, moveAbility)) return null;
   const destination = pathfindMove(entity, target, state.grid, state.entities, moveAbility.distance);
   if (destination) {
     actions.push({ type: "ability", entityId: entity.id, abilityId: moveAbility.id, destination });
@@ -134,7 +129,7 @@ export const kiteStrategy: AiStrategy = {
 
 function findRetreatPos(entity: Entity, threat: Entity, state: GameState): Vec2 | null {
   const moveAbility = getMoveAbility(entity);
-  if (!moveAbility || !canAfford(entity, moveAbility)) return null;
+  if (!moveAbility || !canAffordAbility(entity, moveAbility)) return null;
 
   const awayDir = normalize(sub(entity.position, threat.position));
   const retreatTarget = add(entity.position, scale(awayDir, moveAbility.distance));

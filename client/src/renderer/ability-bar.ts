@@ -1,5 +1,5 @@
-import type { AbilityDefinition, Entity, MoveAbility, Vec2 } from "shared";
-import { clampToMovementRange, distance, computeMoveCost } from "shared";
+import type { AbilityDefinition, Entity, Vec2 } from "shared";
+import { clampToMovementRange, distance, canAffordAbility, getAbilityCost } from "shared";
 import type { ItemDefinition } from "shared/src/core/items.js";
 import type { ClientState } from "../state/client-state.js";
 
@@ -110,7 +110,6 @@ export class AbilityBar {
   updateMouse(mouseWorld: Vec2) {
     if (!this.variableCostEl || !this.variableCostAbility) return;
     const ability = this.variableCostAbility;
-    if (ability.kind !== "move") return;
 
     const state = this.clientState.getState();
     const entityId = this.clientState.selectedEntityId;
@@ -120,7 +119,7 @@ export class AbilityBar {
 
     const clamped = clampToMovementRange(entity, mouseWorld);
     const dist = distance(entity.position, clamped);
-    const cost = computeMoveCost(ability, dist);
+    const cost = getAbilityCost(ability, { distance: dist });
 
     const costParts: string[] = [];
     if (ability.cost.red) costParts.push(`<span style="color:#c0392b">${Math.min(cost.red ?? 0, entity.energy.red)} &#9679;</span>`);
@@ -186,11 +185,7 @@ export class AbilityBar {
   private createCard(ability: AbilityDefinition, entity: Entity, sourceItem: ItemDefinition | null): HTMLDivElement {
     const card = document.createElement("div");
     const isSelected = this.clientState.selectedAbilityId === ability.id;
-    const canAfford = ability.variableCost
-      ? (ability.cost.red ? entity.energy.red > 0 : true)
-        && (ability.cost.blue ? entity.energy.blue > 0 : true)
-      : (ability.cost.red ?? 0) <= entity.energy.red
-        && (ability.cost.blue ?? 0) <= entity.energy.blue;
+    const canAfford = canAffordAbility(entity, ability);
 
     const s = this.scale;
     const opacity = canAfford ? "1" : "0.5";

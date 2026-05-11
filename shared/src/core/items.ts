@@ -1,4 +1,4 @@
-import { SHORT_SWORD_SLASH, SHORT_SWORD_STAB, SPEAR_THRUST, SPEAR_JAB, BOW_SHOT, BOW_SNAP_SHOT } from "./types.js";
+import { SHORT_SWORD_SLASH, SHORT_SWORD_STAB, SPEAR_THRUST, SPEAR_JAB, BOW_SHOT, BOW_SNAP_SHOT, ShapeKind } from "./types.js";
 import type { AbilityDefinition, AttackAbility } from "./types.js";
 
 export type ItemRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
@@ -82,7 +82,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Long Slash",
       kind: "attack",
       cost: { red: 2 },
-      shape: { kind: "sector", radius: 100, halfAngle: Math.PI / 3 },
+      shape: { kind: ShapeKind.Sector, radius: 100, halfAngle: Math.PI / 3 },
       damage: 35,
       onHit: [{ type: "knockback", distance: 35 }],
     } satisfies AttackAbility, {
@@ -90,7 +90,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Thrust",
       kind: "attack",
       cost: { red: 1 },
-      shape: { kind: "rectangle", length: 90, width: 18 },
+      shape: { kind: ShapeKind.Rectangle, length: 90, width: 18 },
       damage: 20,
     } satisfies AttackAbility],
     animSet: "sword",
@@ -119,7 +119,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Chop",
       kind: "attack",
       cost: { red: 2 },
-      shape: { kind: "sector", radius: 75, halfAngle: Math.PI / 4 },
+      shape: { kind: ShapeKind.Sector, radius: 75, halfAngle: Math.PI / 4 },
       damage: 35,
       onHit: [{ type: "knockback", distance: 40 }],
     } satisfies AttackAbility, {
@@ -127,7 +127,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Hack",
       kind: "attack",
       cost: { red: 1 },
-      shape: { kind: "sector", radius: 65, halfAngle: Math.PI / 6 },
+      shape: { kind: ShapeKind.Sector, radius: 65, halfAngle: Math.PI / 6 },
       damage: 20,
     } satisfies AttackAbility],
     animSet: "sword",
@@ -159,7 +159,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Sweep",
       kind: "attack",
       cost: { red: 2 },
-      shape: { kind: "sector", radius: 90, halfAngle: Math.PI / 2 },
+      shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 2 },
       damage: 40,
       onHit: [{ type: "knockback", distance: 35 }],
     } satisfies AttackAbility, {
@@ -167,7 +167,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Pommel Strike",
       kind: "attack",
       cost: { red: 1 },
-      shape: { kind: "sector", radius: 60, halfAngle: Math.PI / 4 },
+      shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 4 },
       damage: 18,
       onHit: [{ type: "knockback", distance: 25 }],
     } satisfies AttackAbility],
@@ -186,7 +186,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Cleave",
       kind: "attack",
       cost: { red: 2 },
-      shape: { kind: "sector", radius: 85, halfAngle: Math.PI / 3 },
+      shape: { kind: ShapeKind.Sector, radius: 85, halfAngle: Math.PI / 3 },
       damage: 45,
       onHit: [{ type: "knockback", distance: 50 }],
     } satisfies AttackAbility, {
@@ -194,7 +194,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Hook",
       kind: "attack",
       cost: { red: 1 },
-      shape: { kind: "sector", radius: 70, halfAngle: Math.PI / 5 },
+      shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 5 },
       damage: 22,
     } satisfies AttackAbility],
     animSet: "two-handed",
@@ -212,7 +212,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Crush",
       kind: "attack",
       cost: { red: 2 },
-      shape: { kind: "sector", radius: 70, halfAngle: Math.PI / 4 },
+      shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 4 },
       damage: 30,
       onHit: [{ type: "knockback", distance: 55 }],
     } satisfies AttackAbility, {
@@ -220,7 +220,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Swing",
       kind: "attack",
       cost: { red: 1 },
-      shape: { kind: "sector", radius: 60, halfAngle: Math.PI / 3 },
+      shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 3 },
       damage: 15,
       onHit: [{ type: "knockback", distance: 35 }],
     } satisfies AttackAbility],
@@ -301,14 +301,14 @@ export const ITEMS: Record<string, ItemDefinition> = {
       name: "Arcane Blast",
       kind: "attack",
       cost: { red: 2 },
-      shape: { kind: "circle", radius: 60, range: 200 },
+      shape: { kind: ShapeKind.Circle, radius: 60, range: 200 },
       damage: 25,
     } satisfies AttackAbility, {
       id: "staff-bolt",
       name: "Arcane Bolt",
       kind: "attack",
       cost: { red: 1 },
-      shape: { kind: "point", range: 160 },
+      shape: { kind: ShapeKind.Point, range: 160 },
       damage: 12,
     } satisfies AttackAbility],
     animSet: "staff",

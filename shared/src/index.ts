@@ -11,6 +11,7 @@ export * from "./map/hex-map.js";
 export * from "./map/hex-config.js";
 export * from "./map/pathfinding.js";
 export * from "./geometry/index.js";
+export * from "./combat/ability-cost.js";
 export * from "./combat/combat.js";
 export * from "./combat/turn-resolver.js";
 export * from "./combat/movement.js";

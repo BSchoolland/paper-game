@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
-import type { AttackAbility, Entity, GameEvent, GameState, Vec2 } from "shared";
-import { normalize, raycast } from "shared";
+import type { AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, Vec2 } from "shared";
+import { ShapeKind, normalize, raycast } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark } from "./sketch-utils.js";
 
@@ -179,7 +179,7 @@ export class EntityManager {
     const shape = ability.shape;
 
     switch (shape.kind) {
-      case "sector": {
+      case ShapeKind.Sector: {
         gfx.moveTo(pos.x, pos.y);
         drawRoughArc(
           gfx, pos.x, pos.y,
@@ -193,7 +193,7 @@ export class EntityManager {
         gfx.stroke({ color: FLASH_COLOR, alpha: 0.7, width: 1.5 });
         break;
       }
-      case "rectangle": {
+      case ShapeKind.Rectangle: {
         const perpX = -norm.y;
         const perpY = norm.x;
         const hw = shape.width / 2;
@@ -210,7 +210,7 @@ export class EntityManager {
         gfx.stroke({ color: FLASH_COLOR, alpha: 0.7, width: 1.5 });
         break;
       }
-      case "point": {
+      case ShapeKind.Point: {
         const result = raycast(
           pos, norm, shape.range,
           state.entities, state.grid,
@@ -226,13 +226,17 @@ export class EntityManager {
         }
         break;
       }
-      case "circle": {
+      case ShapeKind.Circle: {
         const targetX = pos.x + norm.x * shape.range;
         const targetY = pos.y + norm.y * shape.range;
         drawRoughArc(gfx, targetX, targetY, shape.radius, 0, Math.PI * 2, 1.5, 24, 83);
         gfx.fill({ color: FLASH_COLOR, alpha: 0.2 });
         gfx.stroke({ color: FLASH_COLOR, alpha: 0.7, width: 1.5 });
         break;
+      }
+      default: {
+        const _exhaustive: never = shape;
+        throw new Error(`Unhandled shape kind: ${(_exhaustive as CombatShapeDefinition).kind}`);
       }
     }
 

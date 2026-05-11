@@ -13,11 +13,18 @@ export interface GridState {
   readonly walls: Uint8Array;
 }
 
+export const enum ShapeKind {
+  Sector = "sector",
+  Rectangle = "rectangle",
+  Circle = "circle",
+  Point = "point",
+}
+
 export type CombatShapeDefinition =
-  | { kind: "sector"; radius: number; halfAngle: number }
-  | { kind: "rectangle"; length: number; width: number }
-  | { kind: "circle"; radius: number; range: number }
-  | { kind: "point"; range: number };
+  | { kind: ShapeKind.Sector; radius: number; halfAngle: number }
+  | { kind: ShapeKind.Rectangle; length: number; width: number }
+  | { kind: ShapeKind.Circle; radius: number; range: number }
+  | { kind: ShapeKind.Point; range: number };
 
 export type WeaponEffect =
   | { type: "knockback"; distance: number };
@@ -159,7 +166,7 @@ export const INNATE_PUNCH: AttackAbility = {
   name: "Punch",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "sector", radius: 50, halfAngle: Math.PI / 4 },
+  shape: { kind: ShapeKind.Sector, radius: 50, halfAngle: Math.PI / 4 },
   damage: 10,
 };
 
@@ -172,7 +179,7 @@ export const SHORT_SWORD_SLASH: AttackAbility = {
   name: "Slash",
   kind: "attack",
   cost: { red: 2 },
-  shape: { kind: "sector", radius: 80, halfAngle: Math.PI / 3 },
+  shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
   damage: 25,
   onHit: [{ type: "knockback", distance: 30 }],
 };
@@ -182,7 +189,7 @@ export const SHORT_SWORD_STAB: AttackAbility = {
   name: "Stab",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "rectangle", length: 70, width: 15 },
+  shape: { kind: ShapeKind.Rectangle, length: 70, width: 15 },
   damage: 15,
 };
 
@@ -191,7 +198,7 @@ export const SPEAR_THRUST: AttackAbility = {
   name: "Thrust",
   kind: "attack",
   cost: { red: 2 },
-  shape: { kind: "rectangle", length: 140, width: 20 },
+  shape: { kind: ShapeKind.Rectangle, length: 140, width: 20 },
   damage: 30,
   onHit: [{ type: "knockback", distance: 25 }],
 };
@@ -201,7 +208,7 @@ export const SPEAR_JAB: AttackAbility = {
   name: "Jab",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "rectangle", length: 110, width: 15 },
+  shape: { kind: ShapeKind.Rectangle, length: 110, width: 15 },
   damage: 15,
 };
 
@@ -210,7 +217,7 @@ export const BOW_SHOT: AttackAbility = {
   name: "Shot",
   kind: "attack",
   cost: { red: 2 },
-  shape: { kind: "point", range: 300 },
+  shape: { kind: ShapeKind.Point, range: 300 },
   damage: 20,
   ignoreCoverRange: 40,
 };
@@ -220,7 +227,7 @@ export const BOW_SNAP_SHOT: AttackAbility = {
   name: "Snap Shot",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "point", range: 180 },
+  shape: { kind: ShapeKind.Point, range: 180 },
   damage: 10,
 };
 
@@ -231,7 +238,7 @@ export const GOBLIN_SPEAR_THRUST: AttackAbility = {
   name: "Spear Thrust",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "rectangle", length: 100, width: 18 },
+  shape: { kind: ShapeKind.Rectangle, length: 100, width: 18 },
   damage: 25,
   onHit: [{ type: "knockback", distance: 20 }],
 };
@@ -241,7 +248,7 @@ export const GOBLIN_BOW_SHOT: AttackAbility = {
   name: "Bow Shot",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "point", range: 260 },
+  shape: { kind: ShapeKind.Point, range: 260 },
   damage: 15,
 };
 
@@ -250,7 +257,7 @@ export const SHIELD_BASH_ATTACK: AttackAbility = {
   name: "Shield Bash",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "sector", radius: 60, halfAngle: Math.PI / 4 },
+  shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 4 },
   damage: 15,
   onHit: [{ type: "knockback", distance: 45 }],
 };
@@ -260,7 +267,7 @@ export const BRUTE_SLAM_ATTACK: AttackAbility = {
   name: "Brute Slam",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "sector", radius: 90, halfAngle: Math.PI / 2 },
+  shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 2 },
   damage: 40,
   onHit: [{ type: "knockback", distance: 50 }],
 };
@@ -270,7 +277,7 @@ export const GOLEM_SMASH_ATTACK: AttackAbility = {
   name: "Golem Smash",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "circle", radius: 70, range: 60 },
+  shape: { kind: ShapeKind.Circle, radius: 70, range: 60 },
   damage: 50,
   onHit: [{ type: "knockback", distance: 60 }],
 };
@@ -280,7 +287,7 @@ export const SLIME_SPIT_ATTACK: AttackAbility = {
   name: "Slime Spit",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "point", range: 180 },
+  shape: { kind: ShapeKind.Point, range: 180 },
   damage: 12,
 };
 
@@ -289,7 +296,7 @@ export const SLIME_LASH_ATTACK: AttackAbility = {
   name: "Slime Lash",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "sector", radius: 70, halfAngle: Math.PI / 3 },
+  shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 3 },
   damage: 20,
   onHit: [{ type: "knockback", distance: 20 }],
 };
@@ -299,7 +306,7 @@ export const SLIME_WAVE_ATTACK: AttackAbility = {
   name: "Slime Wave",
   kind: "attack",
   cost: { red: 1 },
-  shape: { kind: "circle", radius: 80, range: 50 },
+  shape: { kind: ShapeKind.Circle, radius: 80, range: 50 },
   damage: 35,
   onHit: [{ type: "knockback", distance: 35 }],
 };

@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Sprite, Text } from "pixi.js";
-import type { AttackAbility, GameEvent, GridState, MoveAbility, Vec2 } from "shared";
-import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, computeMoveCost } from "shared";
+import type { AttackAbility, GameEvent, GridState, Vec2 } from "shared";
+import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, getAbilityCost } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
   createBackground,
@@ -194,7 +194,7 @@ export class GameRenderer {
       drawMovePreview(this.moveGfx, entity, mouseWorld, state);
       const clamped = clampToMovementRange(entity, mouseWorld);
       const dist = distance(entity.position, clamped);
-      const moveCost = computeMoveCost(selectedAbility as MoveAbility, dist);
+      const moveCost = getAbilityCost(selectedAbility, { distance: dist });
       const cost = Math.min(moveCost.blue ?? 0, entity.energy.blue);
       this.showCostLabel(entity, cost, entity.energy.blue, "#2980b9");
     }
