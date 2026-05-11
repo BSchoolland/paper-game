@@ -237,7 +237,8 @@ export class AbilityBar {
     const imageRegion = this.getRegion("image");
     if (imageRegion && sourceItem) {
       const img = document.createElement("img");
-      img.src = `sprites/items/${sourceItem.sprite}.webp`;
+      const dimPrefix = sourceItem.dimensionId === 0 ? "" : `dimension-${sourceItem.dimensionId}/`;
+      img.src = `sprites/items/${dimPrefix}${sourceItem.sprite}.webp`;
       img.style.cssText = `
         position: absolute;
         left: ${imageRegion.x * s}px;
