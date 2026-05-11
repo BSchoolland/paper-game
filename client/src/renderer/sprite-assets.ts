@@ -60,6 +60,9 @@ export interface DimensionManifest {
   id: number;
   name: string;
   spritePaths: string[];
+  structureSprites: Record<string, string>;
+  itemSprites: Record<string, string>;
+  backgroundPath: string | null;
 }
 
 export async function loadDimensionSprites(dimensionId: number): Promise<DimensionManifest> {
@@ -72,11 +75,24 @@ export async function loadDimensionSprites(dimensionId: number): Promise<Dimensi
   for (const path of manifest.spritePaths) {
     entries.push({ alias: path, src: `${SERVER_BASE}${path}` });
   }
+  for (const [name, path] of Object.entries(manifest.structureSprites)) {
+    entries.push({ alias: `map-${name}`, src: path });
+  }
+  for (const [spriteId, path] of Object.entries(manifest.itemSprites)) {
+    entries.push({ alias: `item-${spriteId}`, src: path });
+  }
+  if (manifest.backgroundPath) {
+    entries.push({ alias: "map-background", src: manifest.backgroundPath });
+  }
 
   if (entries.length > 0) {
     await Assets.load(entries);
     for (const path of manifest.spritePaths) {
       enemyTextures.set(path, Assets.get(path));
+    }
+    for (const spriteId of Object.keys(manifest.itemSprites)) {
+      const tex = Assets.get<Texture>(`item-${spriteId}`);
+      if (tex) itemTextures.set(spriteId, tex);
     }
   }
 

@@ -1,0 +1,29 @@
+{
+  "id": 4,
+  "name": "The Hammerwood",
+  "description": "A dimension of dense, dark forest lit from below by veins of molten amber running through the soil. The trees are iron-hard — trunks ringed with natural metallic bands that resonate when struck. Everything here is about impact: woodpeckers the size of wolves hammer at the trunks, the ground shakes with the footsteps of massive foraging beasts, and the local predators kill by ramming, stomping, and crushing.",
+  "palette": {
+    "primary": "#1f357f",
+    "secondary": "#ed8b53",
+    "accent": "#7cd043"
+  },
+  "mood": "Dense and percussive. You hear this dimension before you see it — constant hammering, cracking, thumping. The canopy blocks most light, but the amber veins below cast everything in a warm orange underglow.",
+  "biome": "metallic old-growth forest with magma-amber underbelly",
+  "inspirationSeeds": {
+    "colors": ["dark azure (#1f357f)", "light red (#ed8b53)", "chartreuse (#7cd043)"],
+    "nouns": ["cob", "step-daughter", "ring", "brake", "peen"]
+  },
+  "enemyThemes": {
+    "fodder": "Iron beetles — small armored insects that charge in packs and slam into targets",
+    "ranged": "Sap spitters — tree-dwelling creatures that launch globs of molten amber that harden and slow",
+    "melee": "Hammerbeaks — wolf-sized woodpecker beasts with devastating pecking strikes",
+    "elite": "Ring stags — massive elk-like creatures with metallic antler rings that charge and gore",
+    "boss": "The Ironbark — a colossal tree-beast that has fused with the forest itself, slamming root-fists and raining down iron-hard branches"
+  },
+  "mechanicalIdentity": "Brute physical force with a tempo mechanic. Enemies telegraph big hits with windup, but when they connect the damage and knockback are extreme. Sap/amber creates slowed zones. The forest itself feels like a weapon — dense structures force tight corridors where getting charged is lethal.",
+  "structureThemes": {
+    "decorations": "Ironbark tree trunks, glowing amber veins in the ground, metallic ferns, shattered bark plates, beetle burrows, resonating stumps",
+    "walls": "Fallen ironbark logs, hardened amber pools, dense root tangles, metallic boulder clusters, bark-plate barriers"
+  },
+  "itemThemes": "Forged from the forest's own materials — ironbark clubs and hammers, amber-encased blades, beetle-chitin armor pieces, resonance chimes that stun, and sap flasks that create sticky traps"
+}

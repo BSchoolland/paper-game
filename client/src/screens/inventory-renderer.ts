@@ -42,15 +42,17 @@ export class InventoryRenderer {
     this.onSpriteLoad = onSpriteLoad;
   }
 
-  loadSprite(spriteId: string): HTMLImageElement | null {
-    if (this.spriteImages.has(spriteId)) {
-      const img = this.spriteImages.get(spriteId)!;
+  loadSprite(spriteId: string, dimensionId: number): HTMLImageElement | null {
+    const key = `${dimensionId}/${spriteId}`;
+    if (this.spriteImages.has(key)) {
+      const img = this.spriteImages.get(key)!;
       return img.naturalWidth > 0 ? img : null;
     }
     const img = new Image();
-    img.src = `sprites/items/${spriteId}.webp`;
+    const dimPrefix = dimensionId === 0 ? "" : `dimension-${dimensionId}/`;
+    img.src = `sprites/items/${dimPrefix}${spriteId}.webp`;
     img.onload = () => this.onSpriteLoad();
-    this.spriteImages.set(spriteId, img);
+    this.spriteImages.set(key, img);
     return null;
   }
 
@@ -108,7 +110,7 @@ export class InventoryRenderer {
       const item = state.inventory.equipped[i]!;
       const pos = state.positions.get(item.id);
       if (!pos) continue;
-      const sprite = this.loadSprite(item.sprite);
+      const sprite = this.loadSprite(item.sprite, item.dimensionId);
       const { w, h } = getItemSize(pos, item, sprite);
       const now = performance.now();
       if (now - this._lastLogTime > 2000) {
@@ -172,7 +174,7 @@ export class InventoryRenderer {
   }
 
   private drawSelection(ctx: CanvasRenderingContext2D, pos: ItemPosition, item: ItemDefinition) {
-    const sprite = this.loadSprite(item.sprite);
+    const sprite = this.loadSprite(item.sprite, item.dimensionId);
     const { w, h } = getItemSize(pos, item, sprite);
 
     ctx.save();
@@ -231,7 +233,7 @@ export class InventoryRenderer {
       if (!item) continue;
 
       const equipable = canEquip(state.inventory.equipped, item);
-      const img = this.loadSprite(item.sprite);
+      const img = this.loadSprite(item.sprite, item.dimensionId);
 
       if (!equipable) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.15)";

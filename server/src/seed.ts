@@ -210,32 +210,37 @@ const ENEMY_TEMPLATES: Record<string, UnitTemplate> = {
 
 // --- Dimension 0 Structures ---
 
+function dim0Sprite(folder: string, name: string): string {
+  const sub = folder ? `${folder}/` : "";
+  return `sprites/map-objects/${sub}${name}.webp`;
+}
+
 const DIMENSION_0_STRUCTURES: StructureEntry[] = [
-  { name: "tree-oak-small", category: "decoration", cost: 1, scale: 0.35 },
-  { name: "tree-oak-medium", category: "decoration", cost: 2, scale: 0.4 },
-  { name: "tree-oak-large", category: "decoration", cost: 3, scale: 0.45 },
-  { name: "tree-pine", category: "decoration", cost: 2, scale: 0.45 },
-  { name: "bush-small", category: "decoration", cost: 1, scale: 0.3 },
-  { name: "bush-medium", category: "decoration", cost: 1, scale: 0.35 },
-  { name: "bush-large", category: "decoration", cost: 2, scale: 0.35 },
-  { name: "grass-small", category: "decoration", cost: 1, scale: 0.25 },
-  { name: "grass-medium", category: "decoration", cost: 1, scale: 0.25 },
-  { name: "grass-large", category: "decoration", cost: 1, scale: 0.3 },
-  { name: "rock-small", category: "decoration", cost: 1, scale: 0.25 },
-  { name: "rock-medium", category: "decoration", cost: 2, scale: 0.3 },
-  { name: "rock-large", category: "decoration", cost: 3, scale: 0.35 },
-  { name: "rock-pile", category: "decoration", cost: 2, scale: 0.3 },
-  { name: "ruins-rubble", category: "decoration", cost: 2, scale: 0.35 },
-  { name: "stone-block", category: "wall", cost: 2, scale: 0.25 },
-  { name: "stone-brick", category: "wall", cost: 2, scale: 0.25 },
-  { name: "stone-pillar", category: "wall", cost: 3, scale: 0.3 },
-  { name: "wall-corner", category: "wall", cost: 3, scale: 0.3 },
-  { name: "wall-enclosure", category: "wall", cost: 4, scale: 0.35 },
-  { name: "wall-long", category: "wall", cost: 3, scale: 0.3 },
-  { name: "wall-medium", category: "wall", cost: 2, scale: 0.3 },
-  { name: "wall-short", category: "wall", cost: 1, scale: 0.25 },
-  { name: "wall-t-junction", category: "wall", cost: 3, scale: 0.3 },
-  { name: "wall-u-shape", category: "wall", cost: 3, scale: 0.3 },
+  { name: "tree-oak-small", category: "decoration", cost: 1, scale: 0.35, spritePath: dim0Sprite("plants", "tree-oak-small") },
+  { name: "tree-oak-medium", category: "decoration", cost: 2, scale: 0.4, spritePath: dim0Sprite("plants", "tree-oak-medium") },
+  { name: "tree-oak-large", category: "decoration", cost: 3, scale: 0.45, spritePath: dim0Sprite("plants", "tree-oak-large") },
+  { name: "tree-pine", category: "decoration", cost: 2, scale: 0.45, spritePath: dim0Sprite("plants", "tree-pine") },
+  { name: "bush-small", category: "decoration", cost: 1, scale: 0.3, spritePath: dim0Sprite("plants", "bush-small") },
+  { name: "bush-medium", category: "decoration", cost: 1, scale: 0.35, spritePath: dim0Sprite("plants", "bush-medium") },
+  { name: "bush-large", category: "decoration", cost: 2, scale: 0.35, spritePath: dim0Sprite("plants", "bush-large") },
+  { name: "grass-small", category: "decoration", cost: 1, scale: 0.25, spritePath: dim0Sprite("plants", "grass-small") },
+  { name: "grass-medium", category: "decoration", cost: 1, scale: 0.25, spritePath: dim0Sprite("plants", "grass-medium") },
+  { name: "grass-large", category: "decoration", cost: 1, scale: 0.3, spritePath: dim0Sprite("plants", "grass-large") },
+  { name: "rock-small", category: "decoration", cost: 1, scale: 0.25, spritePath: dim0Sprite("rocks", "rock-small") },
+  { name: "rock-medium", category: "decoration", cost: 2, scale: 0.3, spritePath: dim0Sprite("rocks", "rock-medium") },
+  { name: "rock-large", category: "decoration", cost: 3, scale: 0.35, spritePath: dim0Sprite("rocks", "rock-large") },
+  { name: "rock-pile", category: "decoration", cost: 2, scale: 0.3, spritePath: dim0Sprite("rocks", "rock-pile") },
+  { name: "ruins-rubble", category: "decoration", cost: 2, scale: 0.35, spritePath: dim0Sprite("", "ruins-rubble") },
+  { name: "stone-block", category: "wall", cost: 2, scale: 0.25, spritePath: dim0Sprite("walls", "stone-block") },
+  { name: "stone-brick", category: "wall", cost: 2, scale: 0.25, spritePath: dim0Sprite("walls", "stone-brick") },
+  { name: "stone-pillar", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "stone-pillar") },
+  { name: "wall-corner", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-corner") },
+  { name: "wall-enclosure", category: "wall", cost: 4, scale: 0.35, spritePath: dim0Sprite("walls", "wall-enclosure") },
+  { name: "wall-long", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-long") },
+  { name: "wall-medium", category: "wall", cost: 2, scale: 0.3, spritePath: dim0Sprite("walls", "wall-medium") },
+  { name: "wall-short", category: "wall", cost: 1, scale: 0.25, spritePath: dim0Sprite("walls", "wall-short") },
+  { name: "wall-t-junction", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-t-junction") },
+  { name: "wall-u-shape", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-u-shape") },
 ];
 
 // --- Weapon Abilities (dimension 0) ---
@@ -314,6 +319,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A light blade suited for quick strikes.",
     rarity: "common",
     sprite: "short-sword",
+    dimensionId: 0,
     slotCost: { hand: 1 },
     abilities: [SHORT_SWORD_SLASH, SHORT_SWORD_STAB],
     animSet: "sword",
@@ -326,6 +332,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A versatile blade with good reach and damage.",
     rarity: "uncommon",
     sprite: "long-sword",
+    dimensionId: 0,
     slotCost: { hand: 1 },
     abilities: [{
       id: "long-sword-slash",
@@ -362,6 +369,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A long polearm with superior reach.",
     rarity: "common",
     sprite: "spear",
+    dimensionId: 0,
     slotCost: { hand: 1 },
     abilities: [SPEAR_THRUST, SPEAR_JAB],
     animSet: "spear",
@@ -373,6 +381,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A brutal chopping weapon that hits hard.",
     rarity: "common",
     sprite: "axe",
+    dimensionId: 0,
     slotCost: { hand: 1 },
     abilities: [{
       id: "axe-chop",
@@ -402,6 +411,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A ranged weapon that fires arrows at distant targets.",
     rarity: "common",
     sprite: "bow",
+    dimensionId: 0,
     slotCost: { hand: 2 },
     abilities: [BOW_SHOT, {
       id: "bow-piercing-arrow",
@@ -421,6 +431,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A heavy blade with a wide sweeping arc.",
     rarity: "uncommon",
     sprite: "broadsword",
+    dimensionId: 0,
     slotCost: { hand: 1 },
     abilities: [{
       id: "broadsword-sweep",
@@ -458,6 +469,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A massive axe that cleaves through armor.",
     rarity: "rare",
     sprite: "battle-axe",
+    dimensionId: 0,
     slotCost: { hand: 2 },
     abilities: [{
       id: "battle-axe-cleave",
@@ -495,6 +507,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A spiked bludgeon that delivers crushing blows.",
     rarity: "uncommon",
     sprite: "mace",
+    dimensionId: 0,
     slotCost: { hand: 1 },
     abilities: [{
       id: "mace-crush",
@@ -532,6 +545,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A simple wooden shield that blocks incoming damage.",
     rarity: "common",
     sprite: "round-shield",
+    dimensionId: 0,
     slotCost: { hand: 1 },
     abilities: [{
       id: "round-shield-block",
@@ -557,6 +571,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A sturdy metal shield offering strong protection.",
     rarity: "uncommon",
     sprite: "kite-shield",
+    dimensionId: 0,
     slotCost: { hand: 1 },
     abilities: [{
       id: "kite-shield-block",
@@ -588,6 +603,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A small, light shield for parrying attacks.",
     rarity: "common",
     sprite: "buckler",
+    dimensionId: 0,
     slotCost: { hand: 1 },
     abilities: [{
       id: "buckler-block",
@@ -613,6 +629,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A leather quiver that improves ranged accuracy.",
     rarity: "common",
     sprite: "quiver",
+    dimensionId: 0,
     slotCost: { accessory: 1 },
     statBonus: { damage: 5 },
   },
@@ -623,6 +640,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A magical staff that channels arcane energy.",
     rarity: "rare",
     sprite: "staff",
+    dimensionId: 0,
     slotCost: { hand: 1, utility: 1 },
     abilities: [{
       id: "staff-blast",
@@ -659,6 +677,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "An ancient tome that bolsters the wielder's power.",
     rarity: "rare",
     sprite: "spellbook",
+    dimensionId: 0,
     slotCost: { accessory: 1 },
     statBonus: { damage: 10 },
   },
@@ -669,6 +688,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "A red brew that restores health when consumed.",
     rarity: "common",
     sprite: "potion",
+    dimensionId: 0,
     slotCost: { utility: 1 },
     effect: { kind: "heal", amount: 50 },
   },
@@ -679,6 +699,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     description: "An explosive device that damages all nearby enemies.",
     rarity: "uncommon",
     sprite: "bomb",
+    dimensionId: 0,
     slotCost: { utility: 1 },
     effect: { kind: "damage", amount: 40, radius: 80 },
   },
@@ -689,7 +710,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
 export function seedDimension0(): void {
   if (getDimensionCount() > 0) return;
 
-  saveDimension(0, "Greenlands", DIMENSION_0_STRUCTURES);
+  saveDimension(0, "Greenlands", DIMENSION_0_STRUCTURES, "sprites/map-objects/backgrounds/background-grass.png");
   saveEnemyTemplates(0, ENEMY_TEMPLATES);
   saveItems(0, DIMENSION_0_ITEMS);
 }

@@ -1,0 +1,29 @@
+{
+  "id": 1,
+  "name": "The Shallows",
+  "description": "A dimension of vast tidal flats, bioluminescent river deltas, and crumbling stone turrets half-submerged in warm, brackish water. The ground shifts between sandy ridges and shallow pools that glow faintly teal at night. Creatures here are adapted to the water — armored crustaceans, venomous jellyfish-like drifters, and territorial river predators that strike fast and retreat into the current.",
+  "palette": {
+    "primary": "#35e3a9",
+    "secondary": "#367dbe",
+    "accent": "#a47243"
+  },
+  "mood": "Eerie calm punctuated by sudden violence. The water looks peaceful but everything beneath it stings, grabs, or drags you under.",
+  "biome": "tidal flats and flooded ruins",
+  "inspirationSeeds": {
+    "colors": ["spring (#35e3a9)", "cyan (#367dbe)", "red (#a47243)"],
+    "nouns": ["stinger", "bather", "turret", "riverbed", "kick"]
+  },
+  "enemyThemes": {
+    "fodder": "Small darting fish or crabs that swarm in numbers",
+    "ranged": "Jellyfish-like creatures that spit venom from a distance",
+    "melee": "Armored crustaceans with powerful claws",
+    "elite": "River predators — large snapping turtles or mantis shrimp that hit devastatingly hard",
+    "boss": "A massive ancient crustacean or tidal horror entrenched in a ruined turret"
+  },
+  "mechanicalIdentity": "Status effects — poison and slow from venomous stingers, pulls from creatures that drag you into the water. Less knockback than dimension 0, more about controlling the player's position and whittling them down.",
+  "structureThemes": {
+    "decorations": "Coral formations, tide pools, river reeds, driftwood, barnacle-covered stones, glowing algae patches",
+    "walls": "Eroded sandstone blocks, flooded turret remnants, coral walls, waterlogged wooden barriers"
+  },
+  "itemThemes": "Salvaged from the ruins and the creatures themselves — chitin weapons, coral-tipped spears, venomous barbs, shell shields, tidal charms"
+}

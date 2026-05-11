@@ -28,14 +28,15 @@ async function init() {
   const container = document.getElementById("game-container")!;
   container.appendChild(app.canvas);
 
-  await Promise.all([loadSpriteAssets(), loadMapAssets(), loadMapIconAssets()]);
-  await loadDimensionSprites(0);
-
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode") === "pvp" ? "pvp" : "pve";
+  const dim = parseInt(params.get("dim") ?? "0", 10) || 0;
+
+  await Promise.all([loadSpriteAssets(), loadMapAssets(), loadMapIconAssets()]);
+  await loadDimensionSprites(dim);
 
   const conn = new Connection(
-    `ws://${window.location.hostname}:3001/ws?mode=${mode}`
+    `ws://${window.location.hostname}:3001/ws?mode=${mode}&dim=${dim}`
   );
   const combatStore = new CombatStore(conn);
 

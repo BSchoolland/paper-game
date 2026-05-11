@@ -1,0 +1,29 @@
+{
+  "id": 2,
+  "name": "The Vagrant Reach",
+  "description": "A dimension of impossible geometry — floating rings of violet stone orbit a central void where time moves at different speeds. Wandering nomads have built rickety camps on the rims of these rings, but something has corrupted them. Clockwork mechanisms embedded in the stone tick at wrong intervals, and the plant life pulses with an eerie green glow, growing in bursts then withering in seconds.",
+  "palette": {
+    "primary": "#be69cf",
+    "secondary": "#6199c0",
+    "accent": "#15ae5f"
+  },
+  "mood": "Disorienting and melancholy. Time feels unreliable. Things that should be still are moving, and things that should move are frozen.",
+  "biome": "floating stone rings above a void",
+  "inspirationSeeds": {
+    "colors": ["light violet (#be69cf)", "light cyan (#6199c0)", "dark green (#15ae5f)"],
+    "nouns": ["vagrant", "rim", "mission", "chronograph", "eggplant"]
+  },
+  "enemyThemes": {
+    "fodder": "Time-stuttered vagrants — humanoid figures that blink between positions unpredictably",
+    "ranged": "Clockwork sentries embedded in the stone that fire timed energy pulses",
+    "melee": "Corrupted nomads wielding improvised weapons, moving in jerky fast-forward bursts",
+    "elite": "Chrono-warped beasts — creatures half-phased between moments, hitting from angles that shouldn't exist",
+    "boss": "The Chronolith — a massive clockwork golem fused with the ring's core, its attacks synced to a ticking rhythm"
+  },
+  "mechanicalIdentity": "Time manipulation — enemies that apply 'slowed' to players while hasting themselves, confused status effects that scramble ability targeting, and attacks that hit on a delay. Positional uncertainty is the core threat.",
+  "structureThemes": {
+    "decorations": "Floating stone fragments, flickering temporal crystals, withered-then-blooming plants, broken chronograph gears, nomad tent remnants",
+    "walls": "Cracked ring-stone barriers, frozen time-bubbles (translucent walls), collapsed clockwork pylons, stacked nomad barricades"
+  },
+  "itemThemes": "Scavenged clockwork components and temporal shards — gear-toothed blades, chrono-stabilizer charms, nomad wraps that resist time effects, and volatile temporal grenades"
+}

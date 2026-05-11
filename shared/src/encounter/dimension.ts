@@ -6,11 +6,13 @@ export interface StructureEntry {
   readonly category: MapObjectCategory;
   readonly cost: number;
   readonly scale: number;
+  readonly spritePath?: string;
 }
 
 export interface Dimension {
   readonly id: string;
   readonly name: string;
+  readonly backgroundPath: string | null;
   readonly enemies: readonly UnitTemplate[];
   readonly structures: readonly StructureEntry[];
 }

@@ -42,6 +42,7 @@ interface ItemBase {
   readonly description: string;
   readonly rarity: ItemRarity;
   readonly sprite: string;
+  readonly dimensionId: number;
   readonly slotCost: SlotCost;
   readonly visualScale?: number;
   readonly abilities?: readonly AbilityDefinition[];

@@ -1,0 +1,29 @@
+{
+  "id": 3,
+  "name": "The Siege Tombs",
+  "description": "A dimension of sunbaked pyramids and crumbling war-monuments stretching across an endless dusty plateau. The sky burns a hazy rose-red, and the ruins are scarred by some ancient siege that never ended — war machines still smolder, and the soldiers entombed here have not stopped fighting. Everything is massive in scale: towering obelisks, half-collapsed colosseums, and siege ramps carved into cliff faces.",
+  "palette": {
+    "primary": "#f16a6d",
+    "secondary": "#7a92d8",
+    "accent": "#3270e3"
+  },
+  "mood": "Oppressive grandeur. Everything was built to last forever and is now crumbling. The scale makes you feel small, and the undead garrison makes you feel unwelcome.",
+  "biome": "arid ruins and siege works",
+  "inspirationSeeds": {
+    "colors": ["light rose (#f16a6d)", "light azure (#7a92d8)", "azure (#3270e3)"],
+    "nouns": ["tosser", "juggernaut", "jeep", "pyramid", "abolishment"]
+  },
+  "enemyThemes": {
+    "fodder": "Tomb sentinels — skeletal soldiers with spears that patrol in rigid formations",
+    "ranged": "Siege throwers — undead artillerists that lob heavy projectiles in arcs",
+    "melee": "Entombed juggernauts — massive armored revenants that charge in straight lines",
+    "elite": "War chariots — spectral vehicle-rider pairs that trample across the battlefield",
+    "boss": "The Siege Pharaoh — an enormous undead commander atop a crumbling throne-platform, directing troops and raining down siege fire"
+  },
+  "mechanicalIdentity": "Raw force and area denial. Enemies hit very hard in straight lines and zones, with heavy knockback and area-of-effect attacks. Less status effects, more about avoiding devastating telegraphed strikes. Juggernauts push through the battlefield like battering rams.",
+  "structureThemes": {
+    "decorations": "Broken obelisks, scattered siege ammunition, burial urns, cracked sarcophagi, war banners on tilted poles, sand drifts",
+    "walls": "Pyramid stone blocks, siege barricades, toppled columns, sandstone ramparts, collapsed archways"
+  },
+  "itemThemes": "Weapons of war pulled from the tombs — heavy bronze khopeshes, siege crossbows, tower shields emblazoned with forgotten dynasties, war drums that bolster allies, and sealed canopic jars that explode with cursed energy"
+}

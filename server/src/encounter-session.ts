@@ -35,10 +35,11 @@ export class EncounterSession {
     animSet?: AnimSet,
     equipped?: readonly ItemDefinition[],
     attachments?: Record<string, AttachmentData>,
+    dimensionId: number = 0,
   ): Promise<EncounterSession> {
     if (mode === "pve" && hexType && hexCoord && runId !== undefined) {
-      const dimension = loadDimension(0)!;
-      const registry = loadEnemyTemplateRegistry(0);
+      const dimension = loadDimension(dimensionId)!;
+      const registry = loadEnemyTemplateRegistry(dimensionId);
       setTemplateRegistry(registry);
       const encounter = generateEncounter(hexType, dimension, hexCoord.q, hexCoord.r, runId);
       const map = buildEncounterMap(encounter);
@@ -49,7 +50,7 @@ export class EncounterSession {
 
     const map = buildScenarioMap(42);
     await loadCollisionGrid(map.grid, map.mapDefinition.objects);
-    const entities = mode === "pve" ? placePveEntities(map.grid, loadEnemyTemplateRegistry(0)) : placePvpEntities(map.grid);
+    const entities = mode === "pve" ? placePveEntities(map.grid, loadEnemyTemplateRegistry(dimensionId)) : placePvpEntities(map.grid);
     return new EncounterSession(assembleScenarioState(map, entities));
   }
 

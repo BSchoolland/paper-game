@@ -40,17 +40,14 @@ function objectFolder(name: string): string {
 }
 
 export async function loadMapAssets(): Promise<void> {
-  const entries = [
-    { alias: "map-background", src: "sprites/map-objects/backgrounds/background-grass.png" },
-    ...ALL_OBJECT_NAMES.map((name) => {
-      const folder = objectFolder(name);
-      const subpath = folder ? `${folder}/` : "";
-      return {
-        alias: `map-${name}`,
-        src: `sprites/map-objects/${subpath}${name}.webp`,
-      };
-    }),
-  ];
+  const entries = ALL_OBJECT_NAMES.map((name) => {
+    const folder = objectFolder(name);
+    const subpath = folder ? `${folder}/` : "";
+    return {
+      alias: `map-${name}`,
+      src: `sprites/map-objects/${subpath}${name}.webp`,
+    };
+  });
   await Assets.load(entries);
 }
 

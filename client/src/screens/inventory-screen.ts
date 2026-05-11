@@ -174,7 +174,7 @@ export class InventoryScreen implements Screen {
       setSelectedItemId: (id) => { this.selectedItemId = id; },
       getPositionById: (id) => this.positions.get(id),
       setPosition: (id, pos) => this.positions.set(id, pos),
-      loadSprite: (id) => this.renderer.loadSprite(id),
+      loadSprite: (id, dimId) => this.renderer.loadSprite(id, dimId),
       sendEquip: (bagIndex) => this.conn.send({ type: "equip", bagIndex }),
       sendUnequip: (idx) => this.conn.send({ type: "unequip", equippedIndex: idx }),
       deletePosition: (id) => this.positions.delete(id),
@@ -199,7 +199,7 @@ export class InventoryScreen implements Screen {
     const spriteX = (panelPos.x - charX) / scale;
     const spriteY = (panelPos.y - charY) / scale;
 
-    const spriteImg = this.renderer.loadSprite(item.sprite);
+    const spriteImg = this.renderer.loadSprite(item.sprite, item.dimensionId);
     const baseScale = item.visualScale ?? TYPE_BASE_SCALE[item.type] ?? 1;
     const charDrawH = charH * scale;
     let itemDrawH = TARGET_SIZE * baseScale * panelPos.scale;

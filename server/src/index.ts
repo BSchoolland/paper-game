@@ -14,7 +14,7 @@ import {
   getAnimSet,
   shouldAutoEndTurn,
 } from "shared";
-import type { HexCoord, HexMapState, HexIconType, InventoryState } from "shared";
+import type { HexCoord, HexMapState, HexIconType, InventoryState, ItemDefinition } from "shared";
 import { EncounterSession } from "./encounter-session.js";
 import {
   saveExploredHex,
@@ -27,32 +27,42 @@ import {
   loadItems,
 } from "./db.js";
 import { seedDimension0 } from "./seed.js";
+import { seedDimension1 } from "./seed-dimension-1.js";
 import { join } from "path";
 
 seedDiscovery(15);
 seedDimension0();
+seedDimension1();
 
 type GameMode = "pvp" | "pve";
 type Phase = "map" | "combat";
 
-const items = loadItems(0);
-const DEFAULT_INVENTORY = createInventory([
-  items["short-sword"]!,
-  items["long-sword"]!,
-  items["spear"]!,
-  items["axe"]!,
-  items["bow"]!,
-  items["broadsword"]!,
-  items["mace"]!,
-  items["round-shield"]!,
-  items["staff"]!,
-  items["potion"]!,
-  items["bomb"]!,
-]);
+// Dim 1 weapons mixed into starting inventory for playtesting (no loot system yet)
+const DIM1_STARTER_EXTRAS = ["coral-blade", "barbed-harpoon", "urchin-flail", "crab-claw-gauntlet"];
+
+function buildDefaultInventory(dimensionId: number): InventoryState {
+  const dimItems = loadItems(dimensionId);
+  const fallbackItems = dimensionId !== 0 ? loadItems(0) : dimItems;
+  const merged = { ...fallbackItems, ...dimItems };
+
+  // Prepend dim 1 starter weapons so they don't get truncated past BAG_SIZE
+  const dim1Items = loadItems(1);
+  const starters: ItemDefinition[] = [];
+  for (const id of DIM1_STARTER_EXTRAS) {
+    const item = dim1Items[id];
+    if (item) {
+      starters.push(item);
+      delete merged[id];
+    }
+  }
+
+  return createInventory([...starters, ...Object.values(merged)]);
+}
 
 interface SocketData {
   team: TeamId | null;
   mode: GameMode;
+  dimensionId: number;
   hexMap: HexMapState;
   phase: Phase;
   pendingHex: HexCoord | null;
@@ -188,16 +198,18 @@ Bun.serve({
     }
     if (url.pathname === "/ws") {
       const mode = (url.searchParams.get("mode") as GameMode) || "pvp";
+      const dimensionId = parseInt(url.searchParams.get("dim") ?? "0", 10) || 0;
       const upgraded = server.upgrade(req, {
         data: {
           team: null,
           mode,
+          dimensionId,
           hexMap: loadHexMapFromDb(),
           phase: (mode === "pve" ? "map" : "combat") as Phase,
           pendingHex: null,
           visitedThisRun: freshVisitedSet(),
           runId: startNewRun(),
-          inventory: DEFAULT_INVENTORY,
+          inventory: buildDefaultInventory(dimensionId),
         },
       });
       if (!upgraded)
@@ -236,10 +248,23 @@ Bun.serve({
           }
         }
       }
+      const structureSprites: Record<string, string> = {};
+      for (const s of dimension.structures) {
+        if (s.spritePath) structureSprites[s.name] = s.spritePath;
+      }
+      const dimItems = loadItems(dimId);
+      const itemSprites: Record<string, string> = {};
+      for (const item of Object.values(dimItems)) {
+        const prefix = item.dimensionId === 0 ? "" : `dimension-${item.dimensionId}/`;
+        itemSprites[item.sprite] = `sprites/items/${prefix}${item.sprite}.webp`;
+      }
       return Response.json({
         id: dimId,
         name: dimension.name,
         spritePaths,
+        structureSprites,
+        itemSprites,
+        backgroundPath: dimension.backgroundPath,
       }, { headers: CORS_HEADERS });
     }
 
@@ -330,7 +355,7 @@ Bun.serve({
             ?? (isDecorationHex(target) ? "dense-wilderness" : "wilderness");
           const itemAbilities = getItemAbilities(ws.data.inventory.equipped);
           const animSet = getAnimSet(ws.data.inventory.equipped);
-          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId, itemAbilities, animSet, ws.data.inventory.equipped, ws.data.inventory.attachments);
+          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId, itemAbilities, animSet, ws.data.inventory.equipped, ws.data.inventory.attachments, ws.data.dimensionId);
           console.log(`encounter run=${ws.data.runId} hex=(${target.q},${target.r}) type=${hexType}`);
           sendTo(ws, { type: "hexCombatStart" });
           sendTo(ws, {

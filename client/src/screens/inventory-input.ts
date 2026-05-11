@@ -23,7 +23,7 @@ export interface InputCallbacks {
   setSelectedItemId(id: string | null): void;
   getPositionById(id: string): ItemPosition | undefined;
   setPosition(id: string, pos: ItemPosition): void;
-  loadSprite(spriteId: string): HTMLImageElement | null;
+  loadSprite(spriteId: string, dimensionId: number): HTMLImageElement | null;
   sendEquip(bagIndex: number): void;
   sendUnequip(equippedIndex: number): void;
   deletePosition(id: string): void;
@@ -100,7 +100,7 @@ export class InventoryInput {
   }
 
   private hitTestItem(x: number, y: number, pos: ItemPosition, item: ItemDefinition): boolean {
-    const sprite = this.cb.loadSprite(item.sprite);
+    const sprite = this.cb.loadSprite(item.sprite, item.dimensionId);
     const { w, h } = getItemSize(pos, item, sprite);
     const dx = x - pos.x;
     const dy = y - pos.y;
@@ -118,7 +118,7 @@ export class InventoryInput {
   }
 
   private hitRotateHandle(mx: number, my: number, pos: ItemPosition, item: ItemDefinition): boolean {
-    const sprite = this.cb.loadSprite(item.sprite);
+    const sprite = this.cb.loadSprite(item.sprite, item.dimensionId);
     const { h } = getItemSize(pos, item, sprite);
     const hp = getRotateHandlePos(pos, h);
     const dx = mx - hp.x;

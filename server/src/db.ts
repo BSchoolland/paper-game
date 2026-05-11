@@ -20,7 +20,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS dimensions (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
-    structures_json TEXT NOT NULL DEFAULT '[]'
+    structures_json TEXT NOT NULL DEFAULT '[]',
+    background_path TEXT
   )
 `);
 db.exec(`
@@ -96,7 +97,7 @@ export function seedDiscovery(radius: number): void {
 // --- Dimension & Enemy Template Queries ---
 
 const insertDimensionStmt = db.prepare(
-  "INSERT OR REPLACE INTO dimensions (id, name, structures_json) VALUES (?, ?, ?)"
+  "INSERT OR REPLACE INTO dimensions (id, name, structures_json, background_path) VALUES (?, ?, ?, ?)"
 );
 const getDimensionStmt = db.prepare("SELECT * FROM dimensions WHERE id = ?");
 
@@ -113,9 +114,10 @@ const getEnemyTemplateStmt = db.prepare(
 export function saveDimension(
   id: number,
   name: string,
-  structures: readonly StructureEntry[]
+  structures: readonly StructureEntry[],
+  backgroundPath?: string,
 ): void {
-  insertDimensionStmt.run(id, name, JSON.stringify(structures));
+  insertDimensionStmt.run(id, name, JSON.stringify(structures), backgroundPath ?? null);
 }
 
 export function saveEnemyTemplate(
@@ -143,6 +145,7 @@ export function loadDimension(dimensionId: number): Dimension | null {
     id: number;
     name: string;
     structures_json: string;
+    background_path: string | null;
   } | null;
   if (!row) return null;
 
@@ -155,6 +158,7 @@ export function loadDimension(dimensionId: number): Dimension | null {
   return {
     id: `dimension-${row.id}`,
     name: row.name,
+    backgroundPath: row.background_path,
     enemies: templates.map((t) => JSON.parse(t.template_json) as UnitTemplate),
     structures: JSON.parse(row.structures_json) as StructureEntry[],
   };
