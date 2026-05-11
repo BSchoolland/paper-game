@@ -1,5 +1,5 @@
 import type { GameState, PlayerAction } from "shared";
-import { resolveAction } from "shared";
+import { resolveAction, shouldAutoEndTurn } from "shared";
 
 type Listener = () => void;
 
@@ -28,6 +28,12 @@ export class LocalGameStore implements GameStore {
     const result = resolveAction(this.state, action);
     if (result.state !== this.state) {
       this.state = result.state;
+      if (action.type !== "endTurn" && !this.state.winner && shouldAutoEndTurn(this.state)) {
+        const endResult = resolveAction(this.state, { type: "endTurn" });
+        if (endResult.state !== this.state) {
+          this.state = endResult.state;
+        }
+      }
       this.notify();
     }
   }

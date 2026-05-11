@@ -1,4 +1,4 @@
-import type { AbilityDefinition, EnergyCost, Entity, MoveAbility } from "../core/types.js";
+import type { AbilityDefinition, EnergyCost, Entity, GameState, MoveAbility } from "../core/types.js";
 
 export interface AbilityCostContext {
   readonly distance?: number;
@@ -24,5 +24,15 @@ export function canAffordAbility(entity: Entity, ability: AbilityDefinition): bo
   const min = getMinAbilityCost(ability);
   if ((min.red ?? 0) > entity.energy.red) return false;
   if ((min.blue ?? 0) > entity.energy.blue) return false;
+  return true;
+}
+
+export function shouldAutoEndTurn(state: GameState): boolean {
+  for (const entity of state.entities.values()) {
+    if (entity.teamId !== state.activeTeam || entity.dead) continue;
+    for (const ability of entity.abilities) {
+      if (canAffordAbility(entity, ability)) return false;
+    }
+  }
   return true;
 }

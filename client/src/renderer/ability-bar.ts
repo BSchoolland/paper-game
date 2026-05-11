@@ -153,8 +153,6 @@ export class AbilityBar {
       allCards.push({ el: this.createCard(ability, entity, sourceItem), selected });
     }
 
-    this.renderEndTurnButton();
-
     const count = allCards.length;
     const fanRadius = 2400;
     const liftAmount = 30;
@@ -327,7 +325,4 @@ export class AbilityBar {
     return "";
   }
 
-  private renderEndTurnButton() {
-    // Button is pre-created in constructor; visibility managed by show/hide
-  }
 }

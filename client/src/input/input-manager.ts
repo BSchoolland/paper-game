@@ -84,7 +84,6 @@ export class InputManager {
 
     document.addEventListener("keydown", (e) => {
       if (!this.enabled) return;
-      if (e.key === "e" || e.key === "E") this.clientState.endTurn();
       if (e.key === "r" || e.key === "R") this.clientState.reset();
       if (e.key === "Escape") this.clientState.selectAbility(null);
       if (e.key === "F3") {

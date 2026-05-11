@@ -13,6 +13,7 @@ import {
   getItemAbilities,
   getAnimSet,
   ITEMS,
+  shouldAutoEndTurn,
 } from "shared";
 import type { HexCoord, HexMapState, HexIconType, InventoryState } from "shared";
 import { EncounterSession } from "./encounter-session.js";
@@ -289,7 +290,14 @@ Bun.serve({
       if (msg.type === "action") {
         const { changed, events } = session.applyAction(msg.action);
         if (changed) {
-          broadcastState(events);
+          let allEvents = events;
+          if (msg.action.type !== "endTurn" && !session.state.winner && shouldAutoEndTurn(session.state)) {
+            const endResult = session.applyAction({ type: "endTurn" });
+            if (endResult.changed) {
+              allEvents = [...allEvents, ...endResult.events];
+            }
+          }
+          broadcastState(allEvents);
           if (session.state.winner) {
             checkCombatEnd(ws);
           } else {
