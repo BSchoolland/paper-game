@@ -28,7 +28,11 @@ export function placeEncounterEntities(
 ): Map<string, Entity> {
   const entities = new Map<string, Entity>();
   const spriteType = animSet ? `char1-${animSet}` : "char1-sword";
-  const allAbilities = [...PLAYER_INNATE_ABILITIES, ...(itemAbilities ?? [])];
+  const hasItemAttack = itemAbilities?.some(a => a.kind === "attack") ?? false;
+  const innate = hasItemAttack
+    ? PLAYER_INNATE_ABILITIES.filter(a => a.id !== "punch")
+    : [...PLAYER_INNATE_ABILITIES];
+  const allAbilities = [...innate, ...(itemAbilities ?? [])];
   const playerTemplate = { ...UNIT_TEMPLATES.player, abilities: allAbilities, spriteType };
 
   entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", playerTemplate, grid, equipped, attachments));
