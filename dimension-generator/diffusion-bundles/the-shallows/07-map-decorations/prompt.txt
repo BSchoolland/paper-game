@@ -1,0 +1,8 @@
+Dimension: The Shallows
+Biome: tidal flats and flooded ruins
+Mood: Eerie calm punctuated by sudden violence. The water looks peaceful but everything beneath it stings, grabs, or drags you under.
+Palette: primary #35e3a9, secondary #367dbe, accent #a47243
+
+Description: A dimension of vast tidal flats, bioluminescent river deltas, and crumbling stone turrets half-submerged in warm, brackish water. The ground shifts between sandy ridges and shallow pools that glow faintly teal at night. Creatures here are adapted to the water — armored crustaceans, venomous jellyfish-like drifters, and territorial river predators that strike fast and retreat into the current.
+
+Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color saturation, same isometric three-quarter perspective, same drop shadows.

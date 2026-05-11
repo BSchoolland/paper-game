@@ -1,0 +1,135 @@
+{
+  "id": 1,
+  "name": "The Shallows",
+  "description": "A dimension of vast tidal flats, bioluminescent river deltas, and crumbling stone turrets half-submerged in warm, brackish water. The ground shifts between sandy ridges and shallow pools that glow faintly teal at night. Creatures here are adapted to the water — armored crustaceans, venomous jellyfish-like drifters, and territorial river predators that strike fast and retreat into the current.",
+  "palette": { "primary": "#35e3a9", "secondary": "#367dbe", "accent": "#a47243" },
+  "mood": "Eerie calm punctuated by sudden violence. The water looks peaceful but everything beneath it stings, grabs, or drags you under.",
+  "biome": "tidal flats and flooded ruins",
+  "mechanicalIdentity": "Status effects — poison and slow from venomous stingers, pulls from creatures that drag you into the water. Less knockback than dimension 0, more about controlling the player's position and whittling them down.",
+
+  "enemyBatches": [
+    {
+      "name": "fodder",
+      "description": "Small, cheap enemies that swarm in numbers. Each is fragile but contributes to a cumulative threat.",
+      "enemies": [
+        {
+          "name": "Mud Crab",
+          "role": "melee swarm, applies bleeding",
+          "description": "A spiky little crab."
+        },
+        {
+          "name": "Dart Fish",
+          "role": "ranged swarm, applies poisoned",
+          "description": "A bioluminescent fish that leaps out of water."
+        },
+        {
+          "name": "Tide Skimmer",
+          "role": "melee swarm, applies slowed",
+          "description": "A flat ray-like creature that glides low across the water."
+        },
+        {
+          "name": "Snapping Crab",
+          "role": "standard melee, signature PULL mechanic",
+          "description": "A crab with one oversized grabbing claw."
+        }
+      ]
+    },
+    {
+      "name": "standard",
+      "description": "Backbone of mid-tier encounters. Each has 2 distinct abilities and a clear role.",
+      "enemies": [
+        {
+          "name": "Spitting Urchin",
+          "role": "ranged, applies poisoned + close-range spine burst",
+          "description": "A bristling sea urchin that fires venomous spines."
+        },
+        {
+          "name": "Tidal Lurker",
+          "role": "melee, signature VULNERABLE application",
+          "description": "An amphibian humanoid tribal warrior with a coral spear."
+        },
+        {
+          "name": "Jellybell",
+          "role": "ranged, applies poisoned + slow tentacle lash",
+          "description": "A glowing jellyfish that drifts and spits venom bolts."
+        },
+        {
+          "name": "Mantis Shrimp",
+          "role": "elite melee, glass-cannon burst damage",
+          "description": "A colorful crustacean with one massive raptorial fist."
+        }
+      ]
+    },
+    {
+      "name": "elite",
+      "description": "Tougher, signature encounters with distinct mechanics. Each feels like a meaningful threat.",
+      "enemies": [
+        {
+          "name": "Abyssal Angler",
+          "role": "threat, signature LONG PULL via lure",
+          "description": "A deep-sea anglerfish with a bioluminescent lure."
+        },
+        {
+          "name": "Reef Guardian",
+          "role": "elite tank, slowed AoE + wide knockback sweeps",
+          "description": "A hermit crab using a ruined stone turret as its shell."
+        },
+        {
+          "name": "Siren Drifter",
+          "role": "kite elite, AoE poison + slow",
+          "description": "A large jellyfish with a curtain of trailing tendrils."
+        },
+        {
+          "name": "Brackish Stalker",
+          "role": "fast assassin elite, applies bleeding + vulnerable",
+          "description": "A sinuous eel with glowing electric stripes."
+        }
+      ]
+    },
+    {
+      "name": "boss",
+      "description": "Centerpiece fights — each boss has a signature multi-ability identity and onDeath effects.",
+      "enemies": [
+        {
+          "name": "Tidecaller",
+          "role": "ranged boss caster, signature TIDAL WAVE AoE",
+          "description": "A robed amphibian shaman wielding a tusk-staff and commanding water."
+        },
+        {
+          "name": "Iron Claw",
+          "role": "tank boss, hardest single-hit damage in dimension",
+          "description": "An enormous ancient crustacean fused with the ruins of a stone turret."
+        },
+        {
+          "name": "The Bloom",
+          "role": "stationary horror boss, AoE poison + slow + pull",
+          "description": "A massive colonial jellyfish organism overgrowing flooded ruins."
+        },
+        {
+          "name": "Riverjaw",
+          "role": "fast melee boss apex predator, Death Roll + bleeding",
+          "description": "A colossal armored crocodilian."
+        }
+      ]
+    }
+  ],
+
+  "items": [
+    { "name": "Coral Blade", "type": "weapon (sword)", "rarity": "common", "description": "A jagged shard of pink coral lashed to a driftwood grip with blue cord. Asymmetric branchy blade." },
+    { "name": "Barbed Harpoon", "type": "weapon (spear)", "rarity": "common", "description": "A long fishing harpoon with hooked barbs at the tip. Ring at the base for line attachment." },
+    { "name": "Urchin Flail", "type": "weapon (sword anim)", "rarity": "uncommon", "description": "A spiked sea urchin shell on a chain, with a leather-wrapped handle. Mace-like." },
+    { "name": "Driftwood Bow", "type": "weapon (bow)", "rarity": "common", "description": "A bow carved from salt-hardened driftwood, strung with sinew. Bone-tipped arrows." },
+    { "name": "Tide Staff", "type": "weapon (staff)", "rarity": "rare", "description": "A staff of petrified driftwood capped with a glowing teal-blue tidal crystal." },
+    { "name": "Crab Claw Gauntlet", "type": "weapon (sword anim)", "rarity": "uncommon", "description": "A single severed crab claw fitted over the wearer's fist as a gauntlet. Orange-brown chitin." },
+    { "name": "Angler's Crook", "type": "weapon (spear)", "rarity": "uncommon", "description": "A long hooked polearm used for landing big fish. Single sharp hook at the end of a slim shaft." },
+    { "name": "Leviathan Jaw Blade", "type": "weapon (two-handed)", "rarity": "rare", "description": "A massive curved blade carved from the jawbone of a great river predator. Serrated teeth still embedded along the edge." },
+    { "name": "Nautilus Shield", "type": "shield", "rarity": "common", "description": "A round shield made from a polished nautilus shell, reinforced with driftwood bracing. Spiral pattern visible." },
+    { "name": "Abyssal Buckler", "type": "shield", "rarity": "uncommon", "description": "A small dark round shield made from deep-sea carapace. Black with a faint teal sheen and crack-pattern." },
+    { "name": "Tidal Charm", "type": "accessory", "rarity": "common", "description": "A small pendant made from a polished tidal crystal on a cord of braided kelp. Pulses faintly with teal light." },
+    { "name": "Bioluminescent Vial", "type": "accessory", "rarity": "uncommon", "description": "A sealed glass vial filled with glowing teal algae. Casts a soft blue-green light." },
+    { "name": "Stinger Pendant", "type": "accessory", "rarity": "rare", "description": "A dried jellyfish stinger preserved in amber, worn on a thin chain." },
+    { "name": "Tidal Salve", "type": "consumable (heal)", "rarity": "common", "description": "A thick paste of crushed kelp and bioluminescent algae, stored in a clamshell container." },
+    { "name": "Sea Mine", "type": "consumable (damage AoE)", "rarity": "uncommon", "description": "A spiny urchin shell packed with volatile compounds, fuse trailing. Throwable explosive." },
+    { "name": "Riptide Flask", "type": "consumable (AoE pull + damage)", "rarity": "rare", "description": "A sealed glass flask of pressurized swirling tidal water, bound with rope. When shattered, releases a violent current." }
+  ]
+}

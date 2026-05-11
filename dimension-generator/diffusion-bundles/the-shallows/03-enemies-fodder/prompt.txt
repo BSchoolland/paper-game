@@ -1,0 +1,25 @@
+Dimension: The Shallows
+Biome: tidal flats and flooded ruins
+Mood: Eerie calm punctuated by sudden violence. The water looks peaceful but everything beneath it stings, grabs, or drags you under.
+Palette: primary #35e3a9, secondary #367dbe, accent #a47243
+
+Description: A dimension of vast tidal flats, bioluminescent river deltas, and crumbling stone turrets half-submerged in warm, brackish water. The ground shifts between sandy ridges and shallow pools that glow faintly teal at night. Creatures here are adapted to the water — armored crustaceans, venomous jellyfish-like drifters, and territorial river predators that strike fast and retreat into the current.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+
+This batch is the "fodder" tier: Small, cheap enemies that swarm in numbers. Each is fragile but contributes to a cumulative threat.
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Mud Crab — melee swarm, applies bleeding. A spiky little crab.
+
+  Dart Fish — ranged swarm, applies poisoned. A bioluminescent fish that leaps out of water.
+
+  Tide Skimmer — melee swarm, applies slowed. A flat ray-like creature that glides low across the water.
+
+  Snapping Crab — standard melee, signature PULL mechanic. A crab with one oversized grabbing claw.
