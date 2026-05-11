@@ -43,6 +43,10 @@ export class GameRenderer {
   private wasAnimating = false;
   private animToken: PacerToken | null = null;
   private selectionToken: PacerToken | null = null;
+  private shakeIntensity = 0;
+  private shakeTimer = 0;
+  private baseOffsetX = 0;
+  private baseOffsetY = 0;
 
   constructor(
     private app: Application,
@@ -67,6 +71,10 @@ export class GameRenderer {
     }
     this.rebuildGrid();
     this.entities = new EntityManager(this.sortableLayer);
+    this.entities.onShake = (req) => {
+      this.shakeIntensity = req.intensity;
+      this.shakeTimer = 0.3;
+    };
     this.layout();
     const enterState = this.clientState.getState();
     if (enterState) {
@@ -79,7 +87,9 @@ export class GameRenderer {
       this.tickerActive = true;
       this.app.ticker.add((ticker) => {
         if (!this.outerContainer.visible || !this.entities) return;
-        const animating = this.entities.isAnimating();
+        const dt = ticker.deltaTime / 60;
+        const shaking = this.shakeTimer > 0;
+        const animating = this.entities.isAnimating() || shaking;
         if (animating !== this.wasAnimating) {
           if (animating) {
             this.animToken = this.pacer.request(60);
@@ -89,8 +99,20 @@ export class GameRenderer {
           }
           this.wasAnimating = animating;
         }
-        if (!animating) return;
-        const dt = ticker.deltaTime / 60;
+
+        if (shaking) {
+          this.shakeTimer -= dt;
+          const progress = Math.max(0, this.shakeTimer / 0.3);
+          const magnitude = this.shakeIntensity * progress * 6;
+          const shakeX = (Math.random() - 0.5) * 2 * magnitude;
+          const shakeY = (Math.random() - 0.5) * 2 * magnitude;
+          this.worldContainer.position.set(this.baseOffsetX + shakeX, this.baseOffsetY + shakeY);
+          if (this.shakeTimer <= 0) {
+            this.worldContainer.position.set(this.baseOffsetX, this.baseOffsetY);
+          }
+        }
+
+        if (!this.entities.isAnimating()) return;
         const tickState = this.clientState.getState();
         if (!tickState) return;
         this.entities.tick(
@@ -225,6 +247,8 @@ export class GameRenderer {
     this.offsetY = (screenH - worldH * this.scale) / 2;
 
     this.worldContainer.scale.set(this.scale);
+    this.baseOffsetX = this.offsetX;
+    this.baseOffsetY = this.offsetY;
     this.worldContainer.position.set(this.offsetX, this.offsetY);
 
     this.dimGfx.clear();
@@ -242,6 +266,7 @@ export class GameRenderer {
   private rebuildGrid() {
     this.targetingGfx.removeFromParent();
     this.moveGfx.removeFromParent();
+    this.costLabel.removeFromParent();
     for (const child of this.worldContainer.children) {
       child.destroy({ children: true });
     }

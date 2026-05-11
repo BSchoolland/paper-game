@@ -1,5 +1,5 @@
 import type { Vec2 } from "shared";
-import { distance, sub, normalize, clampToMovementRange } from "shared";
+import { distance, sub, clampToMovementRange } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import type { GameRenderer } from "../renderer/game-renderer.js";
 
@@ -144,13 +144,12 @@ export class InputManager {
     const entity = state.entities.get(entityId);
     if (!entity) return;
 
-    const dir = sub(mousePos, entity.position);
-    const aimDirection = normalize(dir);
+    const aimDirection = sub(mousePos, entity.position);
 
     this.clientState.dispatch({
       type: "ability",
       entityId,
-      abilityId: this.clientState.selectedAbilityId ?? "punch",
+      abilityId: this.clientState.selectedAbilityId ?? entity.abilities.find(a => a.kind === "attack")?.id ?? "punch",
       aimDirection,
     });
   }

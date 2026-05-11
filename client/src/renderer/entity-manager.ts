@@ -1,11 +1,11 @@
 import { Container, Graphics } from "pixi.js";
-import type { AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, Vec2 } from "shared";
-import { ShapeKind, normalize, raycast } from "shared";
+import type { AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, TrailEffect, Vec2 } from "shared";
+import { ShapeKind, normalize, length as vecLength, raycast } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
-import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark } from "./sketch-utils.js";
+import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark, drawRoughCircle } from "./sketch-utils.js";
 
 const FOOT_OFFSET = 272 * 0.2 * (1 - 0.75);
-const FLASH_COLOR = 0x8b2020;
+const DEFAULT_FLASH_COLOR = 0x8b2020;
 const FLASH_DURATION = 0.4;
 const HIT_DELAY = 0.2;
 
@@ -20,11 +20,14 @@ interface DelayedHit {
   killed: boolean;
 }
 
+export type ShakeRequest = { intensity: number };
+
 export class EntityManager {
   private visuals = new Map<string, EntityVisual>();
   private pendingEvents: GameEvent[] = [];
   private attackFlashes: AttackFlash[] = [];
   private delayedHits: DelayedHit[] = [];
+  onShake: ((req: ShakeRequest) => void) | null = null;
 
   constructor(private layer: Container) {}
 
@@ -149,6 +152,11 @@ export class EntityManager {
 
         this.spawnAttackFlash(event.attackerPosition, event.aimDirection, event.ability, event.attackerId, state);
 
+        const shake = event.ability.visual?.screenShake;
+        if (shake && shake > 0 && this.onShake) {
+          this.onShake({ intensity: shake });
+        }
+
         for (const hit of event.hits) {
           this.delayedHits.push({ targetId: hit.targetId, timer: HIT_DELAY, killed: hit.killed });
         }
@@ -174,10 +182,37 @@ export class EntityManager {
     state: GameState
   ) {
     const gfx = new Graphics();
-    const norm = normalize(aimDirection);
+    const aimLen = vecLength(aimDirection);
+    const norm = aimLen > 0 ? { x: aimDirection.x / aimLen, y: aimDirection.y / aimLen } : { x: 1, y: 0 };
     const baseAngle = Math.atan2(norm.y, norm.x);
     const shape = ability.shape;
+    const visual = ability.visual;
+    const color = visual?.color ?? DEFAULT_FLASH_COLOR;
+    const trail = visual?.trailEffect;
+    const circleDist = shape.kind === ShapeKind.Circle ? Math.min(aimLen, shape.range) : 0;
 
+    this.drawShapeFlash(gfx, pos, norm, baseAngle, shape, color, attackerId, ability, state, circleDist);
+
+    if (trail) {
+      this.drawTrailEffect(gfx, pos, norm, baseAngle, shape, color, trail, attackerId, ability, state, circleDist);
+    }
+
+    this.layer.addChild(gfx);
+    this.attackFlashes.push({ gfx, timer: FLASH_DURATION });
+  }
+
+  private drawShapeFlash(
+    gfx: Graphics,
+    pos: Vec2,
+    norm: Vec2,
+    baseAngle: number,
+    shape: CombatShapeDefinition,
+    color: number,
+    attackerId: string,
+    ability: AttackAbility,
+    state: GameState,
+    circleDist: number
+  ) {
     switch (shape.kind) {
       case ShapeKind.Sector: {
         gfx.moveTo(pos.x, pos.y);
@@ -189,8 +224,8 @@ export class EntityManager {
           1.5, 24, 71
         );
         gfx.lineTo(pos.x, pos.y);
-        gfx.fill({ color: FLASH_COLOR, alpha: 0.25 });
-        gfx.stroke({ color: FLASH_COLOR, alpha: 0.7, width: 1.5 });
+        gfx.fill({ color, alpha: 0.25 });
+        gfx.stroke({ color, alpha: 0.7, width: 1.5 });
         break;
       }
       case ShapeKind.Rectangle: {
@@ -206,8 +241,8 @@ export class EntityManager {
         ];
 
         drawRoughRect(gfx, corners, 1, 73);
-        gfx.fill({ color: FLASH_COLOR, alpha: 0.25 });
-        gfx.stroke({ color: FLASH_COLOR, alpha: 0.7, width: 1.5 });
+        gfx.fill({ color, alpha: 0.25 });
+        gfx.stroke({ color, alpha: 0.7, width: 1.5 });
         break;
       }
       case ShapeKind.Point: {
@@ -218,20 +253,20 @@ export class EntityManager {
         );
 
         drawRoughLine(gfx, pos.x, pos.y, result.endPoint.x, result.endPoint.y, 0.8, 77);
-        gfx.stroke({ color: FLASH_COLOR, alpha: 0.8, width: 2 });
+        gfx.stroke({ color, alpha: 0.8, width: 2 });
 
         if (result.hit) {
           drawXMark(gfx, result.endPoint.x, result.endPoint.y, 7, 79);
-          gfx.stroke({ color: FLASH_COLOR, alpha: 0.9, width: 2 });
+          gfx.stroke({ color, alpha: 0.9, width: 2 });
         }
         break;
       }
       case ShapeKind.Circle: {
-        const targetX = pos.x + norm.x * shape.range;
-        const targetY = pos.y + norm.y * shape.range;
+        const targetX = pos.x + norm.x * circleDist;
+        const targetY = pos.y + norm.y * circleDist;
         drawRoughArc(gfx, targetX, targetY, shape.radius, 0, Math.PI * 2, 1.5, 24, 83);
-        gfx.fill({ color: FLASH_COLOR, alpha: 0.2 });
-        gfx.stroke({ color: FLASH_COLOR, alpha: 0.7, width: 1.5 });
+        gfx.fill({ color, alpha: 0.2 });
+        gfx.stroke({ color, alpha: 0.7, width: 1.5 });
         break;
       }
       default: {
@@ -239,8 +274,192 @@ export class EntityManager {
         throw new Error(`Unhandled shape kind: ${(_exhaustive as CombatShapeDefinition).kind}`);
       }
     }
+  }
 
-    this.layer.addChild(gfx);
-    this.attackFlashes.push({ gfx, timer: FLASH_DURATION });
+  private drawTrailEffect(
+    gfx: Graphics,
+    pos: Vec2,
+    norm: Vec2,
+    baseAngle: number,
+    shape: CombatShapeDefinition,
+    color: number,
+    trail: TrailEffect,
+    attackerId: string,
+    ability: AttackAbility,
+    state: GameState,
+    circleDist: number
+  ) {
+    switch (trail) {
+      case "slash":
+        this.drawSlashTrail(gfx, pos, baseAngle, shape, color);
+        break;
+      case "thrust":
+        this.drawThrustTrail(gfx, pos, norm, shape, color);
+        break;
+      case "projectile":
+        this.drawProjectileTrail(gfx, pos, norm, shape, color, attackerId, ability, state);
+        break;
+      case "explosion":
+        this.drawExplosionTrail(gfx, pos, norm, shape, color, circleDist);
+        break;
+      case "splash":
+        this.drawSplashTrail(gfx, pos, norm, shape, color, circleDist);
+        break;
+    }
+  }
+
+  private drawSlashTrail(gfx: Graphics, pos: Vec2, baseAngle: number, shape: CombatShapeDefinition, color: number) {
+    const radius = shape.kind === ShapeKind.Sector ? shape.radius :
+                   shape.kind === ShapeKind.Rectangle ? shape.length :
+                   shape.kind === ShapeKind.Circle ? shape.radius : 50;
+    const halfAngle = shape.kind === ShapeKind.Sector ? shape.halfAngle : Math.PI / 4;
+
+    for (let i = 1; i <= 3; i++) {
+      const r = radius * (0.3 + i * 0.2);
+      const angleOffset = (i - 2) * 0.08;
+      drawRoughArc(
+        gfx, pos.x, pos.y, r,
+        baseAngle - halfAngle * 0.8 + angleOffset,
+        baseAngle + halfAngle * 0.8 + angleOffset,
+        2.0, 16, 90 + i * 7
+      );
+      gfx.stroke({ color, alpha: 0.5 - i * 0.1, width: 2.5 - i * 0.4 });
+    }
+  }
+
+  private drawThrustTrail(gfx: Graphics, pos: Vec2, norm: Vec2, shape: CombatShapeDefinition, color: number) {
+    const length = shape.kind === ShapeKind.Rectangle ? shape.length :
+                   shape.kind === ShapeKind.Point ? shape.range : 80;
+
+    const endX = pos.x + norm.x * length;
+    const endY = pos.y + norm.y * length;
+    drawRoughLine(gfx, pos.x, pos.y, endX, endY, 0.5, 95);
+    gfx.stroke({ color, alpha: 0.7, width: 3 });
+
+    const tipLen = 8;
+    const tipSpread = 5;
+    const perpX = -norm.y;
+    const perpY = norm.x;
+    gfx.moveTo(endX, endY);
+    gfx.lineTo(endX - norm.x * tipLen + perpX * tipSpread, endY - norm.y * tipLen + perpY * tipSpread);
+    gfx.moveTo(endX, endY);
+    gfx.lineTo(endX - norm.x * tipLen - perpX * tipSpread, endY - norm.y * tipLen - perpY * tipSpread);
+    gfx.stroke({ color, alpha: 0.6, width: 2 });
+  }
+
+  private drawProjectileTrail(
+    gfx: Graphics,
+    pos: Vec2,
+    norm: Vec2,
+    shape: CombatShapeDefinition,
+    color: number,
+    attackerId: string,
+    ability: AttackAbility,
+    state: GameState
+  ) {
+    if (shape.kind !== ShapeKind.Point) return;
+
+    const result = raycast(
+      pos, norm, shape.range,
+      state.entities, state.grid,
+      attackerId, ability.ignoreCoverRange
+    );
+    const endX = result.endPoint.x;
+    const endY = result.endPoint.y;
+
+    const perpX = -norm.y;
+    const perpY = norm.x;
+    const dx = endX - pos.x;
+    const dy = endY - pos.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const segments = Math.max(3, Math.floor(dist / 20));
+
+    for (let i = 0; i < segments; i++) {
+      const t = i / segments;
+      const x = pos.x + dx * t;
+      const y = pos.y + dy * t;
+      const dotSize = 1.5 + t * 1.5;
+      gfx.circle(x + perpX * Math.sin(t * 12) * 1.5, y + perpY * Math.sin(t * 12) * 1.5, dotSize);
+    }
+    gfx.fill({ color, alpha: 0.4 });
+
+    if (result.hit) {
+      for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const sparkLen = 5 + Math.random() * 5;
+        gfx.moveTo(endX, endY);
+        gfx.lineTo(endX + Math.cos(angle) * sparkLen, endY + Math.sin(angle) * sparkLen);
+      }
+      gfx.stroke({ color, alpha: 0.8, width: 1.5 });
+    }
+  }
+
+  private drawExplosionTrail(gfx: Graphics, pos: Vec2, norm: Vec2, shape: CombatShapeDefinition, color: number, circleDist: number) {
+    let cx: number, cy: number, radius: number;
+
+    if (shape.kind === ShapeKind.Circle) {
+      cx = pos.x + norm.x * circleDist;
+      cy = pos.y + norm.y * circleDist;
+      radius = shape.radius;
+    } else if (shape.kind === ShapeKind.Sector) {
+      cx = pos.x + norm.x * shape.radius * 0.5;
+      cy = pos.y + norm.y * shape.radius * 0.5;
+      radius = shape.radius * 0.6;
+    } else {
+      cx = pos.x + norm.x * 40;
+      cy = pos.y + norm.y * 40;
+      radius = 30;
+    }
+
+    for (let i = 1; i <= 3; i++) {
+      const r = radius * (0.3 + i * 0.25);
+      drawRoughCircle(gfx, cx, cy, r, 2.0, 20, 100 + i * 11);
+      gfx.stroke({ color, alpha: 0.6 - i * 0.15, width: 2.5 - i * 0.5 });
+    }
+
+    for (let i = 0; i < 8; i++) {
+      const angle = (i / 8) * Math.PI * 2 + 0.3;
+      const len = radius * (0.5 + Math.random() * 0.5);
+      gfx.moveTo(cx, cy);
+      gfx.lineTo(cx + Math.cos(angle) * len, cy + Math.sin(angle) * len);
+    }
+    gfx.stroke({ color, alpha: 0.35, width: 1.5 });
+  }
+
+  private drawSplashTrail(gfx: Graphics, pos: Vec2, norm: Vec2, shape: CombatShapeDefinition, color: number, circleDist: number) {
+    let cx: number, cy: number, spread: number;
+
+    if (shape.kind === ShapeKind.Circle) {
+      cx = pos.x + norm.x * circleDist;
+      cy = pos.y + norm.y * circleDist;
+      spread = shape.radius;
+    } else if (shape.kind === ShapeKind.Sector) {
+      cx = pos.x + norm.x * shape.radius * 0.5;
+      cy = pos.y + norm.y * shape.radius * 0.5;
+      spread = shape.radius * 0.7;
+    } else {
+      cx = pos.x + norm.x * 40;
+      cy = pos.y + norm.y * 40;
+      spread = 30;
+    }
+
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2 + i * 0.5;
+      const dist = spread * (0.2 + Math.random() * 0.8);
+      const blobX = cx + Math.cos(angle) * dist;
+      const blobY = cy + Math.sin(angle) * dist;
+      const blobR = 2 + Math.random() * 4;
+      drawRoughCircle(gfx, blobX, blobY, blobR, 1.0, 8, 120 + i * 5);
+      gfx.fill({ color, alpha: 0.35 });
+    }
+
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2;
+      const d1 = spread * 0.3;
+      const d2 = spread * (0.6 + Math.random() * 0.4);
+      gfx.moveTo(cx + Math.cos(angle) * d1, cy + Math.sin(angle) * d1);
+      gfx.lineTo(cx + Math.cos(angle) * d2, cy + Math.sin(angle) * d2);
+    }
+    gfx.stroke({ color, alpha: 0.3, width: 1.5 });
   }
 }

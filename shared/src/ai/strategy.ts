@@ -53,7 +53,7 @@ function tryAttack(
   if (!ability || !canAffordAbility(entity, ability)) return false;
   const attackRange = getAttackRange(ability);
   if (distance(fromPos, target.position) <= attackRange + target.collisionRadius) {
-    const dir = normalize(sub(target.position, fromPos));
+    const dir = sub(target.position, fromPos);
     actions.push({ type: "ability", entityId: entity.id, abilityId: ability.id, aimDirection: dir });
     return true;
   }

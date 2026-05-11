@@ -1,6 +1,6 @@
 import { ShapeKind } from "../core/types.js";
 import type { CombatShapeDefinition, Entity, GridState, Vec2 } from "../core/types.js";
-import { add, normalize, scale } from "../core/vec2.js";
+import { add, length, normalize, scale } from "../core/vec2.js";
 import { entitiesInSector } from "./sector.js";
 import { entitiesInRectangle } from "./rectangle.js";
 import { entitiesInCircle } from "./circle.js";
@@ -21,7 +21,8 @@ export function entitiesInShape(
     case ShapeKind.Rectangle:
       return entitiesInRectangle(origin, direction, shape.length, shape.width, entities, excludeId);
     case ShapeKind.Circle: {
-      const center = add(origin, scale(normalize(direction), shape.range));
+      const dist = Math.min(length(direction), shape.range);
+      const center = add(origin, scale(normalize(direction), dist));
       return entitiesInCircle(center, shape.radius, entities, excludeId);
     }
     case ShapeKind.Point: {

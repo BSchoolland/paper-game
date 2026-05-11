@@ -29,6 +29,16 @@ export type CombatShapeDefinition =
 export type WeaponEffect =
   | { type: "knockback"; distance: number };
 
+// --- Attack Visuals (client-side rendering hints, fully JSON-serializable) ---
+
+export type TrailEffect = "slash" | "thrust" | "projectile" | "explosion" | "splash";
+
+export interface AttackVisual {
+  readonly color?: number;
+  readonly trailEffect?: TrailEffect;
+  readonly screenShake?: number;
+}
+
 // --- Ability System ---
 
 export interface EnergyCost {
@@ -56,6 +66,7 @@ export interface AttackAbility extends AbilityBase {
   readonly damage: number;
   readonly ignoreCoverRange?: number;
   readonly onHit?: readonly WeaponEffect[];
+  readonly visual?: AttackVisual;
 }
 
 export interface MoveAbility extends AbilityBase {
@@ -168,6 +179,7 @@ export const INNATE_PUNCH: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 50, halfAngle: Math.PI / 4 },
   damage: 10,
+  visual: { trailEffect: "slash", screenShake: 0.15 },
 };
 
 export const PLAYER_INNATE_ABILITIES: readonly AbilityDefinition[] = [INNATE_MOVE, INNATE_PUNCH];
@@ -182,6 +194,7 @@ export const SHORT_SWORD_SLASH: AttackAbility = {
   shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
   damage: 25,
   onHit: [{ type: "knockback", distance: 30 }],
+  visual: { color: 0xc0c0c0, trailEffect: "slash", screenShake: 0.3 },
 };
 
 export const SHORT_SWORD_STAB: AttackAbility = {
@@ -191,6 +204,7 @@ export const SHORT_SWORD_STAB: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 70, width: 15 },
   damage: 15,
+  visual: { color: 0xc0c0c0, trailEffect: "thrust" },
 };
 
 export const SPEAR_THRUST: AttackAbility = {
@@ -201,6 +215,7 @@ export const SPEAR_THRUST: AttackAbility = {
   shape: { kind: ShapeKind.Rectangle, length: 140, width: 20 },
   damage: 30,
   onHit: [{ type: "knockback", distance: 25 }],
+  visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.3 },
 };
 
 export const SPEAR_JAB: AttackAbility = {
@@ -210,6 +225,7 @@ export const SPEAR_JAB: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 110, width: 15 },
   damage: 15,
+  visual: { color: 0xa89070, trailEffect: "thrust" },
 };
 
 export const BOW_SHOT: AttackAbility = {
@@ -220,6 +236,7 @@ export const BOW_SHOT: AttackAbility = {
   shape: { kind: ShapeKind.Point, range: 300 },
   damage: 20,
   ignoreCoverRange: 40,
+  visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.15 },
 };
 
 export const BOW_SNAP_SHOT: AttackAbility = {
@@ -229,6 +246,7 @@ export const BOW_SNAP_SHOT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 180 },
   damage: 10,
+  visual: { color: 0xd4a857, trailEffect: "projectile" },
 };
 
 // --- Enemy Abilities ---
@@ -241,6 +259,7 @@ export const GOBLIN_SPEAR_THRUST: AttackAbility = {
   shape: { kind: ShapeKind.Rectangle, length: 100, width: 18 },
   damage: 25,
   onHit: [{ type: "knockback", distance: 20 }],
+  visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.2 },
 };
 
 export const GOBLIN_BOW_SHOT: AttackAbility = {
@@ -250,6 +269,7 @@ export const GOBLIN_BOW_SHOT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 260 },
   damage: 15,
+  visual: { color: 0xd4a857, trailEffect: "projectile" },
 };
 
 export const SHIELD_BASH_ATTACK: AttackAbility = {
@@ -260,6 +280,7 @@ export const SHIELD_BASH_ATTACK: AttackAbility = {
   shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 4 },
   damage: 15,
   onHit: [{ type: "knockback", distance: 45 }],
+  visual: { color: 0x8899aa, trailEffect: "slash", screenShake: 0.35 },
 };
 
 export const BRUTE_SLAM_ATTACK: AttackAbility = {
@@ -270,6 +291,7 @@ export const BRUTE_SLAM_ATTACK: AttackAbility = {
   shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 2 },
   damage: 40,
   onHit: [{ type: "knockback", distance: 50 }],
+  visual: { color: 0x7a6040, trailEffect: "slash", screenShake: 0.6 },
 };
 
 export const GOLEM_SMASH_ATTACK: AttackAbility = {
@@ -280,6 +302,7 @@ export const GOLEM_SMASH_ATTACK: AttackAbility = {
   shape: { kind: ShapeKind.Circle, radius: 70, range: 60 },
   damage: 50,
   onHit: [{ type: "knockback", distance: 60 }],
+  visual: { color: 0x8b7355, trailEffect: "explosion", screenShake: 0.8 },
 };
 
 export const SLIME_SPIT_ATTACK: AttackAbility = {
@@ -289,6 +312,7 @@ export const SLIME_SPIT_ATTACK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 180 },
   damage: 12,
+  visual: { color: 0x5cb85c, trailEffect: "projectile" },
 };
 
 export const SLIME_LASH_ATTACK: AttackAbility = {
@@ -299,6 +323,7 @@ export const SLIME_LASH_ATTACK: AttackAbility = {
   shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 3 },
   damage: 20,
   onHit: [{ type: "knockback", distance: 20 }],
+  visual: { color: 0x5cb85c, trailEffect: "splash", screenShake: 0.2 },
 };
 
 export const SLIME_WAVE_ATTACK: AttackAbility = {
@@ -309,6 +334,7 @@ export const SLIME_WAVE_ATTACK: AttackAbility = {
   shape: { kind: ShapeKind.Circle, radius: 80, range: 50 },
   damage: 35,
   onHit: [{ type: "knockback", distance: 35 }],
+  visual: { color: 0x5cb85c, trailEffect: "splash", screenShake: 0.5 },
 };
 
 export const ENEMY_TAGS = [
