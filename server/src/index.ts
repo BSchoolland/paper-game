@@ -38,6 +38,7 @@ const DEFAULT_INVENTORY = createInventory([
   ITEMS["broadsword"]!,
   ITEMS["mace"]!,
   ITEMS["round-shield"]!,
+  ITEMS["staff"]!,
   ITEMS["potion"]!,
   ITEMS["bomb"]!,
 ]);
