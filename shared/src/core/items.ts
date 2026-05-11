@@ -1,5 +1,5 @@
-import { SHORT_SWORD, SPEAR, BOW } from "./types.js";
-import type { WeaponDefinition } from "./types.js";
+import { SHORT_SWORD_SLASH, SPEAR_THRUST, BOW_SHOT } from "./types.js";
+import type { AbilityDefinition, AttackAbility } from "./types.js";
 
 export type ItemRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 
@@ -19,17 +19,18 @@ interface ItemBase {
   readonly sprite: string;
   readonly slotCost: SlotCost;
   readonly visualScale?: number;
+  readonly abilities?: readonly AbilityDefinition[];
 }
 
 export interface WeaponItem extends ItemBase {
   readonly type: "weapon";
-  readonly weapon: WeaponDefinition;
+  readonly abilities: readonly AbilityDefinition[];
   readonly animSet: AnimSet;
 }
 
 export interface ShieldItem extends ItemBase {
   readonly type: "shield";
-  readonly damageReduction: number;
+  readonly abilities: readonly AbilityDefinition[];
 }
 
 export interface ConsumableItem extends ItemBase {
@@ -64,7 +65,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "common",
     sprite: "short-sword",
     slotCost: { hand: 1 },
-    weapon: SHORT_SWORD,
+    abilities: [SHORT_SWORD_SLASH],
     animSet: "sword",
     visualScale: 2.0,
   },
@@ -76,14 +77,15 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "uncommon",
     sprite: "long-sword",
     slotCost: { hand: 1 },
-    weapon: {
-      id: "long-sword",
-      name: "Long Sword",
+    abilities: [{
+      id: "long-sword-slash",
+      name: "Long Slash",
+      kind: "attack",
+      cost: { red: 1 },
       shape: { kind: "sector", radius: 100, halfAngle: Math.PI / 3 },
       damage: 35,
-      actionCost: 1,
       onHit: [{ type: "knockback", distance: 35 }],
-    },
+    } satisfies AttackAbility],
     animSet: "sword",
   },
   "spear": {
@@ -94,7 +96,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "common",
     sprite: "spear",
     slotCost: { hand: 1 },
-    weapon: SPEAR,
+    abilities: [SPEAR_THRUST],
     animSet: "spear",
   },
   "axe": {
@@ -105,14 +107,15 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "common",
     sprite: "axe",
     slotCost: { hand: 1 },
-    weapon: {
-      id: "axe",
-      name: "Axe",
+    abilities: [{
+      id: "axe-chop",
+      name: "Chop",
+      kind: "attack",
+      cost: { red: 1 },
       shape: { kind: "sector", radius: 75, halfAngle: Math.PI / 4 },
       damage: 35,
-      actionCost: 1,
       onHit: [{ type: "knockback", distance: 40 }],
-    },
+    } satisfies AttackAbility],
     animSet: "sword",
     visualScale: 4,
   },
@@ -126,7 +129,7 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "common",
     sprite: "bow",
     slotCost: { hand: 2 },
-    weapon: BOW,
+    abilities: [BOW_SHOT],
     animSet: "bow",
   },
   "broadsword": {
@@ -137,14 +140,15 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "uncommon",
     sprite: "broadsword",
     slotCost: { hand: 1 },
-    weapon: {
-      id: "broadsword",
-      name: "Broadsword",
+    abilities: [{
+      id: "broadsword-sweep",
+      name: "Sweep",
+      kind: "attack",
+      cost: { red: 1 },
       shape: { kind: "sector", radius: 90, halfAngle: Math.PI / 2 },
       damage: 40,
-      actionCost: 1,
       onHit: [{ type: "knockback", distance: 35 }],
-    },
+    } satisfies AttackAbility],
     animSet: "two-handed",
   },
   "battle-axe": {
@@ -155,14 +159,15 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "rare",
     sprite: "battle-axe",
     slotCost: { hand: 2 },
-    weapon: {
-      id: "battle-axe",
-      name: "Battle Axe",
+    abilities: [{
+      id: "battle-axe-cleave",
+      name: "Cleave",
+      kind: "attack",
+      cost: { red: 2 },
       shape: { kind: "sector", radius: 85, halfAngle: Math.PI / 3 },
       damage: 45,
-      actionCost: 1,
       onHit: [{ type: "knockback", distance: 50 }],
-    },
+    } satisfies AttackAbility],
     animSet: "two-handed",
   },
   "mace": {
@@ -173,14 +178,15 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "uncommon",
     sprite: "mace",
     slotCost: { hand: 1 },
-    weapon: {
-      id: "mace",
-      name: "Mace",
+    abilities: [{
+      id: "mace-crush",
+      name: "Crush",
+      kind: "attack",
+      cost: { red: 1 },
       shape: { kind: "sector", radius: 70, halfAngle: Math.PI / 4 },
       damage: 30,
-      actionCost: 1,
       onHit: [{ type: "knockback", distance: 55 }],
-    },
+    } satisfies AttackAbility],
     animSet: "sword",
   },
 
@@ -193,7 +199,13 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "common",
     sprite: "round-shield",
     slotCost: { hand: 1 },
-    damageReduction: 5,
+    abilities: [{
+      id: "round-shield-block",
+      name: "Block",
+      kind: "buff",
+      cost: { blue: 1 },
+      effect: { type: "block", damageReduction: 10 },
+    }],
   },
   "kite-shield": {
     type: "shield",
@@ -203,7 +215,13 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "uncommon",
     sprite: "kite-shield",
     slotCost: { hand: 1 },
-    damageReduction: 10,
+    abilities: [{
+      id: "kite-shield-block",
+      name: "Block",
+      kind: "buff",
+      cost: { blue: 1 },
+      effect: { type: "block", damageReduction: 15 },
+    }],
   },
   "buckler": {
     type: "shield",
@@ -213,7 +231,13 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "common",
     sprite: "buckler",
     slotCost: { hand: 1 },
-    damageReduction: 3,
+    abilities: [{
+      id: "buckler-block",
+      name: "Parry",
+      kind: "buff",
+      cost: { blue: 1 },
+      effect: { type: "block", damageReduction: 5 },
+    }],
   },
   "quiver": {
     type: "accessory",
@@ -235,13 +259,14 @@ export const ITEMS: Record<string, ItemDefinition> = {
     rarity: "rare",
     sprite: "staff",
     slotCost: { hand: 1, utility: 1 },
-    weapon: {
-      id: "staff",
-      name: "Staff",
+    abilities: [{
+      id: "staff-blast",
+      name: "Arcane Blast",
+      kind: "attack",
+      cost: { red: 1 },
       shape: { kind: "circle", radius: 60, range: 200 },
       damage: 25,
-      actionCost: 1,
-    },
+    } satisfies AttackAbility],
     animSet: "staff",
   },
   "spellbook": {

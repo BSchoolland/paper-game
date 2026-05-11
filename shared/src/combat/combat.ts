@@ -1,4 +1,4 @@
-import type { AttackHit, Entity, GameState, GridState, WeaponDefinition, Vec2 } from "../core/types.js";
+import type { AttackAbility, AttackHit, CombatShapeDefinition, Entity, GameState, GridState, Vec2 } from "../core/types.js";
 import { entitiesInShape } from "../geometry/index.js";
 
 export interface DamageResult {
@@ -10,17 +10,17 @@ export function resolveWeaponAttack(
   attacker: Entity,
   aimDirection: Vec2,
   entities: ReadonlyMap<string, Entity>,
-  weapon: WeaponDefinition,
+  ability: Pick<AttackAbility, "shape" | "ignoreCoverRange">,
   grid: GridState
 ): Entity[] {
   const hits = entitiesInShape(
     attacker.position,
     aimDirection,
-    weapon.shape,
+    ability.shape,
     entities,
     grid,
     attacker.id,
-    weapon.ignoreCoverRange
+    ability.ignoreCoverRange
   );
   return hits.filter((e) => e.teamId !== attacker.teamId);
 }

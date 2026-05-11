@@ -1,5 +1,5 @@
 import type { Graphics } from "pixi.js";
-import type { Entity, GameState, Vec2 } from "shared";
+import type { Entity, GameState, MoveAbility, Vec2 } from "shared";
 import {
   clampToMovementRange,
   isPositionWalkable,
@@ -58,7 +58,7 @@ export function drawMovePreview(
     g,
     entity.position.x,
     entity.position.y,
-    entity.movementRemaining,
+    (entity.abilities.find(a => a.kind === "move") as MoveAbility | undefined)?.distance ?? 0,
     1.5,
     48,
     7

@@ -80,6 +80,16 @@ export function getEquippedWeapon(inv: InventoryState): ItemDefinition | null {
   return inv.equipped.find((item) => item.type === "weapon") ?? null;
 }
 
+export function getItemAbilities(equipped: readonly ItemDefinition[]): import("./types.js").AbilityDefinition[] {
+  const abilities: import("./types.js").AbilityDefinition[] = [];
+  for (const item of equipped) {
+    if ("abilities" in item && item.abilities) {
+      abilities.push(...item.abilities);
+    }
+  }
+  return abilities;
+}
+
 export function getAnimSet(equipped: readonly ItemDefinition[]): AnimSet {
   const handItems = equipped.filter(
     (item) => item.slotCost.hand && item.slotCost.hand > 0,

@@ -1,5 +1,5 @@
 import type { Graphics } from "pixi.js";
-import type { Entity, GameState, Vec2 } from "shared";
+import type { AttackAbility, Entity, GameState, Vec2 } from "shared";
 import { normalize, sub, length, raycast } from "shared";
 import {
   PENCIL,
@@ -12,18 +12,26 @@ import {
   drawXMark,
 } from "./sketch-utils.js";
 
+export function getActiveAttackAbility(entity: Entity): AttackAbility | undefined {
+  return entity.abilities.find(a => a.kind === "attack") as AttackAbility | undefined;
+}
+
 export function drawTargetingPreview(
   g: Graphics,
   entity: Entity,
   mouseWorld: Vec2,
-  state: GameState
+  state: GameState,
+  selectedAbility?: AttackAbility
 ): void {
+  const ability = selectedAbility ?? getActiveAttackAbility(entity);
+  if (!ability) return;
+
   const dir = sub(mouseWorld, entity.position);
   if (length(dir) < 1) return;
 
   const norm = normalize(dir);
   const baseAngle = Math.atan2(norm.y, norm.x);
-  const shape = entity.weapon.shape;
+  const shape = ability.shape;
 
   switch (shape.kind) {
     case "sector": {
@@ -78,7 +86,7 @@ export function drawTargetingPreview(
         state.entities,
         state.grid,
         entity.id,
-        entity.weapon.ignoreCoverRange
+        ability.ignoreCoverRange
       );
 
       const endX = result.endPoint.x;

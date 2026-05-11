@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite } from "pixi.js";
-import type { GameEvent, GridState, Vec2 } from "shared";
+import type { AttackAbility, GameEvent, GridState, Vec2 } from "shared";
 import { CELL_WALL, CELL_COVER } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
@@ -12,7 +12,7 @@ import { drawTargetingPreview } from "./targeting-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
 import type { FramePacer, PacerToken } from "./frame-pacer.js";
 
-const PADDING = 15;
+const PADDING = 75;
 const DIM_ALPHA = 0.4;
 const DIM_COLOR = 0x1a140e;
 const BORDER_COLOR = 0x4a3728;
@@ -125,6 +125,18 @@ export class GameRenderer {
     }
   }
 
+  getCombatRect(): { x: number; y: number; w: number; h: number } {
+    const state = this.clientState.getState();
+    if (!state) return { x: 0, y: 0, w: 0, h: 0 };
+    const grid = state.grid;
+    return {
+      x: this.offsetX,
+      y: this.offsetY,
+      w: grid.width * grid.cellSize * this.scale,
+      h: grid.height * grid.cellSize * this.scale,
+    };
+  }
+
   screenToWorld(screenPos: Vec2): Vec2 {
     return {
       x: (screenPos.x - this.offsetX) / this.scale,
@@ -168,14 +180,12 @@ export class GameRenderer {
     const entity = state.entities.get(selectedId);
     if (!entity || entity.dead) return;
 
-    if (
-      this.clientState.inputMode === "attack" &&
-      entity.actionsRemaining > 0
-    ) {
-      drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state);
+    const selectedAbility = this.clientState.getSelectedAbility();
+    if (selectedAbility?.kind === "attack" && entity.energy.red > 0) {
+      drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state, selectedAbility as AttackAbility);
     } else if (
-      this.clientState.inputMode === "select" &&
-      entity.movementRemaining > 1
+      (selectedAbility?.kind === "move" || this.clientState.inputMode === "select") &&
+      entity.energy.blue > 0
     ) {
       drawMovePreview(this.moveGfx, entity, mouseWorld, state);
     }
@@ -210,18 +220,6 @@ export class GameRenderer {
     const combatH = worldH * this.scale;
 
     this.frameGfx.clear();
-    for (let i = 3; i >= 1; i--) {
-      const spread = i * (SHADOW_BLUR / 3);
-      const alpha = SHADOW_ALPHA * (1 - i / 4);
-      this.frameGfx.roundRect(
-        combatX - spread, combatY - spread,
-        combatW + spread * 2, combatH + spread * 2,
-        4
-      );
-      this.frameGfx.fill({ color: SHADOW_COLOR, alpha });
-    }
-    this.frameGfx.roundRect(combatX, combatY, combatW, combatH, 2);
-    this.frameGfx.stroke({ color: BORDER_COLOR, alpha: 0.6, width: BORDER_WIDTH });
   }
 
   private rebuildGrid() {

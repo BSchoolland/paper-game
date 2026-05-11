@@ -34,10 +34,10 @@ export function processEffects(result: ActionResult): ActionResult {
   for (const event of result.events) {
     if (event.type !== "attack") continue;
 
-    const weapon = event.weapon;
-    if (weapon.onHit) {
+    const ability = event.ability;
+    if (ability.onHit) {
       for (const hit of event.hits) {
-        for (const effect of weapon.onHit) {
+        for (const effect of ability.onHit) {
           const applied = applyWeaponEffect(effect, hit.targetId, event.attackerPosition, state);
           state = applied.state;
           events.push(...applied.events);
@@ -148,7 +148,7 @@ function spawnEntities(
 
     const id = nextSpawnId();
     const entity = makeEntity(id, template.className, position.x, position.y, teamId, template);
-    entities.set(id, { ...entity, actionsRemaining: 0, movementRemaining: 0 });
+    entities.set(id, { ...entity, energy: { ...entity.energy, red: 0, blue: 0 } });
     events.push({ type: "spawn", entityId: id, position, templateKey });
   }
 

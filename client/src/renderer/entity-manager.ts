@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import type { Entity, GameEvent, GameState, Vec2, WeaponDefinition } from "shared";
+import type { AttackAbility, Entity, GameEvent, GameState, Vec2 } from "shared";
 import { normalize, raycast } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark } from "./sketch-utils.js";
@@ -147,7 +147,7 @@ export class EntityManager {
           visual.triggerAttack(aimX);
         }
 
-        this.spawnAttackFlash(event.attackerPosition, event.aimDirection, event.weapon, event.attackerId, state);
+        this.spawnAttackFlash(event.attackerPosition, event.aimDirection, event.ability, event.attackerId, state);
 
         for (const hit of event.hits) {
           this.delayedHits.push({ targetId: hit.targetId, timer: HIT_DELAY, killed: hit.killed });
@@ -169,14 +169,14 @@ export class EntityManager {
   private spawnAttackFlash(
     pos: Vec2,
     aimDirection: Vec2,
-    weapon: WeaponDefinition,
+    ability: AttackAbility,
     attackerId: string,
     state: GameState
   ) {
     const gfx = new Graphics();
     const norm = normalize(aimDirection);
     const baseAngle = Math.atan2(norm.y, norm.x);
-    const shape = weapon.shape;
+    const shape = ability.shape;
 
     switch (shape.kind) {
       case "sector": {
@@ -214,7 +214,7 @@ export class EntityManager {
         const result = raycast(
           pos, norm, shape.range,
           state.entities, state.grid,
-          attackerId, weapon.ignoreCoverRange
+          attackerId, ability.ignoreCoverRange
         );
 
         drawRoughLine(gfx, pos.x, pos.y, result.endPoint.x, result.endPoint.y, 0.8, 77);

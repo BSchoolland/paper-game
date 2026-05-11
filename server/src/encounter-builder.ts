@@ -1,5 +1,5 @@
-import type { AnimSet, Entity, GameState, GridState, WeaponDefinition, ItemDefinition, AttachmentData } from "shared";
-import { UNIT_TEMPLATES, makeEntity, findWalkablePosition } from "shared";
+import type { AbilityDefinition, AnimSet, Entity, GameState, GridState, ItemDefinition, AttachmentData } from "shared";
+import { UNIT_TEMPLATES, PLAYER_INNATE_ABILITIES, makeEntity, findWalkablePosition } from "shared";
 import { createCombatGrid } from "shared";
 import type { GeneratedEncounter } from "shared";
 import type { MapDefinition } from "shared";
@@ -21,16 +21,15 @@ export function buildEncounterMap(encounter: GeneratedEncounter): EncounterMap {
 export function placeEncounterEntities(
   encounter: GeneratedEncounter,
   grid: GridState,
-  equippedWeapon?: WeaponDefinition,
+  itemAbilities?: readonly AbilityDefinition[],
   animSet?: AnimSet,
   equipped?: readonly ItemDefinition[],
   attachments?: Record<string, AttachmentData>,
 ): Map<string, Entity> {
   const entities = new Map<string, Entity>();
   const spriteType = animSet ? `char1-${animSet}` : "char1-sword";
-  const playerTemplate = equippedWeapon
-    ? { ...UNIT_TEMPLATES.player, weapon: equippedWeapon, spriteType }
-    : { ...UNIT_TEMPLATES.player, spriteType };
+  const allAbilities = [...PLAYER_INNATE_ABILITIES, ...(itemAbilities ?? [])];
+  const playerTemplate = { ...UNIT_TEMPLATES.player, abilities: allAbilities, spriteType };
 
   entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", playerTemplate, grid, equipped, attachments));
 
@@ -41,13 +40,9 @@ export function placeEncounterEntities(
 
   for (let i = 0; i < encounter.enemies.length; i++) {
     const template = encounter.enemies[i]!;
-    const col = Math.floor(i / 4);
-    const row = i % 4;
-    const x = enemyStartX + col * (enemySpreadX / 3) + (row % 2) * 30;
-    const y = enemyStartY + row * (enemySpreadY / 4);
-    const id = `enemy${i + 1}`;
-    console.log(`[encounter] ${id}: class=${template.className} sprite=${template.spriteType} hp=${template.hp} weapon=${template.weapon.id} shape=${template.weapon.shape.kind}`);
-    entities.set(id, placeEntity(id, template.className, x, y, "blue", template, grid));
+    const attackAbility = template.abilities.find(a => a.kind === "attack");
+    console.log(`[encounter] enemy${i + 1}: class=${template.className} sprite=${template.spriteType} hp=${template.hp} attack=${attackAbility?.id ?? "none"}`);
+    entities.set(`enemy${i + 1}`, placeEntity(`enemy${i + 1}`, template.className, 500 + Math.floor(i / 4) * 66 + (i % 2) * 30, 150 + (i % 4) * 87, "blue", template, grid));
   }
 
   return entities;

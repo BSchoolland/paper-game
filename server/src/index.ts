@@ -10,7 +10,7 @@ import {
   createInventory,
   equipFromBag,
   unequipItem,
-  getEquippedWeapon,
+  getItemAbilities,
   getAnimSet,
   ITEMS,
 } from "shared";
@@ -271,10 +271,9 @@ Bun.serve({
           ws.data.pendingHex = target;
           const hexType = getHexIcon(target, ws.data.hexMap.icons)
             ?? (isDecorationHex(target) ? "dense-wilderness" : "wilderness");
-          const eqWeapon = getEquippedWeapon(ws.data.inventory);
-          const weapon = eqWeapon?.type === "weapon" ? eqWeapon.weapon : undefined;
+          const itemAbilities = getItemAbilities(ws.data.inventory.equipped);
           const animSet = getAnimSet(ws.data.inventory.equipped);
-          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId, weapon, animSet, ws.data.inventory.equipped, ws.data.inventory.attachments);
+          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId, itemAbilities, animSet, ws.data.inventory.equipped, ws.data.inventory.attachments);
           console.log(`encounter run=${ws.data.runId} hex=(${target.q},${target.r}) type=${hexType}`);
           sendTo(ws, { type: "hexCombatStart" });
           sendTo(ws, {

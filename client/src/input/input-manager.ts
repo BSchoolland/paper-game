@@ -45,12 +45,25 @@ export class InputManager {
 
       if (state.winner) return;
 
-      if (
-        this.clientState.inputMode === "attack" &&
-        this.clientState.selectedEntityId
-      ) {
-        this.doAttack(pos);
-        return;
+      if (this.clientState.selectedEntityId) {
+        const selectedAbility = this.clientState.getSelectedAbility();
+        if (selectedAbility?.kind === "attack") {
+          this.doAttack(pos);
+          return;
+        }
+        if (selectedAbility?.kind === "move") {
+          const entity = state.entities.get(this.clientState.selectedEntityId);
+          if (entity) {
+            const clamped = clampToMovementRange(entity, pos);
+            this.clientState.dispatch({
+              type: "ability",
+              entityId: this.clientState.selectedEntityId,
+              abilityId: selectedAbility.id,
+              destination: clamped,
+            });
+          }
+          return;
+        }
       }
 
       const clicked = this.findEntityAt(pos);
@@ -73,8 +86,9 @@ export class InputManager {
       const clamped = clampToMovementRange(entity, pos);
 
       this.clientState.dispatch({
-        type: "move",
+        type: "ability",
         entityId: this.clientState.selectedEntityId,
+        abilityId: "move",
         destination: clamped,
       });
     });
@@ -116,8 +130,9 @@ export class InputManager {
     const aimDirection = normalize(dir);
 
     this.clientState.dispatch({
-      type: "attack",
+      type: "ability",
       entityId,
+      abilityId: this.clientState.selectedAbilityId ?? "punch",
       aimDirection,
     });
 

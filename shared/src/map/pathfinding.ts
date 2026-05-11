@@ -162,7 +162,8 @@ export function pathfindMove(
   entity: Entity,
   target: Vec2,
   grid: GridState,
-  entities: ReadonlyMap<string, Entity>
+  entities: ReadonlyMap<string, Entity>,
+  maxDistance?: number
 ): Vec2 | null {
   const path = pathfind(
     entity.position, target, grid,
@@ -170,7 +171,8 @@ export function pathfindMove(
   );
   if (path.length === 0) return null;
 
-  let remaining = entity.movementRemaining;
+  const moveAbility = entity.abilities.find(a => a.kind === "move");
+  let remaining = maxDistance ?? (moveAbility ? (moveAbility as import("../core/types.js").MoveAbility).distance : 0);
   let current = entity.position;
   let bestPoint = current;
 

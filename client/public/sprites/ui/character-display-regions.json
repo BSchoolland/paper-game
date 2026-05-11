@@ -1,0 +1,40 @@
+{
+  "image": "character-display",
+  "regions": [
+    {
+      "name": "character-portrait",
+      "x": 140,
+      "y": 253,
+      "w": 416,
+      "h": 574
+    },
+    {
+      "name": "hp-bar",
+      "x": 597,
+      "y": 301,
+      "w": 628,
+      "h": 76
+    },
+    {
+      "name": "xp-bar",
+      "x": 600,
+      "y": 399,
+      "w": 628,
+      "h": 70
+    },
+    {
+      "name": "stat-row-1",
+      "x": 671,
+      "y": 536,
+      "w": 565,
+      "h": 62
+    },
+    {
+      "name": "stat-row-2",
+      "x": 674,
+      "y": 659,
+      "w": 567,
+      "h": 64
+    }
+  ]
+}

@@ -1,4 +1,4 @@
-import type { ActionResult, AttackHit, Entity, GameEvent, GameState, PlayerAction, TeamId } from "../core/types.js";
+import type { AbilityDefinition, ActionResult, ActiveBuff, AttackAbility, AttackHit, BuffAbility, Entity, EnergyPool, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
 import { distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
@@ -34,18 +34,33 @@ function entitiesOverlap(
 
 const NO_CHANGE = (state: GameState): ActionResult => ({ state, events: [] });
 
+function canAfford(energy: EnergyPool, cost: { red?: number; blue?: number }): boolean {
+  if ((cost.red ?? 0) > energy.red) return false;
+  if ((cost.blue ?? 0) > energy.blue) return false;
+  return true;
+}
+
+function spendEnergy(energy: EnergyPool, cost: { red?: number; blue?: number }): EnergyPool {
+  return {
+    ...energy,
+    red: energy.red - (cost.red ?? 0),
+    blue: energy.blue - (cost.blue ?? 0),
+  };
+}
+
+function findAbility(entity: Entity, abilityId: string): AbilityDefinition | undefined {
+  return entity.abilities.find(a => a.id === abilityId);
+}
+
 function resolveMove(
   state: GameState,
-  entityId: string,
+  entity: Entity,
+  ability: MoveAbility,
   destination: { x: number; y: number }
 ): ActionResult {
-  const entity = state.entities.get(entityId);
-  if (!entity || entity.dead) return NO_CHANGE(state);
-  if (entity.teamId !== state.activeTeam) return NO_CHANGE(state);
-  if (entity.hasAttackedThisTurn && !entity.canMoveAfterAttack) return NO_CHANGE(state);
-
+  const entityId = entity.id;
   const dist = distance(entity.position, destination);
-  if (dist > entity.movementRemaining + 0.01) return NO_CHANGE(state);
+  if (dist > ability.distance + 0.01) return NO_CHANGE(state);
   if (!isPositionWalkable(state.grid, destination, entity.collisionRadius))
     return NO_CHANGE(state);
   if (!isWithinBounds(state.grid, destination, entity.collisionRadius))
@@ -58,7 +73,7 @@ function resolveMove(
   entities.set(entityId, {
     ...entity,
     position: destination,
-    movementRemaining: entity.movementRemaining - dist,
+    energy: spendEnergy(entity.energy, ability.cost),
   });
   return {
     state: { ...state, entities },
@@ -68,36 +83,30 @@ function resolveMove(
 
 function resolveAttack(
   state: GameState,
-  entityId: string,
+  entity: Entity,
+  ability: AttackAbility,
   aimDirection: { x: number; y: number }
 ): ActionResult {
-  const entity = state.entities.get(entityId);
-  if (!entity || entity.dead) return NO_CHANGE(state);
-  if (entity.teamId !== state.activeTeam) return NO_CHANGE(state);
-  if (entity.actionsRemaining < entity.weapon.actionCost) return NO_CHANGE(state);
+  const entityId = entity.id;
 
   const targets = resolveWeaponAttack(
     entity,
     aimDirection,
     state.entities,
-    entity.weapon,
+    ability,
     state.grid
   );
 
   const entities = new Map(state.entities);
   entities.set(entityId, {
     ...entity,
-    actionsRemaining: entity.actionsRemaining - entity.weapon.actionCost,
-    hasAttackedThisTurn: true,
-    movementRemaining: entity.canMoveAfterAttack
-      ? entity.movementRemaining
-      : 0,
+    energy: spendEnergy(entity.energy, ability.cost),
   });
   let newState: GameState = { ...state, entities };
 
   let hits: readonly AttackHit[] = [];
   if (targets.length > 0) {
-    const result = applyDamage(newState, targets, entity.weapon.damage);
+    const result = applyDamage(newState, targets, ability.damage);
     newState = result.state;
     hits = result.hits;
   }
@@ -109,7 +118,7 @@ function resolveAttack(
       attackerId: entityId,
       attackerPosition: entity.position,
       aimDirection,
-      weapon: entity.weapon,
+      ability,
       hits,
     }],
   };
@@ -122,6 +131,58 @@ function resolveAttack(
   };
 }
 
+function resolveBuff(
+  state: GameState,
+  entity: Entity,
+  ability: BuffAbility
+): ActionResult {
+  const entityId = entity.id;
+  const buff: ActiveBuff = {
+    id: ability.id,
+    effect: ability.effect,
+    turnsRemaining: 1,
+  };
+
+  const entities = new Map(state.entities);
+  entities.set(entityId, {
+    ...entity,
+    energy: spendEnergy(entity.energy, ability.cost),
+    buffs: [...entity.buffs, buff],
+  });
+
+  return {
+    state: { ...state, entities },
+    events: [{ type: "buff", entityId, buff }],
+  };
+}
+
+function resolveAbility(
+  state: GameState,
+  entityId: string,
+  abilityId: string,
+  aimDirection?: { x: number; y: number },
+  destination?: { x: number; y: number }
+): ActionResult {
+  const entity = state.entities.get(entityId);
+  if (!entity || entity.dead) return NO_CHANGE(state);
+  if (entity.teamId !== state.activeTeam) return NO_CHANGE(state);
+
+  const ability = findAbility(entity, abilityId);
+  if (!ability) return NO_CHANGE(state);
+  if (!canAfford(entity.energy, ability.cost)) return NO_CHANGE(state);
+
+  switch (ability.kind) {
+    case "move":
+      if (!destination) return NO_CHANGE(state);
+      return resolveMove(state, entity, ability, destination);
+    case "attack":
+      if (!aimDirection) return NO_CHANGE(state);
+      return resolveAttack(state, entity, ability, aimDirection);
+    case "buff":
+      return resolveBuff(state, entity, ability);
+  }
+}
+
 function resolveEndTurn(state: GameState): ActionResult {
   const nextTeam: TeamId = state.activeTeam === "red" ? "blue" : "red";
   const entities = new Map<string, Entity>();
@@ -129,11 +190,13 @@ function resolveEndTurn(state: GameState): ActionResult {
     if (entity.dead) {
       entities.set(id, entity);
     } else if (entity.teamId === nextTeam) {
+      const remainingBuffs = entity.buffs
+        .map(b => ({ ...b, turnsRemaining: b.turnsRemaining - 1 }))
+        .filter(b => b.turnsRemaining > 0);
       entities.set(id, {
         ...entity,
-        movementRemaining: entity.movementBudget,
-        actionsRemaining: 1,
-        hasAttackedThisTurn: false,
+        energy: { ...entity.energy, red: entity.energy.maxRed, blue: entity.energy.maxBlue },
+        buffs: remainingBuffs,
       });
     } else {
       entities.set(id, entity);
@@ -157,10 +220,8 @@ export function resolveAction(
   if (state.winner) return NO_CHANGE(state);
 
   switch (action.type) {
-    case "move":
-      return resolveMove(state, action.entityId, action.destination);
-    case "attack":
-      return resolveAttack(state, action.entityId, action.aimDirection);
+    case "ability":
+      return resolveAbility(state, action.entityId, action.abilityId, action.aimDirection, action.destination);
     case "endTurn":
       return resolveEndTurn(state);
   }

@@ -252,27 +252,36 @@ export class InventoryScreen implements Screen {
     switch (item.type) {
       case "weapon": {
         const w = item as WeaponItem;
-        const shape = w.weapon.shape;
-        let rangeText = "";
-        if (shape.kind === "sector") rangeText = `${shape.radius}`;
-        else if (shape.kind === "circle") rangeText = `${shape.range} (${shape.radius} AoE)`;
-        else if (shape.kind === "rectangle") rangeText = `${shape.length}`;
-        else if (shape.kind === "point") rangeText = `${shape.range}`;
-        statsHtml = `
-          <div style="margin-top:8px">
-            <div><span style="color:#8b8b7a">Damage:</span> ${w.weapon.damage}</div>
+        const attacks = w.abilities.filter(a => a.kind === "attack") as import("shared").AttackAbility[];
+        const lines = attacks.map(a => {
+          const shape = a.shape;
+          let rangeText = "";
+          if (shape.kind === "sector") rangeText = `${shape.radius}`;
+          else if (shape.kind === "circle") rangeText = `${shape.range} (${shape.radius} AoE)`;
+          else if (shape.kind === "rectangle") rangeText = `${shape.length}`;
+          else if (shape.kind === "point") rangeText = `${shape.range}`;
+          const costParts: string[] = [];
+          if (a.cost.red) costParts.push(`${a.cost.red} red`);
+          if (a.cost.blue) costParts.push(`${a.cost.blue} blue`);
+          return `
+            <div style="margin-top:4px"><strong>${a.name}</strong> (${costParts.join(" + ")})</div>
+            <div><span style="color:#8b8b7a">Damage:</span> ${a.damage}</div>
             <div><span style="color:#8b8b7a">Range:</span> ${rangeText}</div>
-            <div><span style="color:#8b8b7a">Action Cost:</span> ${w.weapon.actionCost}</div>
-            ${w.weapon.onHit?.length ? `<div><span style="color:#8b8b7a">On Hit:</span> ${w.weapon.onHit.map((e) => `${e.type} (${e.distance})`).join(", ")}</div>` : ""}
-          </div>`;
+            ${a.onHit?.length ? `<div><span style="color:#8b8b7a">On Hit:</span> ${a.onHit.map(e => `${e.type} (${e.distance})`).join(", ")}</div>` : ""}`;
+        });
+        statsHtml = `<div style="margin-top:8px">${lines.join("")}</div>`;
         break;
       }
       case "shield": {
         const s = item as ShieldItem;
-        statsHtml = `
-          <div style="margin-top:8px">
-            <div><span style="color:#8b8b7a">Damage Reduction:</span> ${s.damageReduction}</div>
-          </div>`;
+        const buffs = s.abilities.filter(a => a.kind === "buff");
+        const lines = buffs.map(a => {
+          const costParts: string[] = [];
+          if (a.cost.red) costParts.push(`${a.cost.red} red`);
+          if (a.cost.blue) costParts.push(`${a.cost.blue} blue`);
+          return `<div><strong>${a.name}</strong> (${costParts.join(" + ")})</div>`;
+        });
+        statsHtml = `<div style="margin-top:8px">${lines.join("")}</div>`;
         break;
       }
       case "consumable": {

@@ -1,7 +1,6 @@
-import type { AiStrategyType, Entity, GameState, PlayerAction, Vec2 } from "../core/types.js";
+import type { AbilityDefinition, AiStrategyType, AttackAbility, Entity, GameState, MoveAbility, PlayerAction, Vec2 } from "../core/types.js";
 import { distance, sub, normalize, add, scale } from "../core/vec2.js";
 import { pathfindMove } from "../map/pathfinding.js";
-import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 
 export interface AiStrategy {
   planActions(entity: Entity, state: GameState): PlayerAction[];
@@ -21,14 +20,30 @@ function closestEnemy(entity: Entity, state: GameState): Entity | null {
   return best;
 }
 
-function getAttackRange(entity: Entity): number {
-  const shape = entity.weapon.shape;
+function getMoveAbility(entity: Entity): MoveAbility | null {
+  const a = entity.abilities.find(a => a.kind === "move");
+  return a ? a as MoveAbility : null;
+}
+
+function getAttackAbility(entity: Entity): AttackAbility | null {
+  const a = entity.abilities.find(a => a.kind === "attack");
+  return a ? a as AttackAbility : null;
+}
+
+function getAttackRange(ability: AttackAbility): number {
+  const shape = ability.shape;
   switch (shape.kind) {
     case "point": return shape.range;
     case "sector": return shape.radius;
     case "rectangle": return shape.length;
-    default: return 80;
+    case "circle": return shape.range + shape.radius;
   }
+}
+
+function canAfford(entity: Entity, ability: AbilityDefinition): boolean {
+  if ((ability.cost.red ?? 0) > entity.energy.red) return false;
+  if ((ability.cost.blue ?? 0) > entity.energy.blue) return false;
+  return true;
 }
 
 function tryAttack(
@@ -37,17 +52,33 @@ function tryAttack(
   fromPos: Vec2,
   actions: PlayerAction[]
 ): boolean {
-  const attackRange = getAttackRange(entity);
-  if (distance(fromPos, target.position) <= attackRange + target.collisionRadius
-    && entity.actionsRemaining > 0) {
+  const ability = getAttackAbility(entity);
+  if (!ability || !canAfford(entity, ability)) return false;
+  const attackRange = getAttackRange(ability);
+  if (distance(fromPos, target.position) <= attackRange + target.collisionRadius) {
     const dir = normalize(sub(target.position, fromPos));
-    actions.push({ type: "attack", entityId: entity.id, aimDirection: dir });
+    actions.push({ type: "ability", entityId: entity.id, abilityId: ability.id, aimDirection: dir });
     return true;
   }
   return false;
 }
 
-/** Charges straight at the closest enemy, attacks when in range. */
+function tryMove(
+  entity: Entity,
+  target: Vec2,
+  state: GameState,
+  actions: PlayerAction[]
+): Vec2 | null {
+  const moveAbility = getMoveAbility(entity);
+  if (!moveAbility || !canAfford(entity, moveAbility)) return null;
+  const destination = pathfindMove(entity, target, state.grid, state.entities, moveAbility.distance);
+  if (destination) {
+    actions.push({ type: "ability", entityId: entity.id, abilityId: moveAbility.id, destination });
+    return destination;
+  }
+  return null;
+}
+
 export const rushStrategy: AiStrategy = {
   planActions(entity: Entity, state: GameState): PlayerAction[] {
     const actions: PlayerAction[] = [];
@@ -56,58 +87,43 @@ export const rushStrategy: AiStrategy = {
 
     if (tryAttack(entity, target, entity.position, actions)) return actions;
 
-    const destination = pathfindMove(
-      entity, target.position, state.grid, state.entities
-    );
-    if (destination) {
-      actions.push({ type: "move", entityId: entity.id, destination });
-      tryAttack(entity, target, destination, actions);
+    const movedTo = tryMove(entity, target.position, state, actions);
+    if (movedTo) {
+      tryAttack(entity, target, movedTo, actions);
     }
 
     return actions;
   },
 };
 
-/** Stays at range, attacks from a distance. Retreats if enemies get too close. */
 export const kiteStrategy: AiStrategy = {
   planActions(entity: Entity, state: GameState): PlayerAction[] {
     const actions: PlayerAction[] = [];
     const target = closestEnemy(entity, state);
     if (!target) return actions;
 
-    const dist = distance(entity.position, target.position);
-    const attackRange = getAttackRange(entity);
-    const preferredMin = attackRange * 0.5;
+    const attackAbility = getAttackAbility(entity);
+    if (!attackAbility) return actions;
 
+    const dist = distance(entity.position, target.position);
+    const attackRange = getAttackRange(attackAbility);
+    const preferredMin = attackRange * 0.5;
     const tooClose = dist < preferredMin;
 
-    if (tooClose && entity.canMoveAfterAttack) {
-      if (tryAttack(entity, target, entity.position, actions)) {
-        const retreatPos = findRetreatPos(entity, target, state);
-        if (retreatPos) {
-          actions.push({ type: "move", entityId: entity.id, destination: retreatPos });
-        }
-        return actions;
-      }
-    }
-
     if (tooClose) {
+      tryAttack(entity, target, entity.position, actions);
       const retreatPos = findRetreatPos(entity, target, state);
       if (retreatPos) {
-        actions.push({ type: "move", entityId: entity.id, destination: retreatPos });
-        tryAttack(entity, target, retreatPos, actions);
-        return actions;
+        actions.push({ type: "ability", entityId: entity.id, abilityId: "move", destination: retreatPos });
       }
+      if (actions.length > 0) return actions;
     }
 
     if (tryAttack(entity, target, entity.position, actions)) return actions;
 
-    const destination = pathfindMove(
-      entity, target.position, state.grid, state.entities
-    );
-    if (destination) {
-      actions.push({ type: "move", entityId: entity.id, destination });
-      tryAttack(entity, target, destination, actions);
+    const movedTo = tryMove(entity, target.position, state, actions);
+    if (movedTo) {
+      tryAttack(entity, target, movedTo, actions);
     }
 
     return actions;
@@ -115,10 +131,13 @@ export const kiteStrategy: AiStrategy = {
 };
 
 function findRetreatPos(entity: Entity, threat: Entity, state: GameState): Vec2 | null {
-  const awayDir = normalize(sub(entity.position, threat.position));
-  const retreatTarget = add(entity.position, scale(awayDir, entity.movementRemaining));
+  const moveAbility = getMoveAbility(entity);
+  if (!moveAbility || !canAfford(entity, moveAbility)) return null;
 
-  const dest = pathfindMove(entity, retreatTarget, state.grid, state.entities);
+  const awayDir = normalize(sub(entity.position, threat.position));
+  const retreatTarget = add(entity.position, scale(awayDir, moveAbility.distance));
+
+  const dest = pathfindMove(entity, retreatTarget, state.grid, state.entities, moveAbility.distance);
   if (dest && distance(dest, threat.position) > distance(entity.position, threat.position)) {
     return dest;
   }
@@ -127,8 +146,8 @@ function findRetreatPos(entity: Entity, threat: Entity, state: GameState): Vec2 
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     const rotated = { x: awayDir.x * cos - awayDir.y * sin, y: awayDir.x * sin + awayDir.y * cos };
-    const altTarget = add(entity.position, scale(rotated, entity.movementRemaining));
-    const altDest = pathfindMove(entity, altTarget, state.grid, state.entities);
+    const altTarget = add(entity.position, scale(rotated, moveAbility.distance));
+    const altDest = pathfindMove(entity, altTarget, state.grid, state.entities, moveAbility.distance);
     if (altDest && distance(altDest, threat.position) > distance(entity.position, threat.position)) {
       return altDest;
     }
@@ -137,7 +156,6 @@ function findRetreatPos(entity: Entity, threat: Entity, state: GameState): Vec2 
   return null;
 }
 
-/** Behaves like rush, but locks onto whoever last damaged it until that target dies. */
 export class ThreatStrategy implements AiStrategy {
   private threatTarget: string | null = null;
 
@@ -161,12 +179,9 @@ export class ThreatStrategy implements AiStrategy {
 
     if (tryAttack(entity, target, entity.position, actions)) return actions;
 
-    const destination = pathfindMove(
-      entity, target.position, state.grid, state.entities
-    );
-    if (destination) {
-      actions.push({ type: "move", entityId: entity.id, destination });
-      tryAttack(entity, target, destination, actions);
+    const movedTo = tryMove(entity, target.position, state, actions);
+    if (movedTo) {
+      tryAttack(entity, target, movedTo, actions);
     }
 
     return actions;

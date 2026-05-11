@@ -19,18 +19,58 @@ export type CombatShapeDefinition =
   | { kind: "circle"; radius: number; range: number }
   | { kind: "point"; range: number };
 
-export interface WeaponDefinition {
+export type WeaponEffect =
+  | { type: "knockback"; distance: number };
+
+// --- Ability System ---
+
+export interface EnergyCost {
+  readonly red?: number;
+  readonly blue?: number;
+}
+
+export interface EnergyPool {
+  readonly red: number;
+  readonly blue: number;
+  readonly maxRed: number;
+  readonly maxBlue: number;
+}
+
+interface AbilityBase {
   readonly id: string;
   readonly name: string;
+  readonly cost: EnergyCost;
+}
+
+export interface AttackAbility extends AbilityBase {
+  readonly kind: "attack";
   readonly shape: CombatShapeDefinition;
   readonly damage: number;
-  readonly actionCost: number;
   readonly ignoreCoverRange?: number;
   readonly onHit?: readonly WeaponEffect[];
 }
 
-export type WeaponEffect =
-  | { type: "knockback"; distance: number };
+export interface MoveAbility extends AbilityBase {
+  readonly kind: "move";
+  readonly distance: number;
+}
+
+export interface BuffAbility extends AbilityBase {
+  readonly kind: "buff";
+  readonly effect: BuffEffect;
+}
+
+export type BuffEffect =
+  | { type: "block"; damageReduction: number };
+
+export type AbilityDefinition = AttackAbility | MoveAbility | BuffAbility;
+
+export interface ActiveBuff {
+  readonly id: string;
+  readonly effect: BuffEffect;
+  readonly turnsRemaining: number;
+}
+
 
 export interface Entity {
   readonly id: EntityId;
@@ -40,12 +80,9 @@ export interface Entity {
   readonly hp: number;
   readonly maxHp: number;
   readonly teamId: TeamId;
-  readonly movementBudget: number;
-  readonly movementRemaining: number;
-  readonly actionsRemaining: number;
-  readonly canMoveAfterAttack: boolean;
-  readonly hasAttackedThisTurn: boolean;
-  readonly weapon: WeaponDefinition;
+  readonly energy: EnergyPool;
+  readonly abilities: readonly AbilityDefinition[];
+  readonly buffs: readonly ActiveBuff[];
   readonly spriteType?: string;
   readonly spriteScale?: number;
   readonly heightMeters?: number;
@@ -66,8 +103,7 @@ export interface GameState {
 }
 
 export type PlayerAction =
-  | { type: "move"; entityId: EntityId; destination: Vec2 }
-  | { type: "attack"; entityId: EntityId; aimDirection: Vec2 }
+  | { type: "ability"; entityId: EntityId; abilityId: string; aimDirection?: Vec2; destination?: Vec2 }
   | { type: "endTurn" };
 
 export type GameEvent =
@@ -77,9 +113,10 @@ export type GameEvent =
       attackerId: EntityId;
       attackerPosition: Vec2;
       aimDirection: Vec2;
-      weapon: WeaponDefinition;
+      ability: AttackAbility;
       hits: readonly AttackHit[];
     }
+  | { type: "buff"; entityId: EntityId; buff: ActiveBuff }
   | { type: "endTurn"; nextTeam: TeamId }
   | { type: "spawn"; entityId: EntityId; position: Vec2; templateKey: string }
   | { type: "knockback"; entityId: EntityId; from: Vec2; to: Vec2 };
@@ -105,31 +142,137 @@ export interface ActionResult {
   readonly events: readonly GameEvent[];
 }
 
-export const SHORT_SWORD: WeaponDefinition = {
-  id: "short-sword",
-  name: "Short Sword",
+// --- Innate Abilities (always available) ---
+
+export const INNATE_MOVE: MoveAbility = {
+  id: "move",
+  name: "Move",
+  kind: "move",
+  cost: { blue: 1 },
+  distance: 130,
+};
+
+export const INNATE_PUNCH: AttackAbility = {
+  id: "punch",
+  name: "Punch",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "sector", radius: 50, halfAngle: Math.PI / 4 },
+  damage: 10,
+};
+
+export const PLAYER_INNATE_ABILITIES: readonly AbilityDefinition[] = [INNATE_MOVE, INNATE_PUNCH];
+
+// --- Weapon Abilities (granted by equipped items) ---
+
+export const SHORT_SWORD_SLASH: AttackAbility = {
+  id: "short-sword-slash",
+  name: "Slash",
+  kind: "attack",
+  cost: { red: 1 },
   shape: { kind: "sector", radius: 80, halfAngle: Math.PI / 3 },
   damage: 25,
-  actionCost: 1,
   onHit: [{ type: "knockback", distance: 30 }],
 };
 
-export const SPEAR: WeaponDefinition = {
-  id: "spear",
-  name: "Spear",
+export const SPEAR_THRUST: AttackAbility = {
+  id: "spear-thrust",
+  name: "Thrust",
+  kind: "attack",
+  cost: { red: 1 },
   shape: { kind: "rectangle", length: 140, width: 20 },
   damage: 30,
-  actionCost: 1,
   onHit: [{ type: "knockback", distance: 25 }],
 };
 
-export const BOW: WeaponDefinition = {
-  id: "bow",
-  name: "Bow",
+export const BOW_SHOT: AttackAbility = {
+  id: "bow-shot",
+  name: "Shot",
+  kind: "attack",
+  cost: { red: 1 },
   shape: { kind: "point", range: 300 },
   damage: 20,
-  actionCost: 1,
   ignoreCoverRange: 40,
+};
+
+// --- Enemy Abilities ---
+
+export const GOBLIN_SPEAR_THRUST: AttackAbility = {
+  id: "goblin-spear-thrust",
+  name: "Spear Thrust",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "rectangle", length: 100, width: 18 },
+  damage: 25,
+  onHit: [{ type: "knockback", distance: 20 }],
+};
+
+export const GOBLIN_BOW_SHOT: AttackAbility = {
+  id: "goblin-bow-shot",
+  name: "Bow Shot",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "point", range: 260 },
+  damage: 15,
+};
+
+export const SHIELD_BASH_ATTACK: AttackAbility = {
+  id: "shield-bash",
+  name: "Shield Bash",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "sector", radius: 60, halfAngle: Math.PI / 4 },
+  damage: 15,
+  onHit: [{ type: "knockback", distance: 45 }],
+};
+
+export const BRUTE_SLAM_ATTACK: AttackAbility = {
+  id: "brute-slam",
+  name: "Brute Slam",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "sector", radius: 90, halfAngle: Math.PI / 2 },
+  damage: 40,
+  onHit: [{ type: "knockback", distance: 50 }],
+};
+
+export const GOLEM_SMASH_ATTACK: AttackAbility = {
+  id: "golem-smash",
+  name: "Golem Smash",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "circle", radius: 70, range: 60 },
+  damage: 50,
+  onHit: [{ type: "knockback", distance: 60 }],
+};
+
+export const SLIME_SPIT_ATTACK: AttackAbility = {
+  id: "slime-spit",
+  name: "Slime Spit",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "point", range: 180 },
+  damage: 12,
+};
+
+export const SLIME_LASH_ATTACK: AttackAbility = {
+  id: "slime-lash",
+  name: "Slime Lash",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "sector", radius: 70, halfAngle: Math.PI / 3 },
+  damage: 20,
+  onHit: [{ type: "knockback", distance: 20 }],
+};
+
+export const SLIME_WAVE_ATTACK: AttackAbility = {
+  id: "slime-wave",
+  name: "Slime Wave",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "circle", radius: 80, range: 50 },
+  damage: 35,
+  onHit: [{ type: "knockback", distance: 35 }],
 };
 
 export const ENEMY_TAGS = [
@@ -145,12 +288,15 @@ export type EnemyTag = (typeof ENEMY_TAGS)[number];
 
 export type AiStrategyType = "rush" | "kite" | "threat";
 
+export function makeMove(distance: number): MoveAbility {
+  return { id: "move", name: "Move", kind: "move", cost: { blue: 1 }, distance };
+}
+
 export interface UnitTemplate {
-  readonly weapon: WeaponDefinition;
+  readonly abilities: readonly AbilityDefinition[];
   readonly hp: number;
-  readonly movementBudget: number;
+  readonly energy: { red: number; blue: number };
   readonly collisionRadius: number;
-  readonly canMoveAfterAttack: boolean;
   readonly className: string;
   readonly spriteType?: string;
   readonly spriteScale?: number;
@@ -163,93 +309,21 @@ export interface UnitTemplate {
 
 export const UNIT_TEMPLATES = {
   player: {
-    weapon: SHORT_SWORD,
+    abilities: PLAYER_INNATE_ABILITIES,
     hp: 120,
-    movementBudget: 130,
+    energy: { red: 2, blue: 2 },
     collisionRadius: 16,
-    canMoveAfterAttack: true,
     className: "Player",
     heightMeters: 2,
   },
 } as const satisfies Record<string, UnitTemplate>;
 
-export const GOBLIN_SPEAR: WeaponDefinition = {
-  id: "goblin-spear",
-  name: "Goblin Spear",
-  shape: { kind: "rectangle", length: 100, width: 18 },
-  damage: 25,
-  actionCost: 1,
-  onHit: [{ type: "knockback", distance: 20 }],
-};
-
-export const GOBLIN_BOW: WeaponDefinition = {
-  id: "goblin-bow",
-  name: "Goblin Bow",
-  shape: { kind: "point", range: 260 },
-  damage: 15,
-  actionCost: 1,
-};
-
-export const SHIELD_BASH: WeaponDefinition = {
-  id: "shield-bash",
-  name: "Shield Bash",
-  shape: { kind: "sector", radius: 60, halfAngle: Math.PI / 4 },
-  damage: 15,
-  actionCost: 1,
-  onHit: [{ type: "knockback", distance: 45 }],
-};
-
-export const BRUTE_SLAM: WeaponDefinition = {
-  id: "brute-slam",
-  name: "Brute Slam",
-  shape: { kind: "sector", radius: 90, halfAngle: Math.PI / 2 },
-  damage: 40,
-  actionCost: 1,
-  onHit: [{ type: "knockback", distance: 50 }],
-};
-
-export const GOLEM_SMASH: WeaponDefinition = {
-  id: "golem-smash",
-  name: "Golem Smash",
-  shape: { kind: "circle", radius: 70, range: 60 },
-  damage: 50,
-  actionCost: 1,
-  onHit: [{ type: "knockback", distance: 60 }],
-};
-
-export const SLIME_SPIT: WeaponDefinition = {
-  id: "slime-spit",
-  name: "Slime Spit",
-  shape: { kind: "point", range: 180 },
-  damage: 12,
-  actionCost: 1,
-};
-
-export const SLIME_LASH: WeaponDefinition = {
-  id: "slime-lash",
-  name: "Slime Lash",
-  shape: { kind: "sector", radius: 70, halfAngle: Math.PI / 3 },
-  damage: 20,
-  actionCost: 1,
-  onHit: [{ type: "knockback", distance: 20 }],
-};
-
-export const SLIME_WAVE: WeaponDefinition = {
-  id: "slime-wave",
-  name: "Slime Wave",
-  shape: { kind: "circle", radius: 80, range: 50 },
-  damage: 35,
-  actionCost: 1,
-  onHit: [{ type: "knockback", distance: 35 }],
-};
-
 export const ENEMY_TEMPLATES = {
   "goblin-spear": {
-    weapon: GOBLIN_SPEAR,
+    abilities: [makeMove(150), GOBLIN_SPEAR_THRUST],
     hp: 80,
-    movementBudget: 150,
+    energy: { red: 1, blue: 1 },
     collisionRadius: 14,
-    canMoveAfterAttack: false,
     className: "Goblin Spearman",
     spriteType: "goblin-spear",
     heightMeters: 1.5,
@@ -258,11 +332,10 @@ export const ENEMY_TEMPLATES = {
     tags: ["melee"],
   },
   "goblin-archer": {
-    weapon: GOBLIN_BOW,
+    abilities: [makeMove(140), GOBLIN_BOW_SHOT],
     hp: 55,
-    movementBudget: 140,
+    energy: { red: 1, blue: 2 },
     collisionRadius: 12,
-    canMoveAfterAttack: true,
     className: "Goblin Archer",
     spriteType: "goblin-archer",
     heightMeters: 1.5,
@@ -271,11 +344,10 @@ export const ENEMY_TEMPLATES = {
     tags: ["ranged"],
   },
   "goblin-shield": {
-    weapon: SHIELD_BASH,
+    abilities: [makeMove(110), SHIELD_BASH_ATTACK],
     hp: 110,
-    movementBudget: 110,
+    energy: { red: 1, blue: 2 },
     collisionRadius: 16,
-    canMoveAfterAttack: true,
     className: "Goblin Shield",
     spriteType: "goblin-shield",
     heightMeters: 1.5,
@@ -284,11 +356,10 @@ export const ENEMY_TEMPLATES = {
     tags: ["melee", "tank"],
   },
   "goblin-brute": {
-    weapon: BRUTE_SLAM,
+    abilities: [makeMove(90), BRUTE_SLAM_ATTACK],
     hp: 160,
-    movementBudget: 90,
+    energy: { red: 1, blue: 1 },
     collisionRadius: 20,
-    canMoveAfterAttack: false,
     className: "Goblin Brute",
     spriteType: "goblin-brute",
     heightMeters: 1.75,
@@ -297,11 +368,10 @@ export const ENEMY_TEMPLATES = {
     tags: ["melee", "elite"],
   },
   "stone-golem": {
-    weapon: GOLEM_SMASH,
+    abilities: [makeMove(70), GOLEM_SMASH_ATTACK],
     hp: 250,
-    movementBudget: 70,
+    energy: { red: 1, blue: 1 },
     collisionRadius: 22,
-    canMoveAfterAttack: false,
     className: "Stone Golem",
     spriteType: "stone-golem",
     heightMeters: 3,
@@ -310,11 +380,10 @@ export const ENEMY_TEMPLATES = {
     tags: ["melee", "tank", "boss"],
   },
   "slime": {
-    weapon: SLIME_SPIT,
+    abilities: [makeMove(120), SLIME_SPIT_ATTACK],
     hp: 40,
-    movementBudget: 120,
+    energy: { red: 1, blue: 2 },
     collisionRadius: 12,
-    canMoveAfterAttack: true,
     className: "Slime",
     spriteType: "slime",
     heightMeters: 1.5,
@@ -323,11 +392,10 @@ export const ENEMY_TEMPLATES = {
     tags: ["ranged", "swarm"],
   },
   "big-slime": {
-    weapon: SLIME_LASH,
+    abilities: [makeMove(100), SLIME_LASH_ATTACK],
     hp: 90,
-    movementBudget: 100,
+    energy: { red: 1, blue: 2 },
     collisionRadius: 18,
-    canMoveAfterAttack: true,
     className: "Big Slime",
     spriteType: "slime",
     heightMeters: 3,
@@ -337,11 +405,10 @@ export const ENEMY_TEMPLATES = {
     tags: ["melee", "tank", "elite"],
   },
   "massive-slime": {
-    weapon: SLIME_WAVE,
+    abilities: [makeMove(70), SLIME_WAVE_ATTACK],
     hp: 200,
-    movementBudget: 70,
+    energy: { red: 1, blue: 1 },
     collisionRadius: 28,
-    canMoveAfterAttack: false,
     className: "Massive Slime",
     spriteType: "slime",
     heightMeters: 6,
