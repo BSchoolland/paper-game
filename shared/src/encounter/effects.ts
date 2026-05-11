@@ -1,8 +1,17 @@
-import type { ActionResult, Entity, EntityEffect, GameEvent, StatusEffect, TeamId, Vec2, WeaponEffect } from "../core/types.js";
-import { ENEMY_TEMPLATES } from "../core/items.js";
+import type { ActionResult, Entity, EntityEffect, GameEvent, StatusEffect, TeamId, UnitTemplate, Vec2, WeaponEffect } from "../core/types.js";
 import { makeEntity } from "./entity-factory.js";
 import { normalize, sub, add, scale, distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds, findWalkablePosition } from "../map/collision-grid.js";
+
+let activeTemplateRegistry: Record<string, UnitTemplate> | null = null;
+
+export function setTemplateRegistry(registry: Record<string, UnitTemplate>): void {
+  activeTemplateRegistry = registry;
+}
+
+function getTemplate(key: string): UnitTemplate | undefined {
+  return activeTemplateRegistry?.[key];
+}
 
 function nextSpawnId(state: ActionResult["state"]): { id: string; state: ActionResult["state"] } {
   const next = state.nextSpawnId + 1;
@@ -181,7 +190,7 @@ function spawnEntities(
   teamId: TeamId,
   state: ActionResult["state"]
 ): { state: ActionResult["state"]; events: GameEvent[] } {
-  const template = (ENEMY_TEMPLATES as Record<string, (typeof ENEMY_TEMPLATES)[keyof typeof ENEMY_TEMPLATES]>)[templateKey];
+  const template = getTemplate(templateKey);
   if (!template) return { state, events: [] };
 
   const entities = new Map(state.entities);

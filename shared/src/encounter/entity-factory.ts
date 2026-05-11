@@ -28,7 +28,7 @@ export function makeEntity(
       maxBlue: template.energy.blue,
     },
     abilities: template.abilities,
-    spriteType: template.spriteType,
+    sprites: template.sprites,
     spriteScale: template.spriteScale,
     heightMeters: template.heightMeters,
     strategy: template.strategy,

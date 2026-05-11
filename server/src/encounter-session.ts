@@ -4,12 +4,13 @@ import {
   serializeGameState,
   AiController,
   generateEncounter,
-  GREENLANDS_BIOME,
+  setTemplateRegistry,
   buildScenarioMap,
   placePvpEntities,
   placePveEntities,
   assembleGameState as assembleScenarioState,
 } from "shared";
+import { loadDimension, loadEnemyTemplateRegistry } from "./db.js";
 import { loadCollisionGrid } from "./collision-loader.js";
 import {
   buildEncounterMap,
@@ -36,7 +37,10 @@ export class EncounterSession {
     attachments?: Record<string, AttachmentData>,
   ): Promise<EncounterSession> {
     if (mode === "pve" && hexType && hexCoord && runId !== undefined) {
-      const encounter = generateEncounter(hexType, GREENLANDS_BIOME, hexCoord.q, hexCoord.r, runId);
+      const dimension = loadDimension(0)!;
+      const registry = loadEnemyTemplateRegistry(0);
+      setTemplateRegistry(registry);
+      const encounter = generateEncounter(hexType, dimension, hexCoord.q, hexCoord.r, runId);
       const map = buildEncounterMap(encounter);
       await loadCollisionGrid(map.grid, map.mapDefinition.objects);
       const entities = placeEncounterEntities(encounter, map.grid, itemAbilities, animSet, equipped, attachments);
@@ -45,7 +49,7 @@ export class EncounterSession {
 
     const map = buildScenarioMap(42);
     await loadCollisionGrid(map.grid, map.mapDefinition.objects);
-    const entities = mode === "pve" ? placePveEntities(map.grid) : placePvpEntities(map.grid);
+    const entities = mode === "pve" ? placePveEntities(map.grid, loadEnemyTemplateRegistry(0)) : placePvpEntities(map.grid);
     return new EncounterSession(assembleScenarioState(map, entities));
   }
 

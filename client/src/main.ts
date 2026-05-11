@@ -6,7 +6,7 @@ import { GameRenderer } from "./renderer/game-renderer.js";
 import { HexMapRenderer, loadMapIconAssets } from "./renderer/hex-map-renderer.js";
 import { FramePacer } from "./renderer/frame-pacer.js";
 import { InputManager } from "./input/input-manager.js";
-import { loadSpriteAssets } from "./renderer/sprite-assets.js";
+import { loadSpriteAssets, loadDimensionSprites } from "./renderer/sprite-assets.js";
 import { loadMapAssets } from "./renderer/grid-renderer.js";
 import { ScreenManager } from "./screens/screen-manager.js";
 import { MapScreen } from "./screens/map-screen.js";
@@ -29,6 +29,7 @@ async function init() {
   container.appendChild(app.canvas);
 
   await Promise.all([loadSpriteAssets(), loadMapAssets(), loadMapIconAssets()]);
+  await loadDimensionSprites(0);
 
   const params = new URLSearchParams(window.location.search);
   const mode = params.get("mode") === "pvp" ? "pvp" : "pve";

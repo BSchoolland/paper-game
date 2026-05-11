@@ -12,7 +12,6 @@ import {
   unequipItem,
   getItemAbilities,
   getAnimSet,
-  ITEMS,
   shouldAutoEndTurn,
 } from "shared";
 import type { HexCoord, HexMapState, HexIconType, InventoryState } from "shared";
@@ -23,25 +22,32 @@ import {
   clearExploredHexes,
   seedDiscovery,
   startNewRun,
+  loadDimension,
+  loadEnemyTemplateRegistry,
+  loadItems,
 } from "./db.js";
+import { seedDimension0 } from "./seed.js";
+import { join } from "path";
 
 seedDiscovery(15);
+seedDimension0();
 
 type GameMode = "pvp" | "pve";
 type Phase = "map" | "combat";
 
+const items = loadItems(0);
 const DEFAULT_INVENTORY = createInventory([
-  ITEMS["short-sword"]!,
-  ITEMS["long-sword"]!,
-  ITEMS["spear"]!,
-  ITEMS["axe"]!,
-  ITEMS["bow"]!,
-  ITEMS["broadsword"]!,
-  ITEMS["mace"]!,
-  ITEMS["round-shield"]!,
-  ITEMS["staff"]!,
-  ITEMS["potion"]!,
-  ITEMS["bomb"]!,
+  items["short-sword"]!,
+  items["long-sword"]!,
+  items["spear"]!,
+  items["axe"]!,
+  items["bow"]!,
+  items["broadsword"]!,
+  items["mace"]!,
+  items["round-shield"]!,
+  items["staff"]!,
+  items["potion"]!,
+  items["bomb"]!,
 ]);
 
 interface SocketData {
@@ -162,11 +168,21 @@ function runAiTurn(ws: ServerWebSocket<SocketData>) {
 
 const PORT = Number(process.env.PORT) || 3001;
 
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, OPTIONS",
+};
+
 Bun.serve({
   port: PORT,
 
-  fetch(req, server) {
+  async fetch(req, server) {
     const url = new URL(req.url);
+
+    if (req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
     if (url.pathname === "/health") {
       return Response.json({ status: "ok", uptime: process.uptime() });
     }
@@ -188,6 +204,45 @@ Bun.serve({
         return new Response("WebSocket upgrade failed", { status: 400 });
       return undefined;
     }
+    const spritesPrefix = "/api/sprites/";
+    if (url.pathname.startsWith(spritesPrefix)) {
+      const relativePath = url.pathname.slice(spritesPrefix.length);
+      if (relativePath.includes("..")) return new Response("Forbidden", { status: 403 });
+      const filePath = join(import.meta.dir, "..", "sprites", relativePath);
+      const file = Bun.file(filePath);
+      if (await file.exists()) {
+        return new Response(file, {
+          headers: {
+            ...CORS_HEADERS,
+            "Content-Type": "image/webp",
+            "Cache-Control": "public, max-age=31536000, immutable",
+          },
+        });
+      }
+      return new Response("Not found", { status: 404 });
+    }
+
+    if (url.pathname.startsWith("/api/dimensions/")) {
+      const dimId = parseInt(url.pathname.split("/")[3]!, 10);
+      if (isNaN(dimId)) return new Response("Invalid dimension id", { status: 400 });
+      const dimension = loadDimension(dimId);
+      if (!dimension) return new Response("Dimension not found", { status: 404 });
+      const registry = loadEnemyTemplateRegistry(dimId);
+      const spritePaths: string[] = [];
+      for (const template of Object.values(registry)) {
+        if (template.sprites) {
+          for (const path of Object.values(template.sprites)) {
+            if (!spritePaths.includes(path)) spritePaths.push(path);
+          }
+        }
+      }
+      return Response.json({
+        id: dimId,
+        name: dimension.name,
+        spritePaths,
+      }, { headers: CORS_HEADERS });
+    }
+
     return new Response("Not found", { status: 404 });
   },
 

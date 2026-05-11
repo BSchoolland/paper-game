@@ -1,5 +1,6 @@
-import type { AimDirection, AttackAbility, AttackHit, CombatShapeDefinition, Entity, GameState, GridState, StatusEffectType } from "../core/types.js";
+import type { AimDirection, AttackAbility, AttackHit, Entity, GameState, GridState } from "../core/types.js";
 import { entitiesInShape } from "../geometry/index.js";
+import { getEffectiveDamage } from "./status-modifiers.js";
 
 export interface DamageResult {
   readonly state: GameState;
@@ -25,14 +26,6 @@ export function resolveWeaponAttack(
   return hits.filter((e) => e.teamId !== attacker.teamId);
 }
 
-function hasStatus(entity: Entity, type: StatusEffectType): boolean {
-  return entity.statusEffects?.some(s => s.type === type) ?? false;
-}
-
-function getStatusValue(entity: Entity, type: StatusEffectType): number {
-  return entity.statusEffects?.find(s => s.type === type)?.value ?? 0;
-}
-
 export function applyDamage(
   state: GameState,
   targets: Entity[],
@@ -41,16 +34,10 @@ export function applyDamage(
 ): DamageResult {
   const entities = new Map(state.entities);
   const attacker = attackerId ? state.entities.get(attackerId) : undefined;
-  const weakMultiplier = attacker && hasStatus(attacker, "weak")
-    ? 1 - getStatusValue(attacker, "weak")
-    : 1;
 
   const hits: AttackHit[] = [];
   for (const target of targets) {
-    let effectiveDamage = Math.round(damage * weakMultiplier);
-    if (hasStatus(target, "vulnerable")) {
-      effectiveDamage = Math.round(effectiveDamage * (1 + getStatusValue(target, "vulnerable")));
-    }
+    const effectiveDamage = getEffectiveDamage(damage, attacker, target);
     const barrierAbsorbed = Math.min(target.barrier, effectiveDamage);
     const remainingDamage = effectiveDamage - barrierAbsorbed;
     const newBarrier = target.barrier - barrierAbsorbed;

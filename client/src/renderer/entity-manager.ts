@@ -3,6 +3,7 @@ import type { AimDirection, AttackAbility, CombatShapeDefinition, Entity, GameEv
 import { ShapeKind, normalize, length as vecLength, raycast } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark, drawRoughCircle } from "./sketch-utils.js";
+import { FloatingTextManager } from "./floating-text.js";
 
 const FOOT_OFFSET = 272 * 0.2 * (1 - 0.75);
 const DEFAULT_FLASH_COLOR = 0x8b2020;
@@ -22,14 +23,27 @@ interface DelayedHit {
 
 export type ShakeRequest = { intensity: number };
 
+const STATUS_COLORS: Record<string, number> = {
+  slowed: 0x5b9bd5,
+  weak: 0x9b59b6,
+  vulnerable: 0xe67e22,
+  confused: 0xe6d922,
+  burning: 0xe74c3c,
+  bleeding: 0xc0392b,
+  poisoned: 0x2ecc71,
+};
+
 export class EntityManager {
   private visuals = new Map<string, EntityVisual>();
   private pendingEvents: GameEvent[] = [];
   private attackFlashes: AttackFlash[] = [];
   private delayedHits: DelayedHit[] = [];
+  private floatingText: FloatingTextManager;
   onShake: ((req: ShakeRequest) => void) | null = null;
 
-  constructor(private layer: Container) {}
+  constructor(private layer: Container) {
+    this.floatingText = new FloatingTextManager(layer);
+  }
 
   pushEvents(events: readonly GameEvent[]) {
     this.pendingEvents.push(...events);
@@ -49,7 +63,7 @@ export class EntityManager {
     for (const [id, entity] of currentEntities) {
       let visual = this.visuals.get(id);
 
-      if (visual && (visual.spriteType !== entity.spriteType || visual.heightMeters !== (entity.heightMeters ?? 2))) {
+      if (visual && (visual.entitySprites?.idle !== entity.sprites?.idle || visual.heightMeters !== (entity.heightMeters ?? 2))) {
         this.layer.removeChild(visual.container);
         visual.container.destroy({ children: true });
         visual = undefined;
@@ -103,6 +117,8 @@ export class EntityManager {
         this.delayedHits.splice(i, 1);
       }
     }
+
+    this.floatingText.tick(dt);
   }
 
   destroy() {
@@ -118,6 +134,7 @@ export class EntityManager {
     this.attackFlashes.length = 0;
     this.delayedHits.length = 0;
     this.pendingEvents.length = 0;
+    this.floatingText.destroy();
   }
 
   setDamagePreview(targets: { entityId: string; damage: number; currentHp: number; maxHp: number; barrier: number }[]): void {
@@ -156,6 +173,7 @@ export class EntityManager {
 
   isAnimating(): boolean {
     if (this.attackFlashes.length > 0 || this.delayedHits.length > 0) return true;
+    if (this.floatingText.isAnimating()) return true;
     for (const visual of this.visuals.values()) {
       if (visual.isBusy) return true;
     }
@@ -208,10 +226,25 @@ export class EntityManager {
       }
       case "turnStart":
         break;
-      case "statusApplied":
+      case "statusApplied": {
+        const statusVisual = this.visuals.get(event.entityId);
+        if (statusVisual) {
+          const pos = statusVisual.container.position;
+          const color = STATUS_COLORS[event.status.type] ?? 0xffffff;
+          this.floatingText.spawn(pos.x, pos.y - 50, event.status.type, color);
+        }
         break;
-      case "dotTick":
+      }
+      case "dotTick": {
+        const dotVisual = this.visuals.get(event.entityId);
+        if (dotVisual) {
+          const pos = dotVisual.container.position;
+          const color = STATUS_COLORS[event.status] ?? 0xe74c3c;
+          this.floatingText.spawn(pos.x, pos.y - 50, `-${event.damage}`, color);
+          dotVisual.triggerHit();
+        }
         break;
+      }
     }
   }
 

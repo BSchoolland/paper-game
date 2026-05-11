@@ -27,15 +27,14 @@ export function placeEncounterEntities(
   attachments?: Record<string, AttachmentData>,
 ): Map<string, Entity> {
   const entities = new Map<string, Entity>();
-  const spriteType = animSet ? `char1-${animSet}` : "char1-sword";
   const hasItemAttack = itemAbilities?.some(a => a.kind === "attack") ?? false;
   const innate = hasItemAttack
     ? PLAYER_INNATE_ABILITIES.filter(a => a.id !== "punch")
     : [...PLAYER_INNATE_ABILITIES];
   const allAbilities = [...innate, ...(itemAbilities ?? [])];
-  const playerTemplate = { ...UNIT_TEMPLATES.player, abilities: allAbilities, spriteType };
-
-  entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", playerTemplate, grid, equipped, attachments));
+  const playerTemplate = { ...UNIT_TEMPLATES.player, abilities: allAbilities };
+  const playerEntity = placeEntity("red1", "Player", 120, 300, "red", playerTemplate, grid, equipped, attachments);
+  entities.set("red1", { ...playerEntity, playerAnimSet: animSet ?? "sword" });
 
   const enemyStartX = 500;
   const enemySpreadX = 200;
@@ -44,8 +43,6 @@ export function placeEncounterEntities(
 
   for (let i = 0; i < encounter.enemies.length; i++) {
     const template = encounter.enemies[i]!;
-    const attackAbility = template.abilities.find(a => a.kind === "attack");
-    console.log(`[encounter] enemy${i + 1}: class=${template.className} sprite=${template.spriteType} hp=${template.hp} attack=${attackAbility?.id ?? "none"}`);
     entities.set(`enemy${i + 1}`, placeEntity(`enemy${i + 1}`, template.className, 500 + Math.floor(i / 4) * 66 + (i % 2) * 30, 150 + (i % 4) * 87, "blue", template, grid));
   }
 

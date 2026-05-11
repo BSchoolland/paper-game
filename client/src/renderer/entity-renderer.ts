@@ -1,10 +1,10 @@
 import { Container, Graphics, Sprite, Text } from "pixi.js";
-import type { Entity } from "shared";
+import type { Entity, SpriteSet, StatusEffect } from "shared";
 import type { AnimSet } from "shared";
 import {
   type AnimState,
   getPlayerTexture,
-  getEnemySpriteTexture,
+  getEnemyTexture,
 } from "./sprite-assets.js";
 import { drawRoughEllipse } from "./sketch-utils.js";
 import { CharacterSprite } from "./character-sprite.js";
@@ -44,6 +44,18 @@ function easeOutQuad(t: number): number {
 }
 
 const DEATH_DURATION = 0.5;
+const STATUS_DOT_RADIUS = 2.5;
+const STATUS_DOT_SPACING = 7;
+const STATUS_DOT_Y = HP_BAR_Y + HP_BAR_H + 5;
+const STATUS_COLORS: Record<string, number> = {
+  slowed: 0x5b9bd5,
+  weak: 0x9b59b6,
+  vulnerable: 0xe67e22,
+  confused: 0xe6d922,
+  burning: 0xe74c3c,
+  bleeding: 0xc0392b,
+  poisoned: 0x2ecc71,
+};
 const COMBAT_STATES: AnimState[] = ["idle", "attack", "hit", "move"];
 
 export class EntityVisual {
@@ -56,7 +68,7 @@ export class EntityVisual {
   private animState: AnimState = "idle";
   private animTimer = 0;
   readonly entityId: string;
-  readonly spriteType: string | undefined;
+  readonly entitySprites: SpriteSet | undefined;
   readonly heightMeters: number;
   private lastHp: number;
   private lastBarrier: number;
@@ -70,10 +82,12 @@ export class EntityVisual {
   private isDead = false;
   private isKnockback = false;
   private charSprite: CharacterSprite | null = null;
+  private readonly statusDots: Graphics;
+  private lastStatusCount = 0;
 
   constructor(entity: Entity) {
     this.entityId = entity.id;
-    this.spriteType = entity.spriteType;
+    this.entitySprites = entity.sprites;
     this.heightMeters = entity.heightMeters ?? 2;
     this.lastHp = entity.hp;
     this.lastBarrier = entity.barrier;
@@ -83,10 +97,7 @@ export class EntityVisual {
     this.container = new Container();
     this.container.position.set(entity.position.x, entity.position.y);
 
-    const isPlayer = entity.spriteType?.startsWith("char1-");
-    const playerAnimSet = isPlayer
-      ? entity.spriteType!.slice("char1-".length) as AnimSet
-      : null;
+    const playerAnimSet = entity.playerAnimSet ?? null;
 
     const heightM = entity.heightMeters ?? 2;
 
@@ -106,15 +117,15 @@ export class EntityVisual {
         charSprite.setEquipment(entity.equipped, entity.attachments);
       }
     } else {
-      const idleTex = entity.spriteType
-        ? getEnemySpriteTexture(entity.spriteType, "idle")
+      const idleTex = entity.sprites
+        ? getEnemyTexture(entity.sprites.idle)
         : getPlayerTexture("sword", "idle");
       this.scale = (heightM * PX_PER_METER) / idleTex!.height;
 
       const sprites: Record<string, Sprite> = {};
       for (const state of COMBAT_STATES) {
-        const tex = entity.spriteType
-          ? getEnemySpriteTexture(entity.spriteType, state)
+        const tex = entity.sprites
+          ? getEnemyTexture(entity.sprites[state])
           : getPlayerTexture("sword", state);
         const sprite = new Sprite(tex!);
         sprite.anchor.set(0.5, 0.75);
@@ -139,7 +150,11 @@ export class EntityVisual {
     this.hpPreview = new Graphics();
     this.container.addChild(this.hpPreview);
 
+    this.statusDots = new Graphics();
+    this.container.addChild(this.statusDots);
+
     this.drawHpBar(entity);
+    this.drawStatusDots(entity.statusEffects);
 
     const label = new Text({
       text: entity.name,
@@ -198,6 +213,12 @@ export class EntityVisual {
       this.drawHpBar(entity);
       this.lastHp = entity.hp;
       this.lastBarrier = entity.barrier;
+    }
+
+    const statusCount = entity.statusEffects?.length ?? 0;
+    if (statusCount !== this.lastStatusCount) {
+      this.drawStatusDots(entity.statusEffects);
+      this.lastStatusCount = statusCount;
     }
 
     if (isSelected !== this.wasSelected) {
@@ -403,5 +424,21 @@ export class EntityVisual {
     if (full) return;
 
     this.redrawBarBase(barLayout(entity.hp, entity.maxHp, entity.barrier));
+  }
+
+  private drawStatusDots(statuses: readonly StatusEffect[] | undefined): void {
+    this.statusDots.clear();
+    if (!statuses || statuses.length === 0) {
+      this.statusDots.visible = false;
+      return;
+    }
+    this.statusDots.visible = true;
+    const totalW = statuses.length * STATUS_DOT_SPACING;
+    const startX = -totalW / 2 + STATUS_DOT_SPACING / 2;
+    for (let i = 0; i < statuses.length; i++) {
+      const color = STATUS_COLORS[statuses[i]!.type] ?? 0xffffff;
+      this.statusDots.circle(startX + i * STATUS_DOT_SPACING, STATUS_DOT_Y, STATUS_DOT_RADIUS);
+      this.statusDots.fill({ color });
+    }
   }
 }

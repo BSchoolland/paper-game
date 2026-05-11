@@ -2,11 +2,45 @@ import { describe, it, expect } from "vitest";
 import { pointInSector } from "../geometry/sector.js";
 import { entityInRectangle } from "../geometry/rectangle.js";
 import { resolveWeaponAttack } from "../combat/combat.js";
-import { SHORT_SWORD_SLASH, SPEAR_THRUST, BOW_SHOT } from "../core/items.js";
+import { ShapeKind } from "../core/types.js";
+import type { AttackAbility } from "../core/types.js";
 import { createGrid } from "../map/collision-grid.js";
 import { makeEntity } from "./test-helpers.js";
 
 const emptyGrid = createGrid(100, 100, 8);
+
+const SHORT_SWORD_SLASH: AttackAbility = {
+  id: "short-sword-slash",
+  name: "Slash",
+  kind: "attack",
+  cost: { red: 2 },
+  shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
+  damage: 25,
+  onHit: [{ type: "knockback", distance: 30 }],
+  visual: { color: 0xc0c0c0, trailEffect: "slash", screenShake: 0.3 },
+};
+
+const SPEAR_THRUST: AttackAbility = {
+  id: "spear-thrust",
+  name: "Thrust",
+  kind: "attack",
+  cost: { red: 2 },
+  shape: { kind: ShapeKind.Rectangle, length: 140, width: 20 },
+  damage: 32,
+  onHit: [{ type: "knockback", distance: 25 }],
+  visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.3 },
+};
+
+const BOW_SHOT: AttackAbility = {
+  id: "bow-shot",
+  name: "Shot",
+  kind: "attack",
+  cost: { red: 2 },
+  shape: { kind: ShapeKind.Point, range: 300 },
+  damage: 20,
+  ignoreCoverRange: 40,
+  visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.15 },
+};
 
 describe("pointInSector", () => {
   it("point directly in front", () => {

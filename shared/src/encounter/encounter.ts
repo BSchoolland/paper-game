@@ -1,5 +1,5 @@
 import type { EnemyTag, UnitTemplate } from "../core/types.js";
-import type { Biome, StructureEntry } from "./biome.js";
+import type { Dimension, StructureEntry } from "./dimension.js";
 import type { MapObjectPlacement } from "../map/map-definition.js";
 import { placeObjects } from "../map/map-definition.js";
 import { Rng } from "../core/rng.js";
@@ -28,7 +28,7 @@ export interface GeneratedEncounter {
 
 export function generateEncounter(
   hexType: EncounterType,
-  biome: Biome,
+  dimension: Dimension,
   x: number,
   y: number,
   runId: number
@@ -37,8 +37,8 @@ export function generateEncounter(
   const layoutRng = Rng.seeded(x, y);
   const enemyRng = Rng.perRun(runId, x, y);
 
-  const enemies = rollEnemies(biome.enemies, profile, enemyRng);
-  const structures = rollStructures(biome.structures, profile, layoutRng);
+  const enemies = rollEnemies(dimension.enemies, profile, enemyRng);
+  const structures = rollStructures(dimension.structures, profile, layoutRng);
 
   return { enemies, structures };
 }

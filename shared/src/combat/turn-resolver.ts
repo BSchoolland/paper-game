@@ -4,6 +4,7 @@ import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { processEffects } from "../encounter/effects.js";
+import { getEffectiveDistance, isConfused } from "./status-modifiers.js";
 
 const DOT_TYPES: readonly StatusEffectType[] = ["burning", "bleeding", "poisoned"];
 
@@ -56,10 +57,7 @@ function resolveMove(
   destination: { x: number; y: number }
 ): ActionResult {
   const entityId = entity.id;
-  const slowEffect = entity.statusEffects?.find(s => s.type === "slowed");
-  const maxDistance = slowEffect
-    ? ability.distance * (1 - slowEffect.value)
-    : ability.distance;
+  const maxDistance = getEffectiveDistance(entity, ability.distance);
   const dist = distance(entity.position, destination);
   if (dist > maxDistance + 0.01) return NO_CHANGE(state);
   if (!isPositionWalkable(state.grid, destination, entity.collisionRadius))
@@ -153,19 +151,6 @@ function resolveBarrier(
     state: { ...state, entities },
     events: [{ type: "barrier", entityId, barrierHp: ability.barrierHp }],
   };
-}
-
-function simpleHash(s: string): number {
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) & 0x7fffffff;
-  return h;
-}
-
-function isConfused(entity: Entity, turnNumber: number, actionIndex: number): boolean {
-  const effect = entity.statusEffects?.find(s => s.type === "confused");
-  if (!effect) return false;
-  const hash = simpleHash(`${entity.id}-${turnNumber}-${actionIndex}`);
-  return (hash % 100) / 100 < effect.value;
 }
 
 function flipDirection(dir: Vec2): Vec2 {

@@ -1,5 +1,5 @@
-import type { Entity, GameState, GridState } from "../core/types.js";
-import { UNIT_TEMPLATES, ENEMY_TEMPLATES } from "../core/items.js";
+import type { Entity, GameState, GridState, UnitTemplate } from "../core/types.js";
+import { UNIT_TEMPLATES } from "../core/items.js";
 import { createGrid } from "../map/collision-grid.js";
 import { findWalkablePosition } from "../map/collision-grid.js";
 import { generateMapObjects } from "../map/map-definition.js";
@@ -51,16 +51,19 @@ export function placePvpEntities(grid: GridState): Map<string, Entity> {
   return entities;
 }
 
-export function placePveEntities(grid: GridState): Map<string, Entity> {
+export function placePveEntities(
+  grid: GridState,
+  enemyTemplates: Record<string, UnitTemplate>,
+): Map<string, Entity> {
   const entities = new Map<string, Entity>();
   const { player } = UNIT_TEMPLATES;
 
   entities.set("red1", placeEntity("red1", "Player", 120, 300, "red", player, grid));
 
-  const gs = ENEMY_TEMPLATES["goblin-spear"];
-  const ga = ENEMY_TEMPLATES["goblin-archer"];
-  const gsh = ENEMY_TEMPLATES["goblin-shield"];
-  const sl = ENEMY_TEMPLATES["slime"];
+  const gs = enemyTemplates["goblin-spear"]!;
+  const ga = enemyTemplates["goblin-archer"]!;
+  const gsh = enemyTemplates["goblin-shield"]!;
+  const sl = enemyTemplates["slime"]!;
 
   entities.set("enemy1", placeEntity("enemy1", "Goblin Spearman", 600, 200, "blue", gs, grid));
   entities.set("enemy2", placeEntity("enemy2", "Goblin Archer", 650, 320, "blue", ga, grid));
@@ -87,14 +90,3 @@ export function assembleGameState(map: ScenarioMap, entities: Map<string, Entity
   };
 }
 
-/** @deprecated Use buildScenarioMap + placePvpEntities + assembleGameState */
-export function createInitialGameState(): GameState {
-  const map = buildScenarioMap(42);
-  return assembleGameState(map, placePvpEntities(map.grid));
-}
-
-/** @deprecated Use buildScenarioMap + placePveEntities + assembleGameState */
-export function createPveGameState(): GameState {
-  const map = buildScenarioMap(42);
-  return assembleGameState(map, placePveEntities(map.grid));
-}

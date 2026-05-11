@@ -102,27 +102,49 @@ export interface BarrierAbility extends AbilityBase {
 export type AbilityDefinition = AttackAbility | MoveAbility | BarrierAbility;
 
 
-export interface Entity {
+export interface EntityCore {
   readonly id: EntityId;
   readonly name: string;
   readonly position: Vec2;
   readonly collisionRadius: number;
+  readonly teamId: TeamId;
+}
+
+export interface EntityCombat {
   readonly hp: number;
   readonly maxHp: number;
   readonly barrier: number;
-  readonly teamId: TeamId;
   readonly energy: EnergyPool;
   readonly abilities: readonly AbilityDefinition[];
-  readonly spriteType?: string;
-  readonly spriteScale?: number;
-  readonly heightMeters?: number;
-  readonly strategy?: AiStrategyType;
   readonly effects?: readonly EntityEffect[];
   readonly statusEffects?: readonly StatusEffect[];
   readonly dead?: boolean;
+}
+
+export interface SpriteSet {
+  readonly idle: string;
+  readonly attack: string;
+  readonly hit: string;
+  readonly move: string;
+}
+
+export interface EntityVisuals {
+  readonly sprites?: SpriteSet;
+  readonly playerAnimSet?: import("./items.js").AnimSet;
+  readonly spriteScale?: number;
+  readonly heightMeters?: number;
+}
+
+export interface EntityAi {
+  readonly strategy?: AiStrategyType;
+}
+
+export interface EntityEquipment {
   readonly equipped?: readonly import("./items.js").ItemDefinition[];
   readonly attachments?: Record<string, import("../core/inventory.js").AttachmentData>;
 }
+
+export interface Entity extends EntityCore, EntityCombat, EntityVisuals, EntityAi, EntityEquipment {}
 
 export interface GameState {
   readonly entities: ReadonlyMap<EntityId, Entity>;
@@ -198,7 +220,7 @@ export interface UnitTemplate {
   readonly energy: { red: number; blue: number };
   readonly collisionRadius: number;
   readonly className: string;
-  readonly spriteType?: string;
+  readonly sprites?: SpriteSet;
   readonly spriteScale?: number;
   readonly heightMeters?: number;
   readonly strategy?: AiStrategyType;

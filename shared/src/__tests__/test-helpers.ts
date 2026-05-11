@@ -1,6 +1,26 @@
-import type { Entity, GameState } from "../core/types.js";
-import { SHORT_SWORD_SLASH, INNATE_MOVE } from "../core/items.js";
+import { ShapeKind } from "../core/types.js";
+import type { AttackAbility, Entity, GameState, MoveAbility } from "../core/types.js";
 import { createGrid } from "../map/collision-grid.js";
+
+const TEST_MOVE: MoveAbility = {
+  id: "move",
+  name: "Move",
+  kind: "move",
+  cost: { blue: 2 },
+  variableCost: true,
+  distance: 130,
+};
+
+const TEST_SLASH: AttackAbility = {
+  id: "short-sword-slash",
+  name: "Slash",
+  kind: "attack",
+  cost: { red: 2 },
+  shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
+  damage: 25,
+  onHit: [{ type: "knockback", distance: 30 }],
+  visual: { color: 0xc0c0c0, trailEffect: "slash", screenShake: 0.3 },
+};
 
 export function makeEntity(
   id: string,
@@ -19,7 +39,7 @@ export function makeEntity(
     barrier: 0,
     teamId,
     energy: { red: 2, blue: 2, maxRed: 2, maxBlue: 2 },
-    abilities: [INNATE_MOVE, SHORT_SWORD_SLASH],
+    abilities: [TEST_MOVE, TEST_SLASH],
     ...overrides,
   };
 }
