@@ -1,4 +1,5 @@
-import type { AbilityDefinition, Entity, EnergyPool } from "shared";
+import type { AbilityDefinition, Entity, MoveAbility, Vec2 } from "shared";
+import { clampToMovementRange, distance, computeMoveCost } from "shared";
 import type { ItemDefinition } from "shared/src/core/items.js";
 import type { ClientState } from "../state/client-state.js";
 
@@ -26,6 +27,8 @@ export class AbilityBar {
   private cardWidth = 0;
   private ready = false;
   private endTurnBtn: HTMLButtonElement;
+  private variableCostEl: HTMLElement | null = null;
+  private variableCostAbility: AbilityDefinition | null = null;
 
   constructor(private clientState: ClientState) {
     this.container = document.createElement("div");
@@ -104,6 +107,27 @@ export class AbilityBar {
     this.container.innerHTML = "";
   }
 
+  updateMouse(mouseWorld: Vec2) {
+    if (!this.variableCostEl || !this.variableCostAbility) return;
+    const ability = this.variableCostAbility;
+    if (ability.kind !== "move") return;
+
+    const state = this.clientState.getState();
+    const entityId = this.clientState.selectedEntityId;
+    if (!state || !entityId) return;
+    const entity = state.entities.get(entityId);
+    if (!entity) return;
+
+    const clamped = clampToMovementRange(entity, mouseWorld);
+    const dist = distance(entity.position, clamped);
+    const cost = computeMoveCost(ability, dist);
+
+    const costParts: string[] = [];
+    if (ability.cost.red) costParts.push(`<span style="color:#c0392b">${Math.min(cost.red ?? 0, entity.energy.red)} &#9679;</span>`);
+    if (ability.cost.blue) costParts.push(`<span style="color:#2980b9">${Math.min(cost.blue ?? 0, entity.energy.blue)} &#9679;</span>`);
+    this.variableCostEl.innerHTML = costParts.join(" ");
+  }
+
   private render() {
     if (!this.ready) return;
 
@@ -120,6 +144,8 @@ export class AbilityBar {
     }
 
     this.container.innerHTML = "";
+    this.variableCostEl = null;
+    this.variableCostAbility = null;
 
     const allCards: { el: HTMLDivElement; selected: boolean }[] = [];
     for (const ability of entity.abilities) {
@@ -160,8 +186,11 @@ export class AbilityBar {
   private createCard(ability: AbilityDefinition, entity: Entity, sourceItem: ItemDefinition | null): HTMLDivElement {
     const card = document.createElement("div");
     const isSelected = this.clientState.selectedAbilityId === ability.id;
-    const canAfford = (ability.cost.red ?? 0) <= entity.energy.red
-      && (ability.cost.blue ?? 0) <= entity.energy.blue;
+    const canAfford = ability.variableCost
+      ? (ability.cost.red ? entity.energy.red > 0 : true)
+        && (ability.cost.blue ? entity.energy.blue > 0 : true)
+      : (ability.cost.red ?? 0) <= entity.energy.red
+        && (ability.cost.blue ?? 0) <= entity.energy.blue;
 
     const s = this.scale;
     const opacity = canAfford ? "1" : "0.5";
@@ -247,8 +276,14 @@ export class AbilityBar {
     if (costRegion) {
       const el = document.createElement("div");
       const costParts: string[] = [];
-      if (ability.cost.red) costParts.push(`<span style="color:#c0392b">${ability.cost.red} &#9679;</span>`);
-      if (ability.cost.blue) costParts.push(`<span style="color:#2980b9">${ability.cost.blue} &#9679;</span>`);
+      if (ability.cost.red) {
+        const label = ability.variableCost ? "X" : ability.cost.red;
+        costParts.push(`<span style="color:#c0392b">${label} &#9679;</span>`);
+      }
+      if (ability.cost.blue) {
+        const label = ability.variableCost ? "X" : ability.cost.blue;
+        costParts.push(`<span style="color:#2980b9">${label} &#9679;</span>`);
+      }
       el.style.cssText = `
         position: absolute;
         left: ${costRegion.x * s}px;
@@ -264,6 +299,10 @@ export class AbilityBar {
         font-weight: bold;
       `;
       el.innerHTML = costParts.join(" ");
+      if (ability.variableCost && isSelected) {
+        this.variableCostEl = el;
+        this.variableCostAbility = ability;
+      }
       card.appendChild(el);
     }
 

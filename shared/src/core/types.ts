@@ -40,6 +40,7 @@ interface AbilityBase {
   readonly id: string;
   readonly name: string;
   readonly cost: EnergyCost;
+  readonly variableCost?: boolean;
 }
 
 export interface AttackAbility extends AbilityBase {
@@ -148,7 +149,8 @@ export const INNATE_MOVE: MoveAbility = {
   id: "move",
   name: "Move",
   kind: "move",
-  cost: { blue: 1 },
+  cost: { blue: 2 },
+  variableCost: true,
   distance: 130,
 };
 
@@ -169,30 +171,57 @@ export const SHORT_SWORD_SLASH: AttackAbility = {
   id: "short-sword-slash",
   name: "Slash",
   kind: "attack",
-  cost: { red: 1 },
+  cost: { red: 2 },
   shape: { kind: "sector", radius: 80, halfAngle: Math.PI / 3 },
   damage: 25,
   onHit: [{ type: "knockback", distance: 30 }],
+};
+
+export const SHORT_SWORD_STAB: AttackAbility = {
+  id: "short-sword-stab",
+  name: "Stab",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "rectangle", length: 70, width: 15 },
+  damage: 15,
 };
 
 export const SPEAR_THRUST: AttackAbility = {
   id: "spear-thrust",
   name: "Thrust",
   kind: "attack",
-  cost: { red: 1 },
+  cost: { red: 2 },
   shape: { kind: "rectangle", length: 140, width: 20 },
   damage: 30,
   onHit: [{ type: "knockback", distance: 25 }],
+};
+
+export const SPEAR_JAB: AttackAbility = {
+  id: "spear-jab",
+  name: "Jab",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "rectangle", length: 110, width: 15 },
+  damage: 15,
 };
 
 export const BOW_SHOT: AttackAbility = {
   id: "bow-shot",
   name: "Shot",
   kind: "attack",
-  cost: { red: 1 },
+  cost: { red: 2 },
   shape: { kind: "point", range: 300 },
   damage: 20,
   ignoreCoverRange: 40,
+};
+
+export const BOW_SNAP_SHOT: AttackAbility = {
+  id: "bow-snap-shot",
+  name: "Snap Shot",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: "point", range: 180 },
+  damage: 10,
 };
 
 // --- Enemy Abilities ---

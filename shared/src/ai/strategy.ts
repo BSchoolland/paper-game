@@ -41,8 +41,10 @@ function getAttackRange(ability: AttackAbility): number {
 }
 
 function canAfford(entity: Entity, ability: AbilityDefinition): boolean {
-  if ((ability.cost.red ?? 0) > entity.energy.red) return false;
-  if ((ability.cost.blue ?? 0) > entity.energy.blue) return false;
+  const minRed = ability.variableCost ? Math.min(ability.cost.red ?? 0, 1) : (ability.cost.red ?? 0);
+  const minBlue = ability.variableCost ? Math.min(ability.cost.blue ?? 0, 1) : (ability.cost.blue ?? 0);
+  if (minRed > entity.energy.red) return false;
+  if (minBlue > entity.energy.blue) return false;
   return true;
 }
 

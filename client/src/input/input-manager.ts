@@ -7,6 +7,7 @@ export class InputManager {
   mouseWorld: Vec2 = { x: 0, y: 0 };
   private onMouseMove: () => void;
   private enabled = false;
+  private mouseMoveListeners: ((mouseWorld: Vec2) => void)[] = [];
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -22,6 +23,13 @@ export class InputManager {
     this.enabled = val;
   }
 
+  addMouseMoveListener(listener: (mouseWorld: Vec2) => void): () => void {
+    this.mouseMoveListeners.push(listener);
+    return () => {
+      this.mouseMoveListeners = this.mouseMoveListeners.filter(l => l !== listener);
+    };
+  }
+
   private screenToWorld(e: MouseEvent): Vec2 {
     const rect = this.canvas.getBoundingClientRect();
     return this.renderer.screenToWorld({
@@ -35,6 +43,7 @@ export class InputManager {
       if (!this.enabled) return;
       this.mouseWorld = this.screenToWorld(e);
       this.onMouseMove();
+      for (const listener of this.mouseMoveListeners) listener(this.mouseWorld);
     });
 
     this.canvas.addEventListener("click", (e) => {

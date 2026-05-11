@@ -9,6 +9,7 @@ import { CharacterDisplay } from "../renderer/character-display.js";
 export class CombatScreen implements Screen {
   private abilityBar: AbilityBar;
   private characterDisplay: CharacterDisplay;
+  private removeMouseListener: (() => void) | null = null;
 
   constructor(
     private combatRenderer: GameRenderer,
@@ -27,11 +28,18 @@ export class CombatScreen implements Screen {
       this.inputManager.setEnabled(true);
       this.abilityBar.show();
       this.characterDisplay.show();
+      this.removeMouseListener = this.inputManager.addMouseMoveListener(
+        (mouseWorld) => this.abilityBar.updateMouse(mouseWorld)
+      );
     });
   }
 
   exit() {
     this.inputManager.setEnabled(false);
+    if (this.removeMouseListener) {
+      this.removeMouseListener();
+      this.removeMouseListener = null;
+    }
     this.abilityBar.hide();
     this.characterDisplay.hide();
     this.combatRenderer.exit();

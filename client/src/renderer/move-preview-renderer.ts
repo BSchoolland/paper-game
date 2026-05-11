@@ -1,7 +1,8 @@
 import type { Graphics } from "pixi.js";
-import type { Entity, GameState, MoveAbility, Vec2 } from "shared";
+import type { Entity, GameState, Vec2 } from "shared";
 import {
   clampToMovementRange,
+  getAffordableMoveDistance,
   isPositionWalkable,
   isWithinBounds,
   distance,
@@ -54,20 +55,22 @@ export function drawMovePreview(
   const valid = isDestinationValid(entity, clamped, state);
   const color = valid ? PENCIL : PENCIL_HIT;
 
+  const affordableRange = getAffordableMoveDistance(entity);
+
+  const dx = clamped.x - entity.position.x;
+  const dy = clamped.y - entity.position.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+
   drawRoughCircle(
     g,
     entity.position.x,
     entity.position.y,
-    (entity.abilities.find(a => a.kind === "move") as MoveAbility | undefined)?.distance ?? 0,
+    affordableRange,
     1.5,
     48,
     7
   );
   g.stroke({ color: PENCIL, alpha: 0.4, width: 1.2 });
-
-  const dx = clamped.x - entity.position.x;
-  const dy = clamped.y - entity.position.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
 
   if (dist > 1) {
     const nx = dx / dist;

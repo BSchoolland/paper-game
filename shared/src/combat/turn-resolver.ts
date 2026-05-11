@@ -1,5 +1,6 @@
 import type { AbilityDefinition, ActionResult, ActiveBuff, AttackAbility, AttackHit, BuffAbility, Entity, EnergyPool, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
 import { distance } from "../core/vec2.js";
+import { computeMoveCost } from "./movement.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { processEffects } from "../encounter/effects.js";
@@ -68,12 +69,15 @@ function resolveMove(
   if (entitiesOverlap(destination, entity.collisionRadius, state.entities, entityId))
     return NO_CHANGE(state);
 
+  const actualCost = computeMoveCost(ability, dist);
+  if (!canAfford(entity.energy, actualCost)) return NO_CHANGE(state);
+
   const from = entity.position;
   const entities = new Map(state.entities);
   entities.set(entityId, {
     ...entity,
     position: destination,
-    energy: spendEnergy(entity.energy, ability.cost),
+    energy: spendEnergy(entity.energy, actualCost),
   });
   return {
     state: { ...state, entities },
@@ -169,7 +173,8 @@ function resolveAbility(
 
   const ability = findAbility(entity, abilityId);
   if (!ability) return NO_CHANGE(state);
-  if (!canAfford(entity.energy, ability.cost)) return NO_CHANGE(state);
+  if (!ability.variableCost && !canAfford(entity.energy, ability.cost)) return NO_CHANGE(state);
+  if (ability.variableCost && !canAfford(entity.energy, { red: ability.cost.red ? 1 : 0, blue: ability.cost.blue ? 1 : 0 })) return NO_CHANGE(state);
 
   switch (ability.kind) {
     case "move":

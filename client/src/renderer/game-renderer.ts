@@ -1,6 +1,6 @@
-import { Application, Container, Graphics, Sprite } from "pixi.js";
-import type { AttackAbility, GameEvent, GridState, Vec2 } from "shared";
-import { CELL_WALL, CELL_COVER } from "shared";
+import { Application, Container, Graphics, Sprite, Text } from "pixi.js";
+import type { AttackAbility, GameEvent, GridState, MoveAbility, Vec2 } from "shared";
+import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, computeMoveCost } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
   createBackground,
@@ -31,6 +31,7 @@ export class GameRenderer {
   private overlayLayer = new Container();
   private targetingGfx = new Graphics();
   private moveGfx = new Graphics();
+  private costLabel = new Text({ text: "", style: { fontSize: 11, fontFamily: "monospace", fontWeight: "bold", fill: 0x4a3728 } });
   private scale = 1;
   private offsetX = 0;
   private offsetY = 0;
@@ -172,6 +173,7 @@ export class GameRenderer {
   renderOverlay(mouseWorld: Vec2) {
     this.targetingGfx.clear();
     this.moveGfx.clear();
+    this.costLabel.visible = false;
     const state = this.clientState.getState();
     if (!state) return;
     const selectedId = this.clientState.selectedEntityId;
@@ -183,12 +185,27 @@ export class GameRenderer {
     const selectedAbility = this.clientState.getSelectedAbility();
     if (selectedAbility?.kind === "attack" && entity.energy.red > 0) {
       drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state, selectedAbility as AttackAbility);
+      const cost = selectedAbility.cost.red ?? 0;
+      this.showCostLabel(entity, cost, entity.energy.red, "#c0392b");
     } else if (
       selectedAbility?.kind === "move" &&
       entity.energy.blue > 0
     ) {
       drawMovePreview(this.moveGfx, entity, mouseWorld, state);
+      const clamped = clampToMovementRange(entity, mouseWorld);
+      const dist = distance(entity.position, clamped);
+      const moveCost = computeMoveCost(selectedAbility as MoveAbility, dist);
+      const cost = Math.min(moveCost.blue ?? 0, entity.energy.blue);
+      this.showCostLabel(entity, cost, entity.energy.blue, "#2980b9");
     }
+  }
+
+  private showCostLabel(entity: { position: Vec2 }, cost: number, pool: number, color: string) {
+    this.costLabel.text = `${pool}/${cost}`;
+    this.costLabel.style.fill = color;
+    this.costLabel.anchor.set(0.5);
+    this.costLabel.position.set(entity.position.x, entity.position.y - 55);
+    this.costLabel.visible = true;
   }
 
   private layout() {
@@ -249,6 +266,7 @@ export class GameRenderer {
     this.overlayLayer = new Container();
     this.overlayLayer.addChild(this.targetingGfx);
     this.overlayLayer.addChild(this.moveGfx);
+    this.overlayLayer.addChild(this.costLabel);
     this.worldContainer.addChild(this.overlayLayer);
 
     this.debugLayer = new Container();
