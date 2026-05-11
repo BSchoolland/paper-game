@@ -215,15 +215,22 @@ export class AbilityBar {
         align-items: center;
         justify-content: center;
         font-family: monospace;
-        font-size: ${Math.round(titleRegion.h * s * 0.7)}px;
         font-weight: bold;
         color: #4a3728;
         text-align: center;
         overflow: hidden;
         white-space: nowrap;
-        text-overflow: ellipsis;
       `;
       el.textContent = ability.name;
+      const regionW = titleRegion.w * s;
+      const maxFontSize = Math.round(titleRegion.h * s * 0.7);
+      const ctx = document.createElement("canvas").getContext("2d")!;
+      ctx.font = `bold ${maxFontSize}px monospace`;
+      const measured = ctx.measureText(ability.name).width;
+      const fontSize = measured > regionW
+        ? Math.max(Math.floor(maxFontSize * (regionW / measured)), 8)
+        : maxFontSize;
+      el.style.fontSize = `${fontSize}px`;
       card.appendChild(el);
     }
 
