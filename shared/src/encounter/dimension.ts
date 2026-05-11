@@ -13,6 +13,7 @@ export interface Dimension {
   readonly id: string;
   readonly name: string;
   readonly backgroundPath: string | null;
+  readonly hexDecorationsPath: string | null;
   readonly enemies: readonly UnitTemplate[];
   readonly structures: readonly StructureEntry[];
 }

@@ -768,7 +768,7 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
 // --- Seed ---
 
 export function seedDimension1(): void {
-  saveDimension(1, "The Shallows", DIMENSION_1_STRUCTURES, "sprites/map-objects/dimension-1/backgrounds/background-shallows.png");
+  saveDimension(1, "The Shallows", DIMENSION_1_STRUCTURES, "sprites/map-objects/dimension-1/backgrounds/background-shallows.png", "sprites/map-decorations/dimension-1");
   saveEnemyTemplates(1, ENEMY_TEMPLATES);
   saveItems(1, DIMENSION_1_ITEMS);
 }

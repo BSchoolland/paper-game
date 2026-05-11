@@ -265,6 +265,7 @@ Bun.serve({
         structureSprites,
         itemSprites,
         backgroundPath: dimension.backgroundPath,
+        hexDecorationsPath: dimension.hexDecorationsPath,
       }, { headers: CORS_HEADERS });
     }
 

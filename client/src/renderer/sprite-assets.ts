@@ -1,6 +1,7 @@
 import { Assets, Texture } from "pixi.js";
 import type { AnimSet, SpriteSet } from "shared";
 import { loadCharacterAnchors } from "./anchor-loader.js";
+import { loadHexDecorations } from "./hex-map-renderer.js";
 
 export type AnimState = "idle" | "attack" | "hit" | "move";
 
@@ -63,6 +64,7 @@ export interface DimensionManifest {
   structureSprites: Record<string, string>;
   itemSprites: Record<string, string>;
   backgroundPath: string | null;
+  hexDecorationsPath: string | null;
 }
 
 export async function loadDimensionSprites(dimensionId: number): Promise<DimensionManifest> {
@@ -95,6 +97,8 @@ export async function loadDimensionSprites(dimensionId: number): Promise<Dimensi
       if (tex) itemTextures.set(spriteId, tex);
     }
   }
+
+  await loadHexDecorations(manifest.hexDecorationsPath ?? "sprites/map-decorations");
 
   loadedDimensions.add(dimensionId);
   return manifest;

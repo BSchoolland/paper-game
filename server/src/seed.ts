@@ -710,7 +710,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
 export function seedDimension0(): void {
   if (getDimensionCount() > 0) return;
 
-  saveDimension(0, "Greenlands", DIMENSION_0_STRUCTURES, "sprites/map-objects/backgrounds/background-grass.png");
+  saveDimension(0, "Greenlands", DIMENSION_0_STRUCTURES, "sprites/map-objects/backgrounds/background-grass.png", "sprites/map-decorations");
   saveEnemyTemplates(0, ENEMY_TEMPLATES);
   saveItems(0, DIMENSION_0_ITEMS);
 }

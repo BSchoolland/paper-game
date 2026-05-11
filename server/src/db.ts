@@ -21,9 +21,15 @@ db.exec(`
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     structures_json TEXT NOT NULL DEFAULT '[]',
-    background_path TEXT
+    background_path TEXT,
+    hex_decorations_path TEXT
   )
 `);
+try {
+  db.exec("ALTER TABLE dimensions ADD COLUMN hex_decorations_path TEXT");
+} catch {
+  // column already exists
+}
 db.exec(`
   CREATE TABLE IF NOT EXISTS enemy_templates (
     id TEXT NOT NULL,
@@ -97,7 +103,7 @@ export function seedDiscovery(radius: number): void {
 // --- Dimension & Enemy Template Queries ---
 
 const insertDimensionStmt = db.prepare(
-  "INSERT OR REPLACE INTO dimensions (id, name, structures_json, background_path) VALUES (?, ?, ?, ?)"
+  "INSERT OR REPLACE INTO dimensions (id, name, structures_json, background_path, hex_decorations_path) VALUES (?, ?, ?, ?, ?)"
 );
 const getDimensionStmt = db.prepare("SELECT * FROM dimensions WHERE id = ?");
 
@@ -116,8 +122,9 @@ export function saveDimension(
   name: string,
   structures: readonly StructureEntry[],
   backgroundPath?: string,
+  hexDecorationsPath?: string,
 ): void {
-  insertDimensionStmt.run(id, name, JSON.stringify(structures), backgroundPath ?? null);
+  insertDimensionStmt.run(id, name, JSON.stringify(structures), backgroundPath ?? null, hexDecorationsPath ?? null);
 }
 
 export function saveEnemyTemplate(
@@ -146,6 +153,7 @@ export function loadDimension(dimensionId: number): Dimension | null {
     name: string;
     structures_json: string;
     background_path: string | null;
+    hex_decorations_path: string | null;
   } | null;
   if (!row) return null;
 
@@ -159,6 +167,7 @@ export function loadDimension(dimensionId: number): Dimension | null {
     id: `dimension-${row.id}`,
     name: row.name,
     backgroundPath: row.background_path,
+    hexDecorationsPath: row.hex_decorations_path,
     enemies: templates.map((t) => JSON.parse(t.template_json) as UnitTemplate),
     structures: JSON.parse(row.structures_json) as StructureEntry[],
   };

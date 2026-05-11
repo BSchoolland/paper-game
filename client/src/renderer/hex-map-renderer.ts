@@ -36,17 +36,22 @@ export async function loadMapIconAssets(): Promise<void> {
     src: `sprites/map-icons/${name}.png`,
   }));
 
-  const manifestResponse = await fetch("sprites/map-decorations/manifest.json");
-  const loadedDecorationNames = (await manifestResponse.json()) as string[];
-  const decorationEntries = loadedDecorationNames.map((name) => ({
-    alias: `map-decoration-${name}`,
-    src: `sprites/map-decorations/${name}.png`,
-  }));
-
-  await Assets.load([...entries, ...decorationEntries]);
+  await Assets.load(entries);
   for (const name of HEX_ICON_TYPES) {
     iconTextures.set(name, Assets.get(`map-icon-${name}`));
   }
+}
+
+export async function loadHexDecorations(decorationsPath: string): Promise<void> {
+  const manifestResponse = await fetch(`${decorationsPath}/manifest.json`);
+  const loadedDecorationNames = (await manifestResponse.json()) as string[];
+  const decorationEntries = loadedDecorationNames.map((name) => ({
+    alias: `map-decoration-${name}`,
+    src: `${decorationsPath}/${name}.png`,
+  }));
+
+  await Assets.load(decorationEntries);
+  decorationTextures.clear();
   decorationNames = loadedDecorationNames;
   for (const name of decorationNames) {
     decorationTextures.set(name, Assets.get(`map-decoration-${name}`));

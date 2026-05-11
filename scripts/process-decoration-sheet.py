@@ -26,11 +26,12 @@ def parse_args():
     p.add_argument("input", help="Path to the spritesheet image")
     p.add_argument("output_dir", help="Output directory for individual sprites")
     p.add_argument("--names", default="", help="Comma-separated sprite names (row-major)")
-    p.add_argument("--tolerance", type=int, default=35, help="Flood-fill color tolerance")
+    p.add_argument("--tolerance", type=int, default=25, help="Flood-fill color tolerance")
     p.add_argument("--min-size", type=int, default=40, help="Minimum sprite dimension")
     p.add_argument("--padding", type=int, default=4, help="Padding around sprite")
     p.add_argument("--quality", type=int, default=90, help="WebP quality")
     p.add_argument("--row-height", type=int, default=80, help="Row band height for sort")
+    p.add_argument("--min-cluster", type=int, default=50, help="Minimum pixel cluster size to keep")
     p.add_argument("--debug", action="store_true", help="Save debug image")
     return p.parse_args()
 
@@ -96,6 +97,17 @@ def make_rgba(arr: np.ndarray, bg_mask: np.ndarray) -> Image.Image:
     return Image.fromarray(np.dstack([arr, alpha]), "RGBA")
 
 
+def remove_small_clusters(pixels: np.ndarray, min_cluster: int) -> np.ndarray:
+    alpha = pixels[:, :, 3]
+    mask = alpha > 10
+    labeled_arr, num_features = ndimage.label(mask)
+    for i in range(1, num_features + 1):
+        cluster = labeled_arr == i
+        if cluster.sum() < min_cluster:
+            pixels[cluster, 3] = 0
+    return pixels
+
+
 def crop_to_content(img: Image.Image, padding: int) -> Image.Image:
     bbox = img.getbbox()
     if bbox is None:
@@ -145,6 +157,8 @@ def main():
         rx0, ry0 = max(0, x0 - pad), max(0, y0 - pad)
         rx1, ry1 = min(w, x1 + pad), min(h, y1 + pad)
         sprite = rgba.crop((rx0, ry0, rx1, ry1))
+        sprite_arr = remove_small_clusters(np.array(sprite), args.min_cluster)
+        sprite = Image.fromarray(sprite_arr)
         sprite = crop_to_content(sprite, padding=2)
         name = names[i] if i < len(names) else f"sprite-{i:02d}"
         out_path = os.path.join(args.output_dir, f"{name}.webp")
