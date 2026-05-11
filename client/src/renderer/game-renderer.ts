@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Sprite, Text } from "pixi.js";
-import type { AttackAbility, GameEvent, GridState, Vec2 } from "shared";
-import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, getAbilityCost } from "shared";
+import type { AttackAbility, BarrierAbility, GameEvent, GridState, Vec2 } from "shared";
+import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, getAbilityCost, resolveWeaponAttack, sub, length as vecLength } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
   createBackground,
@@ -47,6 +47,7 @@ export class GameRenderer {
   private shakeTimer = 0;
   private baseOffsetX = 0;
   private baseOffsetY = 0;
+  private lastMouseWorld: Vec2 = { x: 0, y: 0 };
 
   constructor(
     private app: Application,
@@ -126,7 +127,7 @@ export class GameRenderer {
       window.addEventListener("resize", () => {
         if (!this.outerContainer.visible) return;
         this.layout();
-        this.renderOverlay({ x: 0, y: 0 });
+        this.renderOverlay(this.lastMouseWorld);
       });
     }
   }
@@ -180,7 +181,7 @@ export class GameRenderer {
     const renderState = this.clientState.getState();
     if (!renderState) return;
     this.entities.sync(renderState, this.clientState.selectedEntityId);
-    this.renderOverlay({ x: 0, y: 0 });
+    this.renderOverlay(this.lastMouseWorld);
     this.debugLayer.visible = this.clientState.showDebugWalls;
 
     const hasSelection = !!this.clientState.selectedEntityId;
@@ -193,9 +194,11 @@ export class GameRenderer {
   }
 
   renderOverlay(mouseWorld: Vec2) {
+    this.lastMouseWorld = mouseWorld;
     this.targetingGfx.clear();
     this.moveGfx.clear();
     this.costLabel.visible = false;
+    if (this.entities) this.entities.clearDamagePreview();
     const state = this.clientState.getState();
     if (!state) return;
     const selectedId = this.clientState.selectedEntityId;
@@ -206,9 +209,36 @@ export class GameRenderer {
 
     const selectedAbility = this.clientState.getSelectedAbility();
     if (selectedAbility?.kind === "attack" && entity.energy.red > 0) {
-      drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state, selectedAbility as AttackAbility);
+      const atk = selectedAbility as AttackAbility;
+      drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state, atk);
+
+      const dir = sub(mouseWorld, entity.position);
+      if (vecLength(dir) >= 1) {
+        const targets = resolveWeaponAttack(entity, dir, state.entities, atk, state.grid);
+        this.entities!.setDamagePreview(targets.map(t => ({
+          entityId: t.id,
+          damage: atk.damage,
+          currentHp: t.hp,
+          maxHp: t.maxHp,
+          barrier: t.barrier,
+        })));
+      } else {
+        this.entities!.clearDamagePreview();
+      }
+
       const cost = selectedAbility.cost.red ?? 0;
       this.showCostLabel(entity, cost, entity.energy.red, "#c0392b");
+    } else if (selectedAbility?.kind === "barrier") {
+      const barrier = selectedAbility as BarrierAbility;
+      this.entities!.setBarrierPreview(
+        selectedId,
+        barrier.barrierHp,
+        entity.hp,
+        entity.maxHp,
+        entity.barrier,
+      );
+      const cost = selectedAbility.cost.blue ?? 0;
+      this.showCostLabel(entity, cost, entity.energy.blue, "#2980b9");
     } else if (
       selectedAbility?.kind === "move" &&
       entity.energy.blue > 0

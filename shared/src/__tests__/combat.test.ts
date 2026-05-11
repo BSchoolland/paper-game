@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { pointInSector } from "../geometry/sector.js";
 import { entityInRectangle } from "../geometry/rectangle.js";
 import { resolveWeaponAttack } from "../combat/combat.js";
-import { SHORT_SWORD_SLASH, SPEAR_THRUST, BOW_SHOT } from "../core/types.js";
+import { SHORT_SWORD_SLASH, SPEAR_THRUST, BOW_SHOT } from "../core/items.js";
 import { createGrid } from "../map/collision-grid.js";
 import { makeEntity } from "./test-helpers.js";
 

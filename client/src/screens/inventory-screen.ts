@@ -275,14 +275,10 @@ export class InventoryScreen implements Screen {
       }
       case "shield": {
         const s = item as ShieldItem;
-        const buffs = s.abilities.filter(a => a.kind === "buff");
-        const lines = buffs.map(a => {
-          const costParts: string[] = [];
-          if (a.cost.red) costParts.push(`${a.cost.red} red`);
-          if (a.cost.blue) costParts.push(`${a.cost.blue} blue`);
-          return `<div><strong>${a.name}</strong> (${costParts.join(" + ")})</div>`;
-        });
-        statsHtml = `<div style="margin-top:8px">${lines.join("")}</div>`;
+        const lines = s.abilities
+          .filter(a => a.kind === "barrier")
+          .map(a => `<div><strong>${a.name}</strong> +${a.barrierHp} barrier HP</div>`);
+        statsHtml = lines.length > 0 ? `<div style="margin-top:8px">${lines.join("")}</div>` : "";
         break;
       }
       case "consumable": {

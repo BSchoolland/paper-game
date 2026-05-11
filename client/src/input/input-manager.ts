@@ -57,6 +57,10 @@ export class InputManager {
         this.doAttack(pos);
         return;
       }
+      if (selectedAbility?.kind === "barrier") {
+        this.clientState.confirmAbility();
+        return;
+      }
       if (selectedAbility?.kind === "move" && this.clientState.selectedEntityId) {
         const entity = state.entities.get(this.clientState.selectedEntityId);
         if (entity) {
@@ -109,15 +113,7 @@ export class InputManager {
     const abilities = this.getPlayerAbilities();
     if (index < abilities.length) {
       const ability = abilities[index]!;
-      if (ability.kind === "buff") {
-        this.clientState.dispatch({
-          type: "ability",
-          entityId: this.clientState.selectedEntityId!,
-          abilityId: ability.id,
-        });
-      } else {
-        this.clientState.selectAbility(ability.id);
-      }
+      this.clientState.selectAbility(ability.id);
     }
   }
 

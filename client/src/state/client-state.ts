@@ -1,6 +1,7 @@
 import type { AbilityDefinition, GameState, PlayerAction } from "shared";
 import type { GameStore } from "./game-store.js";
 
+
 type Listener = () => void;
 
 export class ClientState {
@@ -35,17 +36,36 @@ export class ClientState {
     if (abilityId === null) {
       this.selectedAbilityId = null;
       this.inputMode = "select";
-    } else {
-      const state = this.getState();
-      if (!state) return;
-      const entity = state.entities.get(this.selectedEntityId);
-      if (!entity) return;
-      const ability = entity.abilities.find(a => a.id === abilityId);
-      if (!ability) return;
-
-      this.selectedAbilityId = abilityId;
-      this.inputMode = ability.kind === "attack" ? "attack" : "select";
+      this.notify();
+      return;
     }
+
+    const state = this.getState();
+    if (!state) return;
+    const entity = state.entities.get(this.selectedEntityId);
+    if (!entity) return;
+    const ability = entity.abilities.find(a => a.id === abilityId);
+    if (!ability) return;
+
+    if (this.selectedAbilityId === abilityId && ability.kind === "barrier") {
+      this.confirmAbility();
+      return;
+    }
+
+    this.selectedAbilityId = abilityId;
+    this.inputMode = ability.kind === "attack" ? "attack" : "select";
+    this.notify();
+  }
+
+  confirmAbility() {
+    if (!this.selectedEntityId || !this.selectedAbilityId) return;
+    this.dispatch({
+      type: "ability",
+      entityId: this.selectedEntityId,
+      abilityId: this.selectedAbilityId,
+    });
+    this.selectedAbilityId = null;
+    this.inputMode = "select";
     this.notify();
   }
 

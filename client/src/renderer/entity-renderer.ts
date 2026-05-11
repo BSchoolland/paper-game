@@ -14,6 +14,31 @@ const HP_BAR_H = 5;
 const HP_BAR_Y = -42;
 const PX_PER_METER = 22.5;
 
+interface BarLayout {
+  totalW: number;
+  left: number;
+  hpRatio: number;
+  hpW: number;
+  hpColor: number;
+  barrierRatio: number;
+}
+
+function barLayout(hp: number, maxHp: number, barrier: number, extraBarrierRatio = 0): BarLayout {
+  const hpRatio = Math.min(hp / maxHp, 1);
+  const barrierRatio = barrier / maxHp;
+  const totalRatio = Math.max(1, hpRatio + barrierRatio + extraBarrierRatio);
+  const totalW = HP_BAR_W * totalRatio;
+  const hpColor = hpRatio > 0.6 ? 0x5a7a3a : hpRatio > 0.3 ? 0x8b7a3a : 0x8b3a3a;
+  return {
+    totalW,
+    left: -totalW / 2,
+    hpRatio,
+    hpW: HP_BAR_W * hpRatio,
+    hpColor,
+    barrierRatio,
+  };
+}
+
 function easeOutQuad(t: number): number {
   return t * (2 - t);
 }
@@ -26,6 +51,7 @@ export class EntityVisual {
   readonly sprites: Record<AnimState, Sprite>;
   private readonly hpBar: Graphics;
   private readonly hpBg: Graphics;
+  private readonly hpPreview: Graphics;
   private readonly selectionRing: Graphics;
   private animState: AnimState = "idle";
   private animTimer = 0;
@@ -33,6 +59,8 @@ export class EntityVisual {
   readonly spriteType: string | undefined;
   readonly heightMeters: number;
   private lastHp: number;
+  private lastBarrier: number;
+  private lastHpRatio: number;
   private tweenFrom: { x: number; y: number } | null = null;
   private tweenProgress = 1;
   private facingLeft: boolean;
@@ -48,6 +76,8 @@ export class EntityVisual {
     this.spriteType = entity.spriteType;
     this.heightMeters = entity.heightMeters ?? 2;
     this.lastHp = entity.hp;
+    this.lastBarrier = entity.barrier;
+    this.lastHpRatio = entity.hp / entity.maxHp;
     this.facingLeft = entity.teamId === "blue";
 
     this.container = new Container();
@@ -106,6 +136,9 @@ export class EntityVisual {
     this.hpBar = new Graphics();
     this.container.addChild(this.hpBar);
 
+    this.hpPreview = new Graphics();
+    this.container.addChild(this.hpPreview);
+
     this.drawHpBar(entity);
 
     const label = new Text({
@@ -161,9 +194,10 @@ export class EntityVisual {
       this.setAnimState("idle");
     }
 
-    if (entity.hp !== this.lastHp) {
+    if (entity.hp !== this.lastHp || entity.barrier !== this.lastBarrier) {
       this.drawHpBar(entity);
       this.lastHp = entity.hp;
+      this.lastBarrier = entity.barrier;
     }
 
     if (isSelected !== this.wasSelected) {
@@ -199,6 +233,7 @@ export class EntityVisual {
     this.selectionRing.visible = false;
     this.hpBar.visible = false;
     this.hpBg.visible = false;
+    this.hpPreview.visible = false;
   }
 
   triggerMove(
@@ -248,6 +283,95 @@ export class EntityVisual {
     this.animTimer = 0.6;
   }
 
+  setDamagePreview(damage: number, currentHp: number, maxHp: number, barrier: number): void {
+    const layout = barLayout(currentHp, maxHp, barrier);
+    this.redrawBarBase(layout);
+    this.hpPreview.clear();
+    this.hpPreview.visible = true;
+
+    const barrierAbsorbed = Math.min(barrier, damage);
+    const hpDamage = damage - barrierAbsorbed;
+    const dmgRatio = Math.min(hpDamage / maxHp, layout.hpRatio);
+    const wouldKill = hpDamage >= currentHp;
+
+    if (dmgRatio > 0) {
+      const previewX = layout.left + HP_BAR_W * (layout.hpRatio - dmgRatio);
+      const previewW = HP_BAR_W * dmgRatio;
+      this.hpPreview.roundRect(previewX, HP_BAR_Y, previewW, HP_BAR_H, 1);
+      this.hpPreview.fill({ color: 0x000000, alpha: 0.7 });
+    }
+
+    if (barrierAbsorbed > 0) {
+      const absorbedRatio = barrierAbsorbed / maxHp;
+      const barrierStart = layout.left + HP_BAR_W * (layout.hpRatio + layout.barrierRatio - absorbedRatio);
+      const barrierW = HP_BAR_W * absorbedRatio;
+      if (barrierW > 0) {
+        this.hpPreview.roundRect(barrierStart, HP_BAR_Y, barrierW, HP_BAR_H, 1);
+        this.hpPreview.fill({ color: 0x2a5a8b, alpha: 0.7 });
+      }
+    }
+
+    if (wouldKill) {
+      this.hpPreview.roundRect(
+        layout.left - 1, HP_BAR_Y - 1,
+        layout.totalW + 2, HP_BAR_H + 2, 1
+      );
+      this.hpPreview.stroke({ color: 0xff0000, alpha: 0.8, width: 1.5 });
+
+      const cx = 0;
+      const cy = HP_BAR_Y + HP_BAR_H / 2;
+      const s = 4;
+      this.hpPreview.moveTo(cx - s, cy - s);
+      this.hpPreview.lineTo(cx + s, cy + s);
+      this.hpPreview.moveTo(cx + s, cy - s);
+      this.hpPreview.lineTo(cx - s, cy + s);
+      this.hpPreview.stroke({ color: 0xff0000, alpha: 0.9, width: 1.5 });
+    }
+  }
+
+  setBarrierPreview(barrierHp: number, currentHp: number, maxHp: number, currentBarrier: number): void {
+    const newBarrierRatio = barrierHp / maxHp;
+    const layout = barLayout(currentHp, maxHp, currentBarrier, newBarrierRatio);
+    this.redrawBarBase(layout);
+    this.hpPreview.clear();
+    this.hpPreview.visible = true;
+
+    const previewX = layout.left + HP_BAR_W * (layout.hpRatio + layout.barrierRatio);
+    const previewW = HP_BAR_W * newBarrierRatio;
+    if (previewW > 0) {
+      this.hpPreview.roundRect(previewX, HP_BAR_Y, previewW, HP_BAR_H, 1);
+      this.hpPreview.fill({ color: 0x6ab8f7, alpha: 0.6 });
+    }
+  }
+
+  clearDamagePreview(): void {
+    this.hpPreview.clear();
+    this.hpPreview.visible = false;
+    if (this.lastHpRatio >= 1 && this.lastBarrier === 0) {
+      this.hpBg.visible = false;
+      this.hpBar.visible = false;
+    }
+  }
+
+  private redrawBarBase(layout: BarLayout): void {
+    this.hpBg.visible = true;
+    this.hpBar.visible = true;
+
+    this.hpBg.clear();
+    this.hpBg.roundRect(layout.left - 1, HP_BAR_Y - 1, layout.totalW + 2, HP_BAR_H + 2, 1);
+    this.hpBg.fill({ color: 0x3d3528, alpha: 0.7 });
+
+    this.hpBar.clear();
+    if (layout.hpRatio > 0) {
+      this.hpBar.roundRect(layout.left, HP_BAR_Y, layout.hpW, HP_BAR_H, 1);
+      this.hpBar.fill({ color: layout.hpColor });
+    }
+    if (layout.barrierRatio > 0) {
+      this.hpBar.roundRect(layout.left + layout.hpW, HP_BAR_Y, HP_BAR_W * layout.barrierRatio, HP_BAR_H, 1);
+      this.hpBar.fill({ color: 0x4a9adb });
+    }
+  }
+
   private setFacing(left: boolean): void {
     if (left === this.facingLeft) return;
     this.facingLeft = left;
@@ -272,35 +396,12 @@ export class EntityVisual {
   }
 
   private drawHpBar(entity: Entity): void {
-    const hpRatio = entity.hp / entity.maxHp;
-    const full = hpRatio >= 1;
+    this.lastHpRatio = entity.hp / entity.maxHp;
+    const full = this.lastHpRatio >= 1 && entity.barrier === 0;
     this.hpBg.visible = !full;
     this.hpBar.visible = !full;
     if (full) return;
 
-    this.hpBg.clear();
-    this.hpBg.roundRect(
-      -HP_BAR_W / 2 - 1,
-      HP_BAR_Y - 1,
-      HP_BAR_W + 2,
-      HP_BAR_H + 2,
-      1
-    );
-    this.hpBg.fill({ color: 0x3d3528, alpha: 0.7 });
-
-    const hpColor =
-      hpRatio > 0.6 ? 0x5a7a3a : hpRatio > 0.3 ? 0x8b7a3a : 0x8b3a3a;
-
-    this.hpBar.clear();
-    if (hpRatio > 0) {
-      this.hpBar.roundRect(
-        -HP_BAR_W / 2,
-        HP_BAR_Y,
-        HP_BAR_W * hpRatio,
-        HP_BAR_H,
-        1
-      );
-      this.hpBar.fill({ color: hpColor });
-    }
+    this.redrawBarBase(barLayout(entity.hp, entity.maxHp, entity.barrier));
   }
 }

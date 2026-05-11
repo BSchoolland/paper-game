@@ -220,6 +220,8 @@ export class AbilityBar {
         color: #4a3728;
         text-align: center;
         overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
       `;
       el.textContent = ability.name;
       card.appendChild(el);
@@ -302,15 +304,7 @@ export class AbilityBar {
     if (canAfford) {
       card.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (ability.kind === "buff") {
-          this.clientState.dispatch({
-            type: "ability",
-            entityId: entity.id,
-            abilityId: ability.id,
-          });
-        } else {
-          this.clientState.selectAbility(ability.id);
-        }
+        this.clientState.selectAbility(ability.id);
       });
     }
 
@@ -320,8 +314,7 @@ export class AbilityBar {
   private getAbilityDescription(ability: AbilityDefinition): string {
     if (ability.kind === "attack") return `${ability.damage} damage`;
     if (ability.kind === "move") return `Move up to ${ability.distance} units`;
-    if (ability.kind === "buff" && ability.effect.type === "block")
-      return `Block ${ability.effect.damageReduction} damage`;
+    if (ability.kind === "barrier") return `+${ability.barrierHp} barrier HP`;
     return "";
   }
 

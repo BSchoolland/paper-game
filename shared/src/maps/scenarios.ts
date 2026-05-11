@@ -1,5 +1,5 @@
 import type { Entity, GameState, GridState } from "../core/types.js";
-import { UNIT_TEMPLATES, ENEMY_TEMPLATES } from "../core/types.js";
+import { UNIT_TEMPLATES, ENEMY_TEMPLATES } from "../core/items.js";
 import { createGrid } from "../map/collision-grid.js";
 import { findWalkablePosition } from "../map/collision-grid.js";
 import { generateMapObjects } from "../map/map-definition.js";

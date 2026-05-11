@@ -1,5 +1,186 @@
-import { SHORT_SWORD_SLASH, SHORT_SWORD_STAB, SPEAR_THRUST, SPEAR_JAB, BOW_SHOT, ShapeKind } from "./types.js";
-import type { AbilityDefinition, AttackAbility } from "./types.js";
+import { ShapeKind } from "./types.js";
+import type { AbilityDefinition, AttackAbility, EntityEffect, MoveAbility, UnitTemplate } from "./types.js";
+
+// --- Innate Abilities (always available) ---
+
+export const INNATE_MOVE: MoveAbility = {
+  id: "move",
+  name: "Move",
+  kind: "move",
+  cost: { blue: 2 },
+  variableCost: true,
+  distance: 130,
+};
+
+export const INNATE_PUNCH: AttackAbility = {
+  id: "punch",
+  name: "Punch",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Sector, radius: 50, halfAngle: Math.PI / 4 },
+  damage: 10,
+  visual: { trailEffect: "slash", screenShake: 0.15 },
+};
+
+export const PLAYER_INNATE_ABILITIES: readonly AbilityDefinition[] = [INNATE_MOVE, INNATE_PUNCH];
+
+// --- Weapon Abilities (granted by equipped items) ---
+
+export const SHORT_SWORD_SLASH: AttackAbility = {
+  id: "short-sword-slash",
+  name: "Slash",
+  kind: "attack",
+  cost: { red: 2 },
+  shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
+  damage: 25,
+  onHit: [{ type: "knockback", distance: 30 }],
+  visual: { color: 0xc0c0c0, trailEffect: "slash", screenShake: 0.3 },
+};
+
+export const SHORT_SWORD_STAB: AttackAbility = {
+  id: "short-sword-stab",
+  name: "Stab",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Rectangle, length: 90, width: 12 },
+  damage: 11,
+  visual: { color: 0xc0c0c0, trailEffect: "thrust" },
+};
+
+export const SPEAR_THRUST: AttackAbility = {
+  id: "spear-thrust",
+  name: "Thrust",
+  kind: "attack",
+  cost: { red: 2 },
+  shape: { kind: ShapeKind.Rectangle, length: 140, width: 20 },
+  damage: 32,
+  onHit: [{ type: "knockback", distance: 25 }],
+  visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.3 },
+};
+
+export const SPEAR_JAB: AttackAbility = {
+  id: "spear-jab",
+  name: "Shaft Strike",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 4 },
+  damage: 10,
+  onHit: [{ type: "knockback", distance: 45 }],
+  visual: { color: 0xa89070, trailEffect: "slash", screenShake: 0.2 },
+};
+
+export const BOW_SHOT: AttackAbility = {
+  id: "bow-shot",
+  name: "Shot",
+  kind: "attack",
+  cost: { red: 2 },
+  shape: { kind: ShapeKind.Point, range: 300 },
+  damage: 20,
+  ignoreCoverRange: 40,
+  visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.15 },
+};
+
+export const BOW_VOLLEY: AttackAbility = {
+  id: "bow-volley",
+  name: "Volley",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Circle, radius: 40, range: 250 },
+  damage: 12,
+  visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.1 },
+};
+
+// --- Enemy Abilities ---
+
+export const GOBLIN_SPEAR_THRUST: AttackAbility = {
+  id: "goblin-spear-thrust",
+  name: "Spear Thrust",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Rectangle, length: 100, width: 18 },
+  damage: 25,
+  onHit: [{ type: "knockback", distance: 20 }],
+  visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.2 },
+};
+
+export const GOBLIN_BOW_SHOT: AttackAbility = {
+  id: "goblin-bow-shot",
+  name: "Bow Shot",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Point, range: 260 },
+  damage: 15,
+  visual: { color: 0xd4a857, trailEffect: "projectile" },
+};
+
+export const SHIELD_BASH_ATTACK: AttackAbility = {
+  id: "shield-bash",
+  name: "Shield Bash",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 4 },
+  damage: 15,
+  onHit: [{ type: "knockback", distance: 45 }],
+  visual: { color: 0x8899aa, trailEffect: "slash", screenShake: 0.35 },
+};
+
+export const BRUTE_SLAM_ATTACK: AttackAbility = {
+  id: "brute-slam",
+  name: "Brute Slam",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 2 },
+  damage: 40,
+  onHit: [{ type: "knockback", distance: 50 }],
+  visual: { color: 0x7a6040, trailEffect: "slash", screenShake: 0.6 },
+};
+
+export const GOLEM_SMASH_ATTACK: AttackAbility = {
+  id: "golem-smash",
+  name: "Golem Smash",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Circle, radius: 70, range: 60 },
+  damage: 50,
+  onHit: [{ type: "knockback", distance: 60 }],
+  visual: { color: 0x8b7355, trailEffect: "explosion", screenShake: 0.8 },
+};
+
+export const SLIME_SPIT_ATTACK: AttackAbility = {
+  id: "slime-spit",
+  name: "Slime Spit",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Point, range: 180 },
+  damage: 12,
+  visual: { color: 0x5cb85c, trailEffect: "projectile" },
+};
+
+export const SLIME_LASH_ATTACK: AttackAbility = {
+  id: "slime-lash",
+  name: "Slime Lash",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 3 },
+  damage: 20,
+  onHit: [{ type: "knockback", distance: 20 }],
+  visual: { color: 0x5cb85c, trailEffect: "splash", screenShake: 0.2 },
+};
+
+export const SLIME_WAVE_ATTACK: AttackAbility = {
+  id: "slime-wave",
+  name: "Slime Wave",
+  kind: "attack",
+  cost: { red: 1 },
+  shape: { kind: ShapeKind.Circle, radius: 80, range: 50 },
+  damage: 35,
+  onHit: [{ type: "knockback", distance: 35 }],
+  visual: { color: 0x5cb85c, trailEffect: "splash", screenShake: 0.5 },
+};
+
+export function makeMove(distance: number): MoveAbility {
+  return { id: "move", name: "Move", kind: "move", cost: { blue: 1 }, distance };
+}
 
 export type ItemRarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 
@@ -283,17 +464,26 @@ export const ITEMS: Record<string, ItemDefinition> = {
     type: "shield",
     id: "round-shield",
     name: "Round Shield",
-    description: "A simple wooden shield that blocks some damage.",
+    description: "A simple wooden shield that blocks incoming damage.",
     rarity: "common",
     sprite: "round-shield",
     slotCost: { hand: 1 },
     abilities: [{
       id: "round-shield-block",
       name: "Block",
-      kind: "buff",
+      kind: "barrier",
       cost: { blue: 1 },
-      effect: { type: "block", damageReduction: 10 },
-    }],
+      barrierHp: 10,
+    }, {
+      id: "round-shield-bash",
+      name: "Shield Bash",
+      kind: "attack",
+      cost: { red: 1 },
+      shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 4 },
+      damage: 12,
+      onHit: [{ type: "knockback", distance: 40 }],
+      visual: { color: 0x8899aa, trailEffect: "slash", screenShake: 0.3 },
+    } satisfies AttackAbility],
   },
   "kite-shield": {
     type: "shield",
@@ -306,9 +496,24 @@ export const ITEMS: Record<string, ItemDefinition> = {
     abilities: [{
       id: "kite-shield-block",
       name: "Block",
-      kind: "buff",
+      kind: "barrier",
       cost: { blue: 1 },
-      effect: { type: "block", damageReduction: 15 },
+      barrierHp: 15,
+    }, {
+      id: "kite-shield-bash",
+      name: "Shield Bash",
+      kind: "attack",
+      cost: { red: 1 },
+      shape: { kind: ShapeKind.Sector, radius: 65, halfAngle: Math.PI / 4 },
+      damage: 15,
+      onHit: [{ type: "knockback", distance: 50 }],
+      visual: { color: 0x8899aa, trailEffect: "slash", screenShake: 0.35 },
+    } satisfies AttackAbility, {
+      id: "kite-shield-wall",
+      name: "Shield Wall",
+      kind: "barrier",
+      cost: { blue: 2 },
+      barrierHp: 30,
     }],
   },
   "buckler": {
@@ -321,11 +526,20 @@ export const ITEMS: Record<string, ItemDefinition> = {
     slotCost: { hand: 1 },
     abilities: [{
       id: "buckler-block",
-      name: "Parry",
-      kind: "buff",
+      name: "Block",
+      kind: "barrier",
       cost: { blue: 1 },
-      effect: { type: "block", damageReduction: 5 },
-    }],
+      barrierHp: 5,
+    }, {
+      id: "buckler-punch",
+      name: "Deflect Punch",
+      kind: "attack",
+      cost: { red: 1 },
+      shape: { kind: ShapeKind.Sector, radius: 45, halfAngle: Math.PI / 4 },
+      damage: 8,
+      onHit: [{ type: "knockback", distance: 35 }],
+      visual: { color: 0x8899aa, trailEffect: "slash", screenShake: 0.2 },
+    } satisfies AttackAbility],
   },
   "quiver": {
     type: "accessory",
@@ -406,3 +620,117 @@ export const ITEMS: Record<string, ItemDefinition> = {
     effect: { kind: "damage", amount: 40, radius: 80 },
   },
 };
+
+// --- Unit & Enemy Templates ---
+
+export const UNIT_TEMPLATES = {
+  player: {
+    abilities: PLAYER_INNATE_ABILITIES,
+    hp: 120,
+    energy: { red: 2, blue: 2 },
+    collisionRadius: 16,
+    className: "Player",
+    heightMeters: 2,
+  },
+} as const satisfies Record<string, UnitTemplate>;
+
+export const ENEMY_TEMPLATES = {
+  "goblin-spear": {
+    abilities: [makeMove(150), GOBLIN_SPEAR_THRUST],
+    hp: 80,
+    energy: { red: 1, blue: 1 },
+    collisionRadius: 14,
+    className: "Goblin Spearman",
+    spriteType: "goblin-spear",
+    heightMeters: 1.5,
+    strategy: "rush",
+    cost: 3,
+    tags: ["melee"],
+  },
+  "goblin-archer": {
+    abilities: [makeMove(140), GOBLIN_BOW_SHOT],
+    hp: 55,
+    energy: { red: 1, blue: 2 },
+    collisionRadius: 12,
+    className: "Goblin Archer",
+    spriteType: "goblin-archer",
+    heightMeters: 1.5,
+    strategy: "kite",
+    cost: 3,
+    tags: ["ranged"],
+  },
+  "goblin-shield": {
+    abilities: [makeMove(110), SHIELD_BASH_ATTACK],
+    hp: 110,
+    energy: { red: 1, blue: 2 },
+    collisionRadius: 16,
+    className: "Goblin Shield",
+    spriteType: "goblin-shield",
+    heightMeters: 1.5,
+    strategy: "rush",
+    cost: 4,
+    tags: ["melee", "tank"],
+  },
+  "goblin-brute": {
+    abilities: [makeMove(90), BRUTE_SLAM_ATTACK],
+    hp: 160,
+    energy: { red: 1, blue: 1 },
+    collisionRadius: 20,
+    className: "Goblin Brute",
+    spriteType: "goblin-brute",
+    heightMeters: 1.75,
+    strategy: "rush",
+    cost: 6,
+    tags: ["melee", "elite"],
+  },
+  "stone-golem": {
+    abilities: [makeMove(70), GOLEM_SMASH_ATTACK],
+    hp: 250,
+    energy: { red: 1, blue: 1 },
+    collisionRadius: 22,
+    className: "Stone Golem",
+    spriteType: "stone-golem",
+    heightMeters: 3,
+    strategy: "threat",
+    cost: 10,
+    tags: ["melee", "tank", "boss"],
+  },
+  "slime": {
+    abilities: [makeMove(120), SLIME_SPIT_ATTACK],
+    hp: 40,
+    energy: { red: 1, blue: 2 },
+    collisionRadius: 12,
+    className: "Slime",
+    spriteType: "slime",
+    heightMeters: 1.5,
+    strategy: "kite",
+    cost: 1,
+    tags: ["ranged", "swarm"],
+  },
+  "big-slime": {
+    abilities: [makeMove(100), SLIME_LASH_ATTACK],
+    hp: 90,
+    energy: { red: 1, blue: 2 },
+    collisionRadius: 18,
+    className: "Big Slime",
+    spriteType: "slime",
+    heightMeters: 3,
+    strategy: "rush",
+    effects: [{ trigger: "onDeath", action: { type: "spawn", templateKey: "slime", count: 2 } }],
+    cost: 6,
+    tags: ["melee", "tank", "elite"],
+  },
+  "massive-slime": {
+    abilities: [makeMove(70), SLIME_WAVE_ATTACK],
+    hp: 200,
+    energy: { red: 1, blue: 1 },
+    collisionRadius: 28,
+    className: "Massive Slime",
+    spriteType: "slime",
+    heightMeters: 6,
+    strategy: "threat",
+    effects: [{ trigger: "onDeath", action: { type: "spawn", templateKey: "big-slime", count: 2 } }],
+    cost: 14,
+    tags: ["melee", "tank", "boss"],
+  },
+} as const satisfies Record<string, UnitTemplate>;

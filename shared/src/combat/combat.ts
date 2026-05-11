@@ -33,13 +33,16 @@ export function applyDamage(
   const entities = new Map(state.entities);
   const hits: AttackHit[] = [];
   for (const target of targets) {
-    const newHp = target.hp - damage;
+    const barrierAbsorbed = Math.min(target.barrier, damage);
+    const remainingDamage = damage - barrierAbsorbed;
+    const newBarrier = target.barrier - barrierAbsorbed;
+    const newHp = target.hp - remainingDamage;
     const killed = newHp <= 0;
     hits.push({ targetId: target.id, damage, killed });
     if (killed) {
-      entities.set(target.id, { ...target, hp: 0, dead: true });
+      entities.set(target.id, { ...target, hp: 0, barrier: 0, dead: true });
     } else {
-      entities.set(target.id, { ...target, hp: newHp });
+      entities.set(target.id, { ...target, hp: newHp, barrier: newBarrier });
     }
   }
   return { state: { ...state, entities }, hits };

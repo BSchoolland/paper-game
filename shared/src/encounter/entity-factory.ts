@@ -19,6 +19,7 @@ export function makeEntity(
     collisionRadius: template.collisionRadius,
     hp: template.hp,
     maxHp: template.hp,
+    barrier: 0,
     teamId,
     energy: {
       red: template.energy.red,
@@ -27,7 +28,6 @@ export function makeEntity(
       maxBlue: template.energy.blue,
     },
     abilities: template.abilities,
-    buffs: [],
     spriteType: template.spriteType,
     spriteScale: template.spriteScale,
     heightMeters: template.heightMeters,

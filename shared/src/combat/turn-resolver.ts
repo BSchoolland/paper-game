@@ -1,4 +1,4 @@
-import type { AbilityDefinition, ActionResult, ActiveBuff, AimDirection, AttackAbility, AttackHit, BuffAbility, Entity, EnergyPool, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
+import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
 import { distance } from "../core/vec2.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
@@ -130,28 +130,22 @@ function resolveAttack(
   };
 }
 
-function resolveBuff(
+function resolveBarrier(
   state: GameState,
   entity: Entity,
-  ability: BuffAbility
+  ability: BarrierAbility
 ): ActionResult {
   const entityId = entity.id;
-  const buff: ActiveBuff = {
-    id: ability.id,
-    effect: ability.effect,
-    turnsRemaining: 1,
-  };
-
   const entities = new Map(state.entities);
   entities.set(entityId, {
     ...entity,
     energy: spendEnergy(entity.energy, ability.cost),
-    buffs: [...entity.buffs, buff],
+    barrier: entity.barrier + ability.barrierHp,
   });
 
   return {
     state: { ...state, entities },
-    events: [{ type: "buff", entityId, buff }],
+    events: [{ type: "barrier", entityId, barrierHp: ability.barrierHp }],
   };
 }
 
@@ -177,8 +171,8 @@ function resolveAbility(
     case "attack":
       if (!aimDirection) return NO_CHANGE(state);
       return resolveAttack(state, entity, ability, aimDirection);
-    case "buff":
-      return resolveBuff(state, entity, ability);
+    case "barrier":
+      return resolveBarrier(state, entity, ability);
   }
 }
 
@@ -189,13 +183,10 @@ function resolveEndTurn(state: GameState): ActionResult {
     if (entity.dead) {
       entities.set(id, entity);
     } else if (entity.teamId === nextTeam) {
-      const remainingBuffs = entity.buffs
-        .map(b => ({ ...b, turnsRemaining: b.turnsRemaining - 1 }))
-        .filter(b => b.turnsRemaining > 0);
       entities.set(id, {
         ...entity,
         energy: { ...entity.energy, red: entity.energy.maxRed, blue: entity.energy.maxBlue },
-        buffs: remainingBuffs,
+        barrier: 0,
       });
     } else {
       entities.set(id, entity);

@@ -1,5 +1,5 @@
 import type { ActionResult, Entity, EntityEffect, GameEvent, TeamId, Vec2, WeaponEffect } from "../core/types.js";
-import { ENEMY_TEMPLATES } from "../core/types.js";
+import { ENEMY_TEMPLATES } from "../core/items.js";
 import { makeEntity } from "./entity-factory.js";
 import { normalize, sub, add, scale, distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds, findWalkablePosition } from "../map/collision-grid.js";

@@ -120,6 +120,34 @@ export class EntityManager {
     this.pendingEvents.length = 0;
   }
 
+  setDamagePreview(targets: { entityId: string; damage: number; currentHp: number; maxHp: number; barrier: number }[]): void {
+    const targetIds = new Set(targets.map(t => t.entityId));
+    for (const [id, visual] of this.visuals) {
+      if (targetIds.has(id)) {
+        const t = targets.find(t => t.entityId === id)!;
+        visual.setDamagePreview(t.damage, t.currentHp, t.maxHp, t.barrier);
+      } else {
+        visual.clearDamagePreview();
+      }
+    }
+  }
+
+  setBarrierPreview(entityId: string, barrierHp: number, currentHp: number, maxHp: number, currentBarrier: number): void {
+    for (const [id, visual] of this.visuals) {
+      if (id === entityId) {
+        visual.setBarrierPreview(barrierHp, currentHp, maxHp, currentBarrier);
+      } else {
+        visual.clearDamagePreview();
+      }
+    }
+  }
+
+  clearDamagePreview(): void {
+    for (const visual of this.visuals.values()) {
+      visual.clearDamagePreview();
+    }
+  }
+
   depthSort() {
     for (const visual of this.visuals.values()) {
       visual.container.zIndex = visual.container.position.y + FOOT_OFFSET;

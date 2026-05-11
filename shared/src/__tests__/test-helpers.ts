@@ -1,5 +1,5 @@
 import type { Entity, GameState } from "../core/types.js";
-import { SHORT_SWORD_SLASH, INNATE_MOVE } from "../core/types.js";
+import { SHORT_SWORD_SLASH, INNATE_MOVE } from "../core/items.js";
 import { createGrid } from "../map/collision-grid.js";
 
 export function makeEntity(
@@ -16,10 +16,10 @@ export function makeEntity(
     collisionRadius: 16,
     hp: 100,
     maxHp: 100,
+    barrier: 0,
     teamId,
     energy: { red: 2, blue: 2, maxRed: 2, maxBlue: 2 },
     abilities: [INNATE_MOVE, SHORT_SWORD_SLASH],
-    buffs: [],
     ...overrides,
   };
 }

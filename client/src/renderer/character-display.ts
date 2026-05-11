@@ -151,7 +151,8 @@ export class CharacterDisplay {
     if (this.hpFill && this.hpText) {
       const pct = Math.max(0, entity.hp / entity.maxHp) * 100;
       this.hpFill.style.width = `${pct}%`;
-      this.hpText.textContent = `${entity.hp} / ${entity.maxHp}`;
+      const barrierText = entity.barrier > 0 ? ` (+${entity.barrier})` : "";
+      this.hpText.textContent = `${entity.hp} / ${entity.maxHp}${barrierText}`;
     }
   }
 }

@@ -1,5 +1,5 @@
 import type { UnitTemplate } from "../core/types.js";
-import { ENEMY_TEMPLATES } from "../core/types.js";
+import { ENEMY_TEMPLATES } from "../core/items.js";
 import type { MapObjectCategory } from "../map/map-definition.js";
 
 export interface StructureEntry {
