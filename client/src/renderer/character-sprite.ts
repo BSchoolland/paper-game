@@ -1,7 +1,8 @@
 import { Container, Sprite } from "pixi.js";
 import type { ItemDefinition, AttachmentData, AnimSet } from "shared";
 import type { AnimState } from "./sprite-assets.js";
-import { getPlayerTexture, getItemTexture } from "./sprite-assets.js";
+import { getPlayerTexture } from "./sprite-assets.js";
+import { loadItemTexture } from "./item-sprites.js";
 import { loadCharacterAnchors } from "./anchor-loader.js";
 import { transformAttachment, type CharacterAnchors, type AnchorSet } from "./bone-transform.js";
 
@@ -101,16 +102,21 @@ export class CharacterSprite {
   }
 
   private initItemSprites(): void {
+    const equippedAtCall = this.equipped;
     loadCharacterAnchors("char1").then((data) => {
-      if (!data) return;
+      if (!data || this.equipped !== equippedAtCall) return;
       this.characterAnchors = data;
       for (const item of this.equipped) {
-        const tex = getItemTexture(item.sprite);
-        const sprite = new Sprite(tex ?? undefined);
+        const sprite = new Sprite();
         sprite.anchor.set(0.5, 0.5);
         sprite.visible = false;
         this.container.addChild(sprite);
         this.itemSprites.push(sprite);
+        loadItemTexture(item).then((tex) => {
+          if (this.equipped !== equippedAtCall) return;
+          if (tex) sprite.texture = tex;
+          this.positionItemSprites();
+        });
       }
       this.positionItemSprites();
     });
@@ -130,6 +136,11 @@ export class CharacterSprite {
       const item = this.equipped[i]!;
       const sprite = this.itemSprites[i];
       if (!sprite) continue;
+
+      if (sprite.texture.width === 0) {
+        sprite.visible = false;
+        continue;
+      }
 
       const attachment = this.attachments[item.id];
       if (!attachment) {

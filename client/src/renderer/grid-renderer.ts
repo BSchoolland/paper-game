@@ -2,6 +2,7 @@ import { Assets, Sprite, Texture } from "pixi.js";
 import type { GridState, MapObjectPlacement } from "shared";
 import { stampMapObjects } from "shared";
 import type { AlphaImage } from "shared";
+import { assetUrl } from "./asset-url.js";
 
 const ALL_OBJECT_NAMES = [
   "tree-oak-small",
@@ -45,7 +46,7 @@ export async function loadMapAssets(): Promise<void> {
     const subpath = folder ? `${folder}/` : "";
     return {
       alias: `map-${name}`,
-      src: `/sprites/map-objects/${subpath}${name}.webp`,
+      src: assetUrl(`sprites/map-objects/${subpath}${name}.webp`),
     };
   });
   await Assets.load(entries);

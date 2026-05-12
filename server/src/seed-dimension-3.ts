@@ -6,10 +6,10 @@ import { saveDimension, saveEnemyTemplates, saveItems } from "./db.js";
 function enemySprites(name: string): SpriteSet {
   const base = `/api/sprites/enemies/dimension-3/${name}/${name}`;
   return {
-    idle: `${base}-idle.webp`,
-    attack: `${base}-attack.webp`,
-    hit: `${base}-hit.webp`,
-    move: `${base}-move.webp`,
+    idle: `${base}-idle.png`,
+    attack: `${base}-attack.png`,
+    hit: `${base}-hit.png`,
+    move: `${base}-move.png`,
   };
 }
 
@@ -602,7 +602,7 @@ function buildDim3Structures(): StructureEntry[] {
       index: i,
       cost: t < 0.33 ? 1 : t < 0.66 ? 2 : 3,
       scale: 0.25 + t * 0.15,
-      spritePath: `sprites/map-objects/dimension-3/sprite-${id}.webp`,
+      spritePath: `sprites/map-objects/dimension-3/sprite-${id}.png`,
     });
   }
   return entries;

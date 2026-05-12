@@ -13,6 +13,7 @@ import { HexCamera } from "./hex-camera.js";
 import { HexPathTrail } from "./hex-path-trail.js";
 import { HexPlayerTween } from "./hex-player-tween.js";
 import type { FramePacer, PacerToken } from "./frame-pacer.js";
+import { assetUrl } from "./asset-url.js";
 
 const HEX_SIZE = 48;
 
@@ -33,7 +34,7 @@ let decorationNames: string[] = [];
 export async function loadMapIconAssets(): Promise<void> {
   const entries = HEX_ICON_TYPES.map((name) => ({
     alias: `map-icon-${name}`,
-    src: `/sprites/map-icons/${name}.png`,
+    src: assetUrl(`sprites/map-icons/${name}.png`),
   }));
 
   await Assets.load(entries);
@@ -43,12 +44,12 @@ export async function loadMapIconAssets(): Promise<void> {
 }
 
 export async function loadHexDecorations(decorationsPath: string): Promise<void> {
-  const base = decorationsPath.startsWith("/") ? decorationsPath : `/${decorationsPath}`;
+  const base = assetUrl(decorationsPath);
   const manifestResponse = await fetch(`${base}/manifest.json`);
   const loadedDecorationNames = (await manifestResponse.json()) as string[];
   const decorationEntries = loadedDecorationNames.map((name) => ({
     alias: `map-decoration-${name}`,
-    src: `${base}/${name}.png`,
+    src: assetUrl(`${base}/${name}.png`),
   }));
 
   await Assets.load(decorationEntries);

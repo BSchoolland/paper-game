@@ -1,5 +1,6 @@
 import type { InventoryState, ItemDefinition } from "shared";
 import { PLAYER_SLOTS } from "shared";
+import { itemSpriteUrl } from "../renderer/item-sprites.js";
 import type { SlotType } from "shared";
 import { canEquip } from "shared";
 import {
@@ -49,8 +50,7 @@ export class InventoryRenderer {
       return img.naturalWidth > 0 ? img : null;
     }
     const img = new Image();
-    const dimPrefix = dimensionId === 0 ? "" : `dimension-${dimensionId}/`;
-    img.src = `sprites/items/${dimPrefix}${spriteId}.webp`;
+    img.src = itemSpriteUrl({ sprite: spriteId, dimensionId });
     img.onload = () => this.onSpriteLoad();
     this.spriteImages.set(key, img);
     return null;

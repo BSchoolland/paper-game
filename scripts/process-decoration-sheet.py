@@ -7,18 +7,29 @@ connected components to find individual sprites.
 
 Usage:
   python3 scripts/process-decoration-sheet.py <input-image> <output-dir>
-      [--names name1,name2,...] [--tolerance 35] [--min-size 40] [--debug]
+      [--names name1,name2,...] [--tolerance 0] [--format png] [--debug]
 
-If --names is provided, sprites are named in row-major order (top-to-bottom,
-left-to-right). Otherwise they're saved as sprite-00.webp, sprite-01.webp, ...
+Output:
+  - sprite-00.png, sprite-01.png, ... (or the provided --names, row-major)
+  - manifest.json: a JSON array of the base names, in order. The game's hex
+    decoration loader reads this; harmless for map-object/structure sheets.
+
+Defaults to PNG because that's what the game's loaders expect.
 """
 
 import argparse
+import json
 import os
 import numpy as np
 from PIL import Image
 from scipy import ndimage
-from collections import deque
+
+from _sheet_utils import (
+    flood_fill_from_edges,
+    rgba_from_bg_mask,
+    remove_small_clusters,
+    crop_to_content,
+)
 
 
 def parse_args():
@@ -29,46 +40,12 @@ def parse_args():
     p.add_argument("--tolerance", type=int, default=0, help="Flood-fill color tolerance (0 = auto-calibrate)")
     p.add_argument("--min-size", type=int, default=40, help="Minimum sprite dimension")
     p.add_argument("--padding", type=int, default=4, help="Padding around sprite")
-    p.add_argument("--quality", type=int, default=90, help="WebP quality")
+    p.add_argument("--format", default="png", choices=["png", "webp"])
+    p.add_argument("--quality", type=int, default=90, help="WebP quality (ignored for PNG)")
     p.add_argument("--row-height", type=int, default=80, help="Row band height for sort")
     p.add_argument("--min-cluster", type=int, default=50, help="Minimum pixel cluster size to keep")
     p.add_argument("--debug", action="store_true", help="Save debug image")
     return p.parse_args()
-
-
-def flood_fill_background(arr: np.ndarray, tolerance: int) -> np.ndarray:
-    """Flood-fill from edges; returns boolean mask where True = background."""
-    h, w = arr.shape[:2]
-    img_f = arr.astype(float)
-    visited = np.zeros((h, w), dtype=bool)
-    is_bg = np.zeros((h, w), dtype=bool)
-
-    queue = deque()
-    for x in range(w):
-        for y in (0, h - 1):
-            if not visited[y, x]:
-                visited[y, x] = True
-                is_bg[y, x] = True
-                queue.append((y, x))
-    for y in range(h):
-        for x in (0, w - 1):
-            if not visited[y, x]:
-                visited[y, x] = True
-                is_bg[y, x] = True
-                queue.append((y, x))
-
-    while queue:
-        cy, cx = queue.popleft()
-        center = img_f[cy, cx]
-        for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)):
-            ny, nx = cy + dy, cx + dx
-            if 0 <= ny < h and 0 <= nx < w and not visited[ny, nx]:
-                visited[ny, nx] = True
-                if np.sqrt(np.sum((img_f[ny, nx] - center) ** 2)) < tolerance:
-                    is_bg[ny, nx] = True
-                    queue.append((ny, nx))
-
-    return is_bg
 
 
 def find_sprite_boxes(bg_mask: np.ndarray, min_size: int, row_h: int):
@@ -78,50 +55,27 @@ def find_sprite_boxes(bg_mask: np.ndarray, min_size: int, row_h: int):
     fg = ndimage.binary_erosion(fg, structure=struct, iterations=1).astype(np.uint8)
 
     labeled, num = ndimage.label(fg)
+    h, w = bg_mask.shape
+    sheet_area = h * w
     boxes = []
     for i in range(1, num + 1):
         ys, xs = np.where(labeled == i)
         x0, x1 = int(xs.min()), int(xs.max()) + 1
         y0, y1 = int(ys.min()), int(ys.max()) + 1
-        if (x1 - x0) >= min_size and (y1 - y0) >= min_size:
-            boxes.append((x0, y0, x1, y1))
+        bw, bh = x1 - x0, y1 - y0
+        if bw < min_size or bh < min_size:
+            continue
+        # Skip the whole-sheet false positive (a box covering most of the image).
+        if bw * bh > 0.5 * sheet_area:
+            continue
+        boxes.append((x0, y0, x1, y1))
 
     boxes.sort(key=lambda b: (b[1] // row_h, b[0]))
     return boxes
 
 
-def make_rgba(arr: np.ndarray, bg_mask: np.ndarray) -> Image.Image:
-    alpha = np.where(bg_mask, 0, 255).astype(np.uint8)
-    alpha_f = ndimage.gaussian_filter(alpha.astype(float), sigma=0.6)
-    alpha = np.clip(alpha_f, 0, 255).astype(np.uint8)
-    return Image.fromarray(np.dstack([arr, alpha]), "RGBA")
-
-
-def remove_small_clusters(pixels: np.ndarray, min_cluster: int) -> np.ndarray:
-    alpha = pixels[:, :, 3]
-    mask = alpha > 10
-    labeled_arr, num_features = ndimage.label(mask)
-    for i in range(1, num_features + 1):
-        cluster = labeled_arr == i
-        if cluster.sum() < min_cluster:
-            pixels[cluster, 3] = 0
-    return pixels
-
-
-def crop_to_content(img: Image.Image, padding: int) -> Image.Image:
-    bbox = img.getbbox()
-    if bbox is None:
-        return img
-    x0, y0, x1, y1 = bbox
-    x0 = max(0, x0 - padding)
-    y0 = max(0, y0 - padding)
-    x1 = min(img.width, x1 + padding)
-    y1 = min(img.height, y1 + padding)
-    return img.crop((x0, y0, x1, y1))
-
-
 def count_sprites_at_tolerance(arr: np.ndarray, tolerance: int, min_size: int, row_h: int) -> int:
-    bg_mask = flood_fill_background(arr, tolerance)
+    bg_mask = flood_fill_from_edges(arr, tolerance)
     boxes = find_sprite_boxes(bg_mask, min_size, row_h)
     return len(boxes)
 
@@ -129,7 +83,7 @@ def count_sprites_at_tolerance(arr: np.ndarray, tolerance: int, min_size: int, r
 def auto_calibrate_tolerance(arr: np.ndarray, min_size: int, row_h: int) -> int:
     """Find the lowest tolerance that produces the correct sprite count.
 
-    Strategy: run at a high tolerance to discover how many sprites exist,
+    Strategy: run at a moderate tolerance to discover how many sprites exist,
     then binary-search down for the lowest tolerance that still finds that many.
     """
     high = 50
@@ -172,14 +126,14 @@ def main():
         tolerance = auto_calibrate_tolerance(arr, args.min_size, args.row_height)
 
     print(f"Flood-filling background (tolerance={tolerance})...")
-    bg_mask = flood_fill_background(arr, tolerance)
+    bg_mask = flood_fill_from_edges(arr, tolerance)
     print(f"  Background: {bg_mask.sum() / (h * w) * 100:.1f}% of image")
 
     print("Finding sprites...")
     boxes = find_sprite_boxes(bg_mask, args.min_size, args.row_height)
     print(f"  Found {len(boxes)} sprites")
 
-    rgba = make_rgba(arr, bg_mask)
+    rgba = rgba_from_bg_mask(arr, bg_mask)
 
     if args.debug:
         from PIL import ImageDraw
@@ -189,9 +143,9 @@ def main():
             draw.rectangle([x0, y0, x1, y1], outline=(255, 0, 0, 255), width=2)
             draw.text((x0 + 2, y0 - 14), str(i), fill=(255, 0, 0, 255))
         debug.save(os.path.join(args.output_dir, "_debug.png"))
-        print(f"  Debug saved")
+        print("  Debug saved")
 
-    # Filter out size outliers (>3x or <1/3 of average dimension)
+    # Filter out size outliers (>3x or <1/3 of the average dimension).
     if len(boxes) > 2:
         widths = [x1 - x0 for x0, y0, x1, y1 in boxes]
         heights = [y1 - y0 for x0, y0, x1, y1 in boxes]
@@ -207,7 +161,10 @@ def main():
         boxes = filtered
         print(f"  After outlier filter: {len(boxes)} sprites")
 
-    names = [n.strip() for n in args.names.split(",") if n.strip()] if args.names else []
+    names_arg = [n.strip() for n in args.names.split(",") if n.strip()] if args.names else []
+    ext = args.format
+    save_kwargs = {"quality": args.quality} if ext == "webp" else {}
+    saved_names = []
 
     for i, (x0, y0, x1, y1) in enumerate(boxes):
         pad = args.padding
@@ -217,12 +174,15 @@ def main():
         sprite_arr = remove_small_clusters(np.array(sprite), args.min_cluster)
         sprite = Image.fromarray(sprite_arr)
         sprite = crop_to_content(sprite, padding=2)
-        name = names[i] if i < len(names) else f"sprite-{i:02d}"
-        out_path = os.path.join(args.output_dir, f"{name}.webp")
-        sprite.save(out_path, "WEBP", quality=args.quality)
+        name = names_arg[i] if i < len(names_arg) else f"sprite-{i:02d}"
+        sprite.save(os.path.join(args.output_dir, f"{name}.{ext}"), ext.upper(), **save_kwargs)
+        saved_names.append(name)
         print(f"  [{i:02d}] {name}: {sprite.size[0]}x{sprite.size[1]}")
 
-    print(f"\nDone! {len(boxes)} sprites saved to {args.output_dir}")
+    with open(os.path.join(args.output_dir, "manifest.json"), "w") as f:
+        json.dump(saved_names, f, indent=2)
+
+    print(f"\nDone! {len(saved_names)} sprites + manifest.json saved to {args.output_dir}")
 
 
 if __name__ == "__main__":

@@ -22,6 +22,8 @@ import numpy as np
 from PIL import Image
 from scipy.ndimage import label, binary_dilation
 
+from _sheet_utils import remove_small_clusters
+
 
 def parse_args():
     p = argparse.ArgumentParser(description="Process a sprite sheet into individual sprites.")
@@ -33,8 +35,8 @@ def parse_args():
     p.add_argument("--states", default="idle,attack,hit,move")
     p.add_argument("--bg-tolerance", type=int, default=55, help="Color distance threshold for background removal")
     p.add_argument("--min-cluster", type=int, default=50, help="Minimum pixel cluster size to keep")
-    p.add_argument("--format", default="webp", choices=["webp", "png"])
-    p.add_argument("--quality", type=int, default=90)
+    p.add_argument("--format", default="png", choices=["png", "webp"])
+    p.add_argument("--quality", type=int, default=90, help="WebP quality (ignored for PNG)")
     p.add_argument("--foot-threshold", type=float, default=0.05, help="Fraction of row width to count as 'real' content")
     return p.parse_args()
 
@@ -72,19 +74,6 @@ def remove_background(pixels: np.ndarray, bg: np.ndarray, tolerance: int) -> np.
     alpha[boundary] = np.clip((diff[boundary] / tolerance) * 255, 0, 255).astype(np.uint8)
 
     pixels[:, :, 3] = alpha
-    return pixels
-
-
-def remove_small_clusters(pixels: np.ndarray, min_cluster: int) -> np.ndarray:
-    alpha = pixels[:, :, 3]
-    mask = alpha > 10
-    labeled_arr, num_features = label(mask)
-
-    for i in range(1, num_features + 1):
-        cluster = labeled_arr == i
-        if cluster.sum() < min_cluster:
-            pixels[cluster, 3] = 0
-
     return pixels
 
 

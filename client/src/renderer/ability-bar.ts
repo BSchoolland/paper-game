@@ -2,6 +2,7 @@ import type { AbilityDefinition, Entity, Vec2 } from "shared";
 import { clampToMovementRange, distance, canAffordAbility, getAbilityCost } from "shared";
 import type { ItemDefinition } from "shared/src/core/items.js";
 import type { ClientState } from "../state/client-state.js";
+import { itemSpriteUrl } from "./item-sprites.js";
 
 interface Region {
   name: string;
@@ -237,8 +238,7 @@ export class AbilityBar {
     const imageRegion = this.getRegion("image");
     if (imageRegion && sourceItem) {
       const img = document.createElement("img");
-      const dimPrefix = sourceItem.dimensionId === 0 ? "" : `dimension-${sourceItem.dimensionId}/`;
-      img.src = `sprites/items/${dimPrefix}${sourceItem.sprite}.webp`;
+      img.src = itemSpriteUrl(sourceItem);
       img.style.cssText = `
         position: absolute;
         left: ${imageRegion.x * s}px;

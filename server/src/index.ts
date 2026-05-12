@@ -31,6 +31,7 @@ import { seedDimension1 } from "./seed-dimension-1.js";
 import { seedDimension2 } from "./seed-dimension-2.js";
 import { seedDimension3 } from "./seed-dimension-3.js";
 import { join } from "path";
+import { existsSync } from "fs";
 
 seedDiscovery(15);
 seedDimension0();
@@ -258,9 +259,12 @@ Bun.serve({
       }
       const dimItems = loadItems(dimId);
       const itemSprites: Record<string, string> = {};
+      const itemsRoot = join(import.meta.dir, "..", "..", "client", "public");
       for (const item of Object.values(dimItems)) {
         const prefix = item.dimensionId === 0 ? "" : `dimension-${item.dimensionId}/`;
-        itemSprites[item.sprite] = `sprites/items/${prefix}${item.sprite}.webp`;
+        const rel = `sprites/items/${prefix}${item.sprite}`;
+        const ext = existsSync(join(itemsRoot, `${rel}.png`)) ? "png" : "webp";
+        itemSprites[item.sprite] = `${rel}.${ext}`;
       }
       return Response.json({
         id: dimId,
