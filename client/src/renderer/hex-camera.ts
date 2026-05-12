@@ -1,4 +1,4 @@
-import { Application, Container, Graphics, Texture, Assets } from "pixi.js";
+import { Application, Container, Graphics } from "pixi.js";
 
 const DEFAULT_MAP_ZOOM = 2;
 const MIN_MAP_ZOOM = 0.85;
@@ -7,37 +7,11 @@ const ZOOM_STEP = 1.12;
 const DRAG_THRESHOLD = 4;
 const PAN_SPEED = 6;
 
-function averageTextureColor(tex: Texture): number {
-  const source = tex.source.resource;
-  if (!(source instanceof HTMLImageElement || source instanceof ImageBitmap)) {
-    return 0x8fae6b;
-  }
-  const canvas = document.createElement("canvas");
-  const w = Math.min(tex.width, 64);
-  const h = Math.min(tex.height, 64);
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  ctx.drawImage(source as CanvasImageSource, 0, 0, w, h);
-  const data = ctx.getImageData(0, 0, w, h).data;
-  let r = 0, g = 0, b = 0, count = 0;
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3]! < 128) continue;
-    r += data[i]!;
-    g += data[i + 1]!;
-    b += data[i + 2]!;
-    count++;
-  }
-  if (count === 0) return 0x8fae6b;
-  r = Math.round(r / count);
-  g = Math.round(g / count);
-  b = Math.round(b / count);
-  return (r << 16) | (g << 8) | b;
-}
+const MAP_BG_COLOR = 0xe8daae;
 
 export class HexCamera {
   private bgGfx = new Graphics();
-  private bgColor = 0x8fae6b;
+  private bgColor = MAP_BG_COLOR;
   private maskGfx = new Graphics();
   private scale = 1;
   private offsetX = 0;
@@ -66,8 +40,6 @@ export class HexCamera {
   }
 
   init() {
-    const bgTex: Texture = Assets.get("map-background");
-    this.bgColor = averageTextureColor(bgTex);
     this.drawBg();
     this.app.stage.addChild(this.bgGfx);
 
