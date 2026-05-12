@@ -7,3 +7,4 @@ bun.lock
 *.sqlite-wal
 *.sqlite-shm
 ScriptableByteArray*
+scripts/__pycache__/
