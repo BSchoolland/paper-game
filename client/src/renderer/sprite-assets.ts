@@ -32,12 +32,12 @@ export async function loadSpriteAssets(): Promise<void> {
   for (const animSet of PLAYER_ANIM_SETS) {
     for (const state of (["idle", "attack", "hit", "move"] as AnimState[])) {
       const k = playerKey(animSet, state);
-      entries.push({ alias: k, src: `sprites/char1/${k}.webp` });
+      entries.push({ alias: k, src: `/sprites/char1/${k}.webp` });
     }
   }
 
   for (const itemId of ITEM_SPRITES) {
-    entries.push({ alias: `item-${itemId}`, src: `sprites/items/${itemId}.webp` });
+    entries.push({ alias: `item-${itemId}`, src: `/sprites/items/${itemId}.webp` });
   }
 
   await Promise.all([
@@ -78,13 +78,13 @@ export async function loadDimensionSprites(dimensionId: number): Promise<Dimensi
     entries.push({ alias: path, src: `${SERVER_BASE}${path}` });
   }
   for (const [name, path] of Object.entries(manifest.structureSprites)) {
-    entries.push({ alias: `map-${name}`, src: path });
+    entries.push({ alias: `map-${name}`, src: `/${path}` });
   }
   for (const [spriteId, path] of Object.entries(manifest.itemSprites)) {
-    entries.push({ alias: `item-${spriteId}`, src: path });
+    entries.push({ alias: `item-${spriteId}`, src: `/${path}` });
   }
   if (manifest.backgroundPath) {
-    entries.push({ alias: "map-background", src: manifest.backgroundPath });
+    entries.push({ alias: "map-background", src: `/${manifest.backgroundPath}` });
   }
 
   if (entries.length > 0) {

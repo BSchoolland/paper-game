@@ -33,7 +33,7 @@ let decorationNames: string[] = [];
 export async function loadMapIconAssets(): Promise<void> {
   const entries = HEX_ICON_TYPES.map((name) => ({
     alias: `map-icon-${name}`,
-    src: `sprites/map-icons/${name}.png`,
+    src: `/sprites/map-icons/${name}.png`,
   }));
 
   await Assets.load(entries);
@@ -43,11 +43,12 @@ export async function loadMapIconAssets(): Promise<void> {
 }
 
 export async function loadHexDecorations(decorationsPath: string): Promise<void> {
-  const manifestResponse = await fetch(`${decorationsPath}/manifest.json`);
+  const base = decorationsPath.startsWith("/") ? decorationsPath : `/${decorationsPath}`;
+  const manifestResponse = await fetch(`${base}/manifest.json`);
   const loadedDecorationNames = (await manifestResponse.json()) as string[];
   const decorationEntries = loadedDecorationNames.map((name) => ({
     alias: `map-decoration-${name}`,
-    src: `${decorationsPath}/${name}.png`,
+    src: `${base}/${name}.png`,
   }));
 
   await Assets.load(decorationEntries);

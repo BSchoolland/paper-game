@@ -45,7 +45,7 @@ export async function loadMapAssets(): Promise<void> {
     const subpath = folder ? `${folder}/` : "";
     return {
       alias: `map-${name}`,
-      src: `sprites/map-objects/${subpath}${name}.webp`,
+      src: `/sprites/map-objects/${subpath}${name}.webp`,
     };
   });
   await Assets.load(entries);
