@@ -26,7 +26,7 @@ def parse_args():
     p.add_argument("input", help="Path to the spritesheet image")
     p.add_argument("output_dir", help="Output directory for individual sprites")
     p.add_argument("--names", default="", help="Comma-separated sprite names (row-major)")
-    p.add_argument("--tolerance", type=int, default=25, help="Flood-fill color tolerance")
+    p.add_argument("--tolerance", type=int, default=0, help="Flood-fill color tolerance (0 = auto-calibrate)")
     p.add_argument("--min-size", type=int, default=40, help="Minimum sprite dimension")
     p.add_argument("--padding", type=int, default=4, help="Padding around sprite")
     p.add_argument("--quality", type=int, default=90, help="WebP quality")
@@ -120,6 +120,42 @@ def crop_to_content(img: Image.Image, padding: int) -> Image.Image:
     return img.crop((x0, y0, x1, y1))
 
 
+def count_sprites_at_tolerance(arr: np.ndarray, tolerance: int, min_size: int, row_h: int) -> int:
+    bg_mask = flood_fill_background(arr, tolerance)
+    boxes = find_sprite_boxes(bg_mask, min_size, row_h)
+    return len(boxes)
+
+
+def auto_calibrate_tolerance(arr: np.ndarray, min_size: int, row_h: int) -> int:
+    """Find the lowest tolerance that produces the correct sprite count.
+
+    Strategy: run at a high tolerance to discover how many sprites exist,
+    then binary-search down for the lowest tolerance that still finds that many.
+    """
+    high = 50
+    target_count = count_sprites_at_tolerance(arr, high, min_size, row_h)
+    print(f"  Calibration: {target_count} sprites at tolerance {high}")
+
+    if target_count <= 1:
+        print(f"  Warning: only {target_count} sprite(s) even at tolerance {high}, using {high}")
+        return high
+
+    lo, hi = 1, high
+    best = high
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        count = count_sprites_at_tolerance(arr, mid, min_size, row_h)
+        print(f"  Calibration: {count} sprites at tolerance {mid}")
+        if count >= target_count:
+            best = mid
+            hi = mid - 1
+        else:
+            lo = mid + 1
+
+    print(f"  Auto-calibrated tolerance: {best} (finds {target_count} sprites)")
+    return best
+
+
 def main():
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
@@ -130,8 +166,13 @@ def main():
     h, w = arr.shape[:2]
     print(f"  Size: {w}x{h}")
 
-    print(f"Flood-filling background (tolerance={args.tolerance})...")
-    bg_mask = flood_fill_background(arr, args.tolerance)
+    tolerance = args.tolerance
+    if tolerance == 0:
+        print("Auto-calibrating tolerance...")
+        tolerance = auto_calibrate_tolerance(arr, args.min_size, args.row_height)
+
+    print(f"Flood-filling background (tolerance={tolerance})...")
+    bg_mask = flood_fill_background(arr, tolerance)
     print(f"  Background: {bg_mask.sum() / (h * w) * 100:.1f}% of image")
 
     print("Finding sprites...")
@@ -149,6 +190,22 @@ def main():
             draw.text((x0 + 2, y0 - 14), str(i), fill=(255, 0, 0, 255))
         debug.save(os.path.join(args.output_dir, "_debug.png"))
         print(f"  Debug saved")
+
+    # Filter out size outliers (>3x or <1/3 of average dimension)
+    if len(boxes) > 2:
+        widths = [x1 - x0 for x0, y0, x1, y1 in boxes]
+        heights = [y1 - y0 for x0, y0, x1, y1 in boxes]
+        avg_w = sum(widths) / len(widths)
+        avg_h = sum(heights) / len(heights)
+        filtered = []
+        for b in boxes:
+            bw, bh = b[2] - b[0], b[3] - b[1]
+            if bw > avg_w * 3 or bw < avg_w / 3 or bh > avg_h * 3 or bh < avg_h / 3:
+                print(f"  Discarding outlier: {bw}x{bh} (avg {avg_w:.0f}x{avg_h:.0f})")
+            else:
+                filtered.append(b)
+        boxes = filtered
+        print(f"  After outlier filter: {len(boxes)} sprites")
 
     names = [n.strip() for n in args.names.split(",") if n.strip()] if args.names else []
 

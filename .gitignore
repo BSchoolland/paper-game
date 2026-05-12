@@ -6,3 +6,4 @@ bun.lock
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+ScriptableByteArray*

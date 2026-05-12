@@ -94,6 +94,8 @@ function formatItem(item: ItemSpec): string {
   return `  ${item.name} (${item.type}, ${item.rarity}) — ${item.description}`;
 }
 
+const ART_STYLE = "Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.";
+
 function dimensionContext(spec: DimensionSpec): string {
   return [
     `Dimension: ${spec.name}`,
@@ -102,6 +104,17 @@ function dimensionContext(spec: DimensionSpec): string {
     `Palette: primary ${spec.palette.primary}, secondary ${spec.palette.secondary}, accent ${spec.palette.accent}`,
     "",
     `Description: ${spec.description}`,
+    "",
+    ART_STYLE,
+  ].join("\n");
+}
+
+function lightContext(spec: DimensionSpec): string {
+  return [
+    `Dimension: ${spec.name}`,
+    `Biome: ${spec.biome}`,
+    "",
+    ART_STYLE,
   ].join("\n");
 }
 
@@ -146,6 +159,8 @@ async function build(specPath: string) {
       "Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color saturation, same isometric three-quarter perspective, same drop shadows.",
       "",
       "Each decoration should be a single distinct object with clear space around it, suitable for cutting out individually. A mix of organic decorations (plants/natural objects) and structural decorations (walls/ruins/built objects) — choose what fits this dimension's biome and mood.",
+      "",
+      "Important: Use a variety of colors across the decorations — not everything should be the same color as the dimension palette. Natural environments have diverse coloring, so include variety (e.g. different plant greens, browns, grays for rocks, varied flower colors).",
     ].join("\n"),
   });
 
@@ -163,7 +178,7 @@ async function build(specPath: string) {
       spec,
       referenceImage: REFERENCES.enemies,
       prompt: [
-        dimensionContext(spec),
+        lightContext(spec),
         "",
         "Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.",
         "",
@@ -171,6 +186,7 @@ async function build(specPath: string) {
         "  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)",
         "  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)",
         "  - Each enemy is consistent across its column (same character drawn 4 different ways)",
+        "  - All characters must face to the RIGHT",
         "",
         `This batch is the "${batch.name}" tier: ${batch.description}`,
         "",
@@ -191,6 +207,8 @@ async function build(specPath: string) {
       dimensionContext(spec),
       "",
       "Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color saturation, same isometric three-quarter perspective, same drop shadows.",
+      "",
+      "Important: Use a variety of colors across the decorations — not everything should be the same color as the dimension palette. Natural environments have diverse coloring, so include variety (e.g. different plant greens, browns, grays for rocks, varied flower colors).",
     ].join("\n"),
   });
 
@@ -202,7 +220,7 @@ async function build(specPath: string) {
     spec,
     referenceImage: REFERENCES.items,
     prompt: [
-      dimensionContext(spec),
+      lightContext(spec),
       "",
       "Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.",
       "",
@@ -212,6 +230,12 @@ async function build(specPath: string) {
       itemList,
     ].join("\n"),
   });
+
+  // Copy send-to-chatgpt.sh into the bundle
+  const sendScript = join(SCRIPT_DIR, "diffusion-bundles", "send-to-chatgpt.sh");
+  if (existsSync(sendScript)) {
+    await copyFile(sendScript, join(outDir, "send-to-chatgpt.sh"));
+  }
 
   console.log(`\n✓ Built bundles in ${outDir}`);
 }

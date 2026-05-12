@@ -12,9 +12,9 @@ Templates to copy:
 
 ## Pipeline
 
-1. Run `bun dimension-generator/inspire.ts` for random colors and nouns. Use them as mood seeds, not literal constraints.
+1. Run `bun dimension-generator/inspire.ts` for random nouns. Use them as mood seeds, not literal constraints.
 
-2. Write `dimension-generator/dimension-N-spec.json`. Pick a mechanical identity that contrasts existing dimensions (which on-hit effects it leans on: knockback, pull, bleeding, poisoned, slowed, vulnerable, confused).
+2. Write `dimension-generator/dimension-N-spec.json`. A dimension is a **whole world** — think of it as an entire planet with diverse biomes, cultures, and ecosystems, not a single room or location. "Underwater caves" is too narrow; "an ocean world with reefs, trenches, and floating kelp cities" is the right scale. The name, description, and enemies should imply variety and depth, not one gimmick. Pick a mechanical identity that contrasts existing dimensions (which on-hit effects it leans on: knockback, pull, bleeding, poisoned, slowed, vulnerable, confused).
 
 3. Run `bun dimension-generator/build-diffusion-bundles.ts dimension-generator/dimension-N-spec.json`. Then **stop and tell the user** to send the bundles through the diffusion model and return with the spritesheets.
 
