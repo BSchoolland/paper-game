@@ -1,12 +1,10 @@
-import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, StatusEffectType, TeamId } from "../core/types.js";
+import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
 import { distance } from "../core/vec2.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { processEffects } from "../encounter/effects.js";
-import { getEffectiveDistance } from "./status-modifiers.js";
-
-const DOT_TYPES: readonly StatusEffectType[] = ["burning", "bleeding", "poisoned"];
+import { getEffectiveDistance, getEffectiveRegen } from "./status-modifiers.js";
 
 function checkWinner(state: GameState): TeamId | null {
   let hasRed = false;
@@ -109,7 +107,7 @@ function resolveAttack(
 
   let hits: readonly AttackHit[] = [];
   if (targets.length > 0) {
-    const result = applyDamage(newState, targets, ability.damage, entityId);
+    const result = applyDamage(newState, targets, ability.damage);
     newState = result.state;
     hits = result.hits;
   }
@@ -202,26 +200,11 @@ function tickStatusEffects(
     const statuses = entity.statusEffects;
     if (!statuses || statuses.length === 0) continue;
 
-    let updated = entity;
-
-    for (const s of statuses) {
-      if (DOT_TYPES.includes(s.type)) {
-        const dotDamage = s.value;
-        const newHp = updated.hp - dotDamage;
-        const killed = newHp <= 0;
-        updated = killed
-          ? { ...updated, hp: 0, dead: true }
-          : { ...updated, hp: newHp };
-        events.push({ type: "dotTick", entityId: id, status: s.type, damage: dotDamage });
-      }
-    }
-
     const remaining = statuses
       .map(s => ({ ...s, duration: s.duration - 1 }))
       .filter(s => s.duration > 0);
 
-    updated = { ...updated, statusEffects: remaining.length > 0 ? remaining : undefined };
-    entities.set(id, updated);
+    entities.set(id, { ...entity, statusEffects: remaining.length > 0 ? remaining : undefined });
   }
 
   return { entities, events };
@@ -236,7 +219,7 @@ function resolveEndTurn(state: GameState): ActionResult {
     turnNumber: state.turnNumber + 1,
   };
 
-  const startResult = resolveTurnStart(endState, nextTeam);
+  const startResult = startTurn(endState, nextTeam);
 
   return {
     state: {
@@ -247,7 +230,13 @@ function resolveEndTurn(state: GameState): ActionResult {
   };
 }
 
-function resolveTurnStart(state: GameState, team: TeamId): ActionResult {
+/**
+ * The single canonical "a turn begins for `team`" transition: regenerate that team's banked
+ * energy (after status penalties, clamped to the cap), clear their one-turn barrier, and tick
+ * down their status durations. Called both when a turn flips (`resolveEndTurn`) and when a
+ * fresh game starts (`createGameState`), so turn 1 behaves exactly like every other turn.
+ */
+export function startTurn(state: GameState, team: TeamId): ActionResult {
   const entities = new Map<string, Entity>();
   for (const [id, entity] of state.entities) {
     if (entity.dead) {
@@ -255,7 +244,11 @@ function resolveTurnStart(state: GameState, team: TeamId): ActionResult {
     } else if (entity.teamId === team) {
       entities.set(id, {
         ...entity,
-        energy: { ...entity.energy, red: entity.energy.maxRed, blue: entity.energy.maxBlue },
+        energy: {
+          ...entity.energy,
+          red: Math.min(entity.energy.red + getEffectiveRegen(entity, "red", entity.energy.regenRed), entity.energy.maxRed),
+          blue: Math.min(entity.energy.blue + getEffectiveRegen(entity, "blue", entity.energy.regenBlue), entity.energy.maxBlue),
+        },
         barrier: 0,
       });
     } else {
@@ -269,6 +262,32 @@ function resolveTurnStart(state: GameState, team: TeamId): ActionResult {
     state: { ...state, entities: tick.entities },
     events: [{ type: "turnStart", team }, ...tick.events],
   };
+}
+
+/**
+ * The one way to spell a fresh game state. Sets the initial scalar fields and immediately runs
+ * the starting team's turn-start, so callers only supply the board (entities, grid, map).
+ */
+export function createGameState(init: {
+  entities: GameState["entities"];
+  grid: GameState["grid"];
+  mapDefinition: GameState["mapDefinition"];
+  startingTeam?: TeamId;
+}): GameState {
+  const team = init.startingTeam ?? "red";
+  return startTurn(
+    {
+      entities: init.entities,
+      grid: init.grid,
+      mapDefinition: init.mapDefinition,
+      activeTeam: team,
+      turnNumber: 1,
+      winner: null,
+      nextSpawnId: 0,
+      actionCount: 0,
+    },
+    team,
+  ).state;
 }
 
 export function resolveAction(

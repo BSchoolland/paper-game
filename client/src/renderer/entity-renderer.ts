@@ -1,6 +1,7 @@
 import { Container, Graphics, Sprite, Text } from "pixi.js";
 import type { Entity, SpriteSet, StatusEffect } from "shared";
 import type { AnimSet } from "shared";
+import { STATUS_META } from "shared";
 import {
   type AnimState,
   getPlayerTexture,
@@ -47,14 +48,6 @@ const DEATH_DURATION = 0.5;
 const STATUS_DOT_RADIUS = 2.5;
 const STATUS_DOT_SPACING = 7;
 const STATUS_DOT_Y = HP_BAR_Y + HP_BAR_H + 5;
-const STATUS_COLORS: Record<string, number> = {
-  slowed: 0x5b9bd5,
-  weak: 0x9b59b6,
-  vulnerable: 0xe67e22,
-  burning: 0xe74c3c,
-  bleeding: 0xc0392b,
-  poisoned: 0x2ecc71,
-};
 const COMBAT_STATES: AnimState[] = ["idle", "attack", "hit", "move"];
 
 export class EntityVisual {
@@ -435,7 +428,7 @@ export class EntityVisual {
     const totalW = statuses.length * STATUS_DOT_SPACING;
     const startX = -totalW / 2 + STATUS_DOT_SPACING / 2;
     for (let i = 0; i < statuses.length; i++) {
-      const color = STATUS_COLORS[statuses[i]!.type] ?? 0xffffff;
+      const color = STATUS_META[statuses[i]!.type]?.color ?? 0xffffff;
       this.statusDots.circle(startX + i * STATUS_DOT_SPACING, STATUS_DOT_Y, STATUS_DOT_RADIUS);
       this.statusDots.fill({ color });
     }

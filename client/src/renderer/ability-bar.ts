@@ -1,5 +1,5 @@
 import type { AbilityDefinition, Entity, Vec2 } from "shared";
-import { clampToMovementRange, distance, canAffordAbility, getAbilityCost } from "shared";
+import { clampToMovementRange, distance, canAffordAbility, getAbilityCost, getEffectiveRegen } from "shared";
 import type { ItemDefinition } from "shared/src/core/items.js";
 import type { ClientState } from "../state/client-state.js";
 import { itemSpriteUrl } from "./item-sprites.js";
@@ -28,6 +28,7 @@ export class AbilityBar {
   private cardWidth = 0;
   private ready = false;
   private endTurnBtn: HTMLButtonElement;
+  private energyEl: HTMLDivElement;
   private variableCostEl: HTMLElement | null = null;
   private variableCostAbility: AbilityDefinition | null = null;
 
@@ -68,6 +69,26 @@ export class AbilityBar {
       pointer-events: auto;
     `;
     document.body.appendChild(this.container);
+
+    this.energyEl = document.createElement("div");
+    this.energyEl.id = "energy-display";
+    this.energyEl.style.cssText = `
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      z-index: 100;
+      display: none;
+      pointer-events: none;
+      font-family: monospace;
+      font-size: 24px;
+      font-weight: bold;
+      padding: 10px 18px;
+      background: rgba(40, 30, 20, 0.75);
+      border: 2px solid #6b5b4a;
+      border-radius: 6px;
+    `;
+    document.body.appendChild(this.energyEl);
+
     this.load();
   }
 
@@ -94,6 +115,7 @@ export class AbilityBar {
   show() {
     this.container.style.display = "block";
     this.endTurnBtn.style.display = "block";
+    this.energyEl.style.display = "block";
     this.unsubscribe = this.clientState.subscribe(() => this.render());
     this.render();
   }
@@ -101,6 +123,7 @@ export class AbilityBar {
   hide() {
     this.container.style.display = "none";
     this.endTurnBtn.style.display = "none";
+    this.energyEl.style.display = "none";
     if (this.unsubscribe) {
       this.unsubscribe();
       this.unsubscribe = null;
@@ -134,14 +157,32 @@ export class AbilityBar {
     const state = this.clientState.getState();
     if (!state) {
       this.container.innerHTML = "";
+      this.energyEl.innerHTML = "";
       return;
     }
 
     const entity = [...state.entities.values()].find(e => e.teamId === "red");
     if (!entity) {
       this.container.innerHTML = "";
+      this.energyEl.innerHTML = "";
       return;
     }
+
+    const regenTag = (effective: number, base: number) => {
+      const color = effective < base ? "#d9534f" : "#8a7a68";
+      return `<span style="color:${color}"> (+${effective})</span>`;
+    };
+    const redRegen = getEffectiveRegen(entity, "red", entity.energy.regenRed);
+    const blueRegen = getEffectiveRegen(entity, "blue", entity.energy.regenBlue);
+
+    this.energyEl.innerHTML =
+      `<span style="color:#e07a5a">&#9679; ${entity.energy.red}</span>` +
+      `<span style="color:#8a7a68"> / ${entity.energy.maxRed}</span>` +
+      regenTag(redRegen, entity.energy.regenRed) +
+      `<span style="color:#8a7a68; margin:0 10px">&nbsp;</span>` +
+      `<span style="color:#5a9be0">&#9679; ${entity.energy.blue}</span>` +
+      `<span style="color:#8a7a68"> / ${entity.energy.maxBlue}</span>` +
+      regenTag(blueRegen, entity.energy.regenBlue);
 
     this.container.innerHTML = "";
     this.variableCostEl = null;

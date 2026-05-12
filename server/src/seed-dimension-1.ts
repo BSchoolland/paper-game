@@ -19,7 +19,7 @@ function makeMove(distance: number): MoveAbility {
 
 // =============================================================================
 // ENEMIES — The Shallows
-// Mechanical identity: pulls, poison, slow, bleed. Less knockback than dim 0.
+// Mechanical identity: pulls, slow. Less knockback than dim 0.
 // =============================================================================
 
 // --- Fodder & Standard ---
@@ -31,7 +31,7 @@ const MUD_CRAB_SNIP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 40, halfAngle: Math.PI / 4 },
   damage: 8,
-  onHit: [{ type: "applyStatus", status: "bleeding", duration: 3, value: 4 }],
+  knockback: 0,
   visual: { color: 0xa07050, trailEffect: "slash", screenShake: 0.15 },
 };
 
@@ -42,7 +42,7 @@ const DART_FISH_VENOM_DART: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 220 },
   damage: 8,
-  onHit: [{ type: "applyStatus", status: "poisoned", duration: 3, value: 3 }],
+  knockback: 0,
   visual: { color: 0x6ee5b0, trailEffect: "projectile" },
 };
 
@@ -53,6 +53,7 @@ const TIDE_SKIMMER_DRIFT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 65, halfAngle: Math.PI / 2 },
   damage: 6,
+  knockback: 0,
   onHit: [{ type: "applyStatus", status: "slowed", duration: 2, value: 0.4 }],
   visual: { color: 0x88c4d8, trailEffect: "splash", screenShake: 0.15 },
 };
@@ -64,6 +65,7 @@ const SNAPPING_CRAB_GRIP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 110, width: 22 },
   damage: 22,
+  knockback: 0,
   onHit: [{ type: "pull", distance: 50 }],
   visual: { color: 0xb87333, trailEffect: "thrust", screenShake: 0.3 },
 };
@@ -75,6 +77,7 @@ const SNAPPING_CRAB_SNAP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 3 },
   damage: 14,
+  knockback: 0,
   visual: { color: 0xb87333, trailEffect: "slash", screenShake: 0.2 },
 };
 
@@ -87,7 +90,7 @@ const SPITTING_URCHIN_SPINE_SHOT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 240 },
   damage: 14,
-  onHit: [{ type: "applyStatus", status: "poisoned", duration: 3, value: 5 }],
+  knockback: 0,
   visual: { color: 0x6ee5b0, trailEffect: "projectile", screenShake: 0.15 },
 };
 
@@ -98,6 +101,7 @@ const SPITTING_URCHIN_SPINE_BURST: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 70, range: 0 },
   damage: 28,
+  knockback: 0,
   visual: { color: 0x6ee5b0, trailEffect: "explosion", screenShake: 0.4 },
 };
 
@@ -108,7 +112,7 @@ const TIDAL_LURKER_CORAL_THRUST: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 105, width: 18 },
   damage: 18,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.4 }],
+  knockback: 0,
   visual: { color: 0xc06848, trailEffect: "thrust", screenShake: 0.25 },
 };
 
@@ -119,7 +123,7 @@ const TIDAL_LURKER_TAIL_WHIP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 4 },
   damage: 10,
-  onHit: [{ type: "knockback", distance: 45 }],
+  knockback: 45,
   visual: { color: 0x809060, trailEffect: "slash", screenShake: 0.2 },
 };
 
@@ -130,7 +134,7 @@ const JELLYBELL_VENOM_BOLT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 230 },
   damage: 15,
-  onHit: [{ type: "applyStatus", status: "poisoned", duration: 3, value: 4 }],
+  knockback: 0,
   visual: { color: 0x35e3a9, trailEffect: "projectile", screenShake: 0.15 },
 };
 
@@ -141,6 +145,7 @@ const JELLYBELL_TENTACLE_LASH: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 90, width: 25 },
   damage: 12,
+  knockback: 0,
   onHit: [{ type: "applyStatus", status: "slowed", duration: 2, value: 0.4 }],
   visual: { color: 0x35e3a9, trailEffect: "splash", screenShake: 0.2 },
 };
@@ -152,7 +157,7 @@ const MANTIS_SHRIMP_SMASH: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Rectangle, length: 80, width: 18 },
   damage: 55,
-  onHit: [{ type: "knockback", distance: 30 }],
+  knockback: 30,
   visual: { color: 0xd45c2e, trailEffect: "explosion", screenShake: 0.7 },
 };
 
@@ -163,6 +168,7 @@ const MANTIS_SHRIMP_FLURRY: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 3 },
   damage: 22,
+  knockback: 0,
   visual: { color: 0xd45c2e, trailEffect: "slash", screenShake: 0.3 },
 };
 
@@ -173,6 +179,7 @@ const ABYSSAL_ANGLER_LURE_DRAG: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 280 },
   damage: 4,
+  knockback: 0,
   onHit: [{ type: "pull", distance: 90 }],
   visual: { color: 0x6ee5b0, trailEffect: "projectile", screenShake: 0.2 },
 };
@@ -184,6 +191,7 @@ const ABYSSAL_ANGLER_BITE: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 4 },
   damage: 45,
+  knockback: 0,
   visual: { color: 0x404040, trailEffect: "slash", screenShake: 0.6 },
 };
 
@@ -194,6 +202,7 @@ const REEF_GUARDIAN_TURRET_SLAM: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 75, halfAngle: Math.PI / 2 },
   damage: 30,
+  knockback: 0,
   onHit: [{ type: "applyStatus", status: "slowed", duration: 2, value: 0.4 }],
   visual: { color: 0x8b7355, trailEffect: "slash", screenShake: 0.5 },
 };
@@ -205,7 +214,7 @@ const REEF_GUARDIAN_SHELL_SURGE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 80, range: 0 },
   damage: 15,
-  onHit: [{ type: "knockback", distance: 50 }],
+  knockback: 50,
   visual: { color: 0x8b7355, trailEffect: "explosion", screenShake: 0.6 },
 };
 
@@ -216,7 +225,7 @@ const REEF_GUARDIAN_CLAW_SWEEP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 65, halfAngle: (2 * Math.PI) / 3 },
   damage: 18,
-  onHit: [{ type: "knockback", distance: 35 }],
+  knockback: 35,
   visual: { color: 0x8b7355, trailEffect: "slash", screenShake: 0.4 },
 };
 
@@ -227,10 +236,8 @@ const SIREN_DRIFTER_TENTACLE_RAIN: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Circle, radius: 70, range: 180 },
   damage: 18,
-  onHit: [
-    { type: "applyStatus", status: "poisoned", duration: 3, value: 4 },
-    { type: "applyStatus", status: "slowed", duration: 2, value: 0.3 },
-  ],
+  knockback: 0,
+  onHit: [{ type: "applyStatus", status: "slowed", duration: 2, value: 0.3 }],
   visual: { color: 0xb088e0, trailEffect: "splash", screenShake: 0.45 },
 };
 
@@ -241,6 +248,7 @@ const SIREN_DRIFTER_DRAG_TENDRIL: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 220 },
   damage: 2,
+  knockback: 0,
   onHit: [{ type: "pull", distance: 75 }],
   visual: { color: 0xb088e0, trailEffect: "projectile", screenShake: 0.15 },
 };
@@ -252,10 +260,7 @@ const BRACKISH_STALKER_CONSTRICT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 100, width: 22 },
   damage: 25,
-  onHit: [
-    { type: "applyStatus", status: "bleeding", duration: 3, value: 4 },
-    { type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 },
-  ],
+  knockback: 0,
   visual: { color: 0x4488cc, trailEffect: "thrust", screenShake: 0.35 },
 };
 
@@ -266,6 +271,7 @@ const BRACKISH_STALKER_STRIKE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 50, halfAngle: Math.PI / 3 },
   damage: 12,
+  knockback: 0,
   visual: { color: 0x4488cc, trailEffect: "slash", screenShake: 0.2 },
 };
 
@@ -278,6 +284,7 @@ const TIDECALLER_TIDAL_WAVE: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Circle, radius: 90, range: 180 },
   damage: 35,
+  knockback: 0,
   onHit: [{ type: "applyStatus", status: "slowed", duration: 2, value: 0.4 }],
   visual: { color: 0x35e3a9, trailEffect: "splash", screenShake: 0.7 },
 };
@@ -289,7 +296,7 @@ const TIDECALLER_CORAL_BOLT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 250 },
   damage: 20,
-  onHit: [{ type: "applyStatus", status: "poisoned", duration: 3, value: 4 }],
+  knockback: 0,
   visual: { color: 0xc06848, trailEffect: "projectile", screenShake: 0.25 },
 };
 
@@ -300,7 +307,7 @@ const IRON_CLAW_CRUSH: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Sector, radius: 85, halfAngle: Math.PI / 3 },
   damage: 65,
-  onHit: [{ type: "knockback", distance: 50 }],
+  knockback: 50,
   visual: { color: 0x7a6040, trailEffect: "explosion", screenShake: 0.9 },
 };
 
@@ -311,6 +318,7 @@ const IRON_CLAW_CAGE_DRAG: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 130, width: 30 },
   damage: 12,
+  knockback: 0,
   onHit: [{ type: "pull", distance: 80 }],
   visual: { color: 0x8b7355, trailEffect: "thrust", screenShake: 0.4 },
 };
@@ -322,7 +330,7 @@ const IRON_CLAW_FORTRESS_SURGE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 90, range: 0 },
   damage: 15,
-  onHit: [{ type: "knockback", distance: 60 }],
+  knockback: 60,
   visual: { color: 0x8b7355, trailEffect: "explosion", screenShake: 0.6 },
 };
 
@@ -333,7 +341,7 @@ const BLOOM_SPORE_CLOUD: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 85, range: 180 },
   damage: 10,
-  onHit: [{ type: "applyStatus", status: "poisoned", duration: 3, value: 5 }],
+  knockback: 0,
   visual: { color: 0xb088e0, trailEffect: "splash", screenShake: 0.35 },
 };
 
@@ -344,6 +352,7 @@ const BLOOM_TENDRIL_FIELD: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 85, range: 150 },
   damage: 8,
+  knockback: 0,
   onHit: [{ type: "applyStatus", status: "slowed", duration: 2, value: 0.5 }],
   visual: { color: 0x35e3a9, trailEffect: "splash", screenShake: 0.3 },
 };
@@ -355,6 +364,7 @@ const BLOOM_CONSUME: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Point, range: 250 },
   damage: 25,
+  knockback: 0,
   onHit: [{ type: "pull", distance: 100 }],
   visual: { color: 0xb088e0, trailEffect: "projectile", screenShake: 0.45 },
 };
@@ -366,7 +376,7 @@ const RIVERJAW_DEATH_ROLL: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Rectangle, length: 110, width: 28 },
   damage: 70,
-  onHit: [{ type: "applyStatus", status: "bleeding", duration: 4, value: 5 }],
+  knockback: 0,
   visual: { color: 0x556844, trailEffect: "slash", screenShake: 0.9 },
 };
 
@@ -377,7 +387,7 @@ const RIVERJAW_TAIL_SWEEP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 2 },
   damage: 30,
-  onHit: [{ type: "knockback", distance: 50 }],
+  knockback: 50,
   visual: { color: 0x556844, trailEffect: "slash", screenShake: 0.5 },
 };
 
@@ -642,7 +652,7 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 75, halfAngle: Math.PI / 3 },
       damage: 22,
-      onHit: [{ type: "applyStatus", status: "bleeding", duration: 3, value: 3 }],
+      knockback: 0,
       visual: { color: 0xe0a090, trailEffect: "slash", screenShake: 0.3 },
     } satisfies AttackAbility, {
       id: "coral-jab",
@@ -651,6 +661,8 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 75, width: 12 },
       damage: 10,
+      knockback: 0,
+      onHit: [{ type: "applyStatus", status: "suppressed", duration: 2, value: 1 }],
       visual: { color: 0xe0a090, trailEffect: "thrust" },
     } satisfies AttackAbility],
     animSet: "sword",
@@ -672,6 +684,7 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Rectangle, length: 130, width: 18 },
       damage: 25,
+      knockback: 0,
       onHit: [{ type: "pull", distance: 50 }],
       visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.3 },
     } satisfies AttackAbility, {
@@ -681,6 +694,8 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 4 },
       damage: 12,
+      knockback: 0,
+      onHit: [{ type: "applyStatus", status: "winded", duration: 2, value: 1 }],
       visual: { color: 0xa89070, trailEffect: "slash", screenShake: 0.2 },
     } satisfies AttackAbility],
     animSet: "spear",
@@ -702,7 +717,7 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 2 },
       damage: 22,
-      onHit: [{ type: "applyStatus", status: "poisoned", duration: 3, value: 4 }],
+      knockback: 0,
       visual: { color: 0x6ee5b0, trailEffect: "slash", screenShake: 0.4 },
     } satisfies AttackAbility, {
       id: "urchin-spine-slam",
@@ -711,6 +726,7 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Circle, radius: 45, range: 0 },
       damage: 28,
+      knockback: 0,
       visual: { color: 0x6ee5b0, trailEffect: "explosion", screenShake: 0.45 },
     } satisfies AttackAbility, {
       id: "urchin-chain-whip",
@@ -719,6 +735,7 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 90, width: 10 },
       damage: 10,
+      knockback: 0,
       onHit: [{ type: "applyStatus", status: "slowed", duration: 2, value: 0.3 }],
       visual: { color: 0x808080, trailEffect: "thrust", screenShake: 0.2 },
     } satisfies AttackAbility],
@@ -741,6 +758,7 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 4 },
       damage: 22,
+      knockback: 0,
       onHit: [{ type: "pull", distance: 50 }],
       visual: { color: 0xb87333, trailEffect: "slash", screenShake: 0.35 },
     } satisfies AttackAbility, {
@@ -750,7 +768,7 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 50, halfAngle: Math.PI / 4 },
       damage: 8,
-      onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.4 }],
+      knockback: 0,
       visual: { color: 0xb87333, trailEffect: "slash", screenShake: 0.2 },
     } satisfies AttackAbility, {
       id: "gauntlet-snap-snap",
@@ -759,6 +777,7 @@ const DIMENSION_1_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 60, width: 14 },
       damage: 14,
+      knockback: 0,
       visual: { color: 0xb87333, trailEffect: "thrust", screenShake: 0.2 },
     } satisfies AttackAbility],
     animSet: "sword",

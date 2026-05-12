@@ -29,13 +29,7 @@ export type CombatShapeDefinition =
   | { kind: ShapeKind.Circle; radius: number; range: number }
   | { kind: ShapeKind.Point; range: number };
 
-export type StatusEffectType =
-  | "slowed"
-  | "weak"
-  | "vulnerable"
-  | "burning"
-  | "bleeding"
-  | "poisoned";
+export type StatusEffectType = "slowed" | "winded" | "suppressed";
 
 export interface StatusEffect {
   readonly type: StatusEffectType;
@@ -44,7 +38,6 @@ export interface StatusEffect {
 }
 
 export type WeaponEffect =
-  | { type: "knockback"; distance: number }
   | { type: "pull"; distance: number }
   | { type: "applyStatus"; status: StatusEffectType; duration: number; value: number };
 
@@ -68,6 +61,10 @@ export interface EnergyCost {
 export interface EnergyPool {
   readonly red: number;
   readonly blue: number;
+  /** Amount added to each pool at the start of the owner's turn (clamped to the cap). */
+  readonly regenRed: number;
+  readonly regenBlue: number;
+  /** Cap each pool can bank up to. */
   readonly maxRed: number;
   readonly maxBlue: number;
 }
@@ -83,6 +80,8 @@ export interface AttackAbility extends AbilityBase {
   readonly kind: "attack";
   readonly shape: CombatShapeDefinition;
   readonly damage: number;
+  /** Distance the target is pushed away from the attacker on hit. Set to 0 for no knockback. */
+  readonly knockback: number;
   readonly ignoreCoverRange?: number;
   readonly onHit?: readonly WeaponEffect[];
   readonly visual?: AttackVisual;
@@ -176,8 +175,7 @@ export type GameEvent =
   | { type: "spawn"; entityId: EntityId; position: Vec2; templateKey: string }
   | { type: "knockback"; entityId: EntityId; from: Vec2; to: Vec2 }
   | { type: "pull"; entityId: EntityId; from: Vec2; to: Vec2 }
-  | { type: "statusApplied"; entityId: EntityId; status: StatusEffect }
-  | { type: "dotTick"; entityId: EntityId; status: StatusEffectType; damage: number };
+  | { type: "statusApplied"; entityId: EntityId; status: StatusEffect };
 
 export interface AttackHit {
   readonly targetId: EntityId;

@@ -205,11 +205,6 @@ export function getEnemyTemplate(
   return row ? (JSON.parse(row.template_json) as UnitTemplate) : null;
 }
 
-export function getDimensionCount(): number {
-  const row = db.prepare("SELECT COUNT(*) as count FROM dimensions").get() as { count: number };
-  return row.count;
-}
-
 // --- Item Queries ---
 
 const insertItemStmt = db.prepare(

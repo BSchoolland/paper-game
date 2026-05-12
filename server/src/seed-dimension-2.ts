@@ -19,7 +19,7 @@ function makeMove(distance: number): MoveAbility {
 
 // =============================================================================
 // ENEMIES — The Gloom Hollows
-// Mechanical identity: vulnerable, knockback from crystal bursts.
+// Mechanical identity: knockback from crystal bursts.
 // =============================================================================
 
 // --- Fodder ---
@@ -31,7 +31,7 @@ const CAVE_MITE_CRYSTAL_BITE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 45, halfAngle: Math.PI / 4 },
   damage: 7,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
+  knockback: 0,
   visual: { color: 0xc060b0, trailEffect: "slash", screenShake: 0.15 },
 };
 
@@ -42,7 +42,7 @@ const SPORE_PUFFER_SPORE_BURST: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 200 },
   damage: 6,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
+  knockback: 0,
   visual: { color: 0x9b5de5, trailEffect: "projectile" },
 };
 
@@ -53,7 +53,7 @@ const GRUB_CRAWLER_ACID_BITE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 50, halfAngle: Math.PI / 3 },
   damage: 9,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
+  knockback: 0,
   visual: { color: 0x6edeb8, trailEffect: "slash", screenShake: 0.15 },
 };
 
@@ -64,6 +64,7 @@ const CRYSTAL_SCARAB_SHARD_SLAM: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 3 },
   damage: 16,
+  knockback: 0,
   visual: { color: 0xe760c9, trailEffect: "slash", screenShake: 0.25 },
 };
 
@@ -74,7 +75,7 @@ const CRYSTAL_SCARAB_SHELL_CRACK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 55, range: 0 },
   damage: 10,
-  onHit: [{ type: "knockback", distance: 35 }],
+  knockback: 35,
   visual: { color: 0xe760c9, trailEffect: "explosion", screenShake: 0.3 },
 };
 
@@ -87,7 +88,7 @@ const GROTTO_SALAMANDER_VENOM_SNAP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 95, width: 20 },
   damage: 16,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.35 }],
+  knockback: 0,
   visual: { color: 0xc060b0, trailEffect: "thrust", screenShake: 0.25 },
 };
 
@@ -98,7 +99,7 @@ const GROTTO_SALAMANDER_DISORIENTING_LICK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 65, halfAngle: Math.PI / 3 },
   damage: 10,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
+  knockback: 0,
   visual: { color: 0x9b5de5, trailEffect: "splash", screenShake: 0.2 },
 };
 
@@ -109,7 +110,7 @@ const PRISM_MOTH_PRISMATIC_DUST: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 60, range: 170 },
   damage: 12,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 3, value: 0.4 }],
+  knockback: 0,
   visual: { color: 0xe760c9, trailEffect: "splash", screenShake: 0.2 },
 };
 
@@ -120,6 +121,7 @@ const PRISM_MOTH_WING_SLASH: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 2 },
   damage: 8,
+  knockback: 0,
   visual: { color: 0x6edeb8, trailEffect: "slash", screenShake: 0.15 },
 };
 
@@ -130,7 +132,7 @@ const FUNGAL_SHAMBLER_SPORE_SLAM: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 2 },
   damage: 16,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
+  knockback: 0,
   visual: { color: 0x6edeb8, trailEffect: "slash", screenShake: 0.35 },
 };
 
@@ -141,7 +143,7 @@ const FUNGAL_SHAMBLER_CAP_BURST: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 65, range: 0 },
   damage: 12,
-  onHit: [{ type: "knockback", distance: 40 }],
+  knockback: 40,
   visual: { color: 0x9b5de5, trailEffect: "explosion", screenShake: 0.4 },
 };
 
@@ -152,6 +154,7 @@ const GEODE_CRAB_CRYSTAL_CRUSH: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Sector, radius: 65, halfAngle: Math.PI / 3 },
   damage: 40,
+  knockback: 0,
   visual: { color: 0xe760c9, trailEffect: "explosion", screenShake: 0.6 },
 };
 
@@ -162,7 +165,7 @@ const GEODE_CRAB_SHARD_SPRAY: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 75, halfAngle: Math.PI / 2 },
   damage: 18,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
+  knockback: 0,
   visual: { color: 0xc060b0, trailEffect: "slash", screenShake: 0.3 },
 };
 
@@ -175,7 +178,7 @@ const HOLLOW_HIPPO_CRYSTAL_CHARGE: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Rectangle, length: 120, width: 35 },
   damage: 35,
-  onHit: [{ type: "knockback", distance: 60 }],
+  knockback: 60,
   visual: { color: 0xc060b0, trailEffect: "thrust", screenShake: 0.7 },
 };
 
@@ -186,7 +189,7 @@ const HOLLOW_HIPPO_PRISM_STOMP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 75, range: 0 },
   damage: 20,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.4 }],
+  knockback: 0,
   visual: { color: 0xe760c9, trailEffect: "explosion", screenShake: 0.5 },
 };
 
@@ -197,9 +200,7 @@ const CRYSTAL_WEAVER_RESONANCE_FIELD: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Circle, radius: 70, range: 170 },
   damage: 15,
-  onHit: [
-    { type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 },
-  ],
+  knockback: 0,
   visual: { color: 0x9b5de5, trailEffect: "splash", screenShake: 0.4 },
 };
 
@@ -210,6 +211,7 @@ const CRYSTAL_WEAVER_FANG_STRIKE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 80, width: 16 },
   damage: 18,
+  knockback: 0,
   visual: { color: 0x9b5de5, trailEffect: "thrust", screenShake: 0.2 },
 };
 
@@ -220,7 +222,7 @@ const MYCELIUM_HORROR_TENDRIL_LASH: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 110, width: 25 },
   damage: 22,
-  onHit: [{ type: "knockback", distance: 45 }],
+  knockback: 45,
   visual: { color: 0x6edeb8, trailEffect: "thrust", screenShake: 0.35 },
 };
 
@@ -231,7 +233,7 @@ const MYCELIUM_HORROR_MIND_SPORE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 80, range: 160 },
   damage: 10,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 3, value: 0.4 }],
+  knockback: 0,
   visual: { color: 0x9b5de5, trailEffect: "splash", screenShake: 0.3 },
 };
 
@@ -242,10 +244,7 @@ const SHARD_SERPENT_CRYSTAL_FANG: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 90, width: 18 },
   damage: 22,
-  onHit: [
-    { type: "applyStatus", status: "bleeding", duration: 3, value: 4 },
-    { type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 },
-  ],
+  knockback: 0,
   visual: { color: 0x6edeb8, trailEffect: "thrust", screenShake: 0.3 },
 };
 
@@ -256,6 +255,7 @@ const SHARD_SERPENT_TAIL_SWEEP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 3 },
   damage: 14,
+  knockback: 0,
   visual: { color: 0x6edeb8, trailEffect: "slash", screenShake: 0.2 },
 };
 
@@ -268,9 +268,7 @@ const GEMWARDEN_PRISM_STORM: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Circle, radius: 85, range: 180 },
   damage: 30,
-  onHit: [
-    { type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 },
-  ],
+  knockback: 0,
   visual: { color: 0xe760c9, trailEffect: "splash", screenShake: 0.7 },
 };
 
@@ -281,7 +279,7 @@ const GEMWARDEN_CRYSTAL_BOLT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 250 },
   damage: 22,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.4 }],
+  knockback: 0,
   visual: { color: 0x9b5de5, trailEffect: "projectile", screenShake: 0.25 },
 };
 
@@ -292,7 +290,7 @@ const GROTTO_TITAN_GEODE_SLAM: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 3 },
   damage: 60,
-  onHit: [{ type: "knockback", distance: 55 }],
+  knockback: 55,
   visual: { color: 0x9b5de5, trailEffect: "explosion", screenShake: 0.9 },
 };
 
@@ -303,7 +301,7 @@ const GROTTO_TITAN_CRYSTAL_BURST: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 85, range: 0 },
   damage: 18,
-  onHit: [{ type: "knockback", distance: 50 }],
+  knockback: 50,
   visual: { color: 0xe760c9, trailEffect: "explosion", screenShake: 0.6 },
 };
 
@@ -314,7 +312,7 @@ const GROTTO_TITAN_PRISM_HORN: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 110, width: 30 },
   damage: 25,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.4 }],
+  knockback: 0,
   visual: { color: 0xc060b0, trailEffect: "thrust", screenShake: 0.5 },
 };
 
@@ -325,7 +323,7 @@ const THE_MYCELIUM_SPORE_NOVA: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 90, range: 170 },
   damage: 12,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 3, value: 0.4 }],
+  knockback: 0,
   visual: { color: 0x9b5de5, trailEffect: "splash", screenShake: 0.4 },
 };
 
@@ -336,7 +334,7 @@ const THE_MYCELIUM_TENDRIL_WHIP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 80, range: 0 },
   damage: 15,
-  onHit: [{ type: "knockback", distance: 55 }],
+  knockback: 55,
   visual: { color: 0x6edeb8, trailEffect: "explosion", screenShake: 0.5 },
 };
 
@@ -347,6 +345,7 @@ const THE_MYCELIUM_CONSUME: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Point, range: 240 },
   damage: 28,
+  knockback: 0,
   onHit: [{ type: "pull", distance: 90 }],
   visual: { color: 0xe760c9, trailEffect: "projectile", screenShake: 0.45 },
 };
@@ -358,7 +357,7 @@ const CRYSTALBACK_REX_CRYSTAL_CHARGE: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Rectangle, length: 120, width: 30 },
   damage: 65,
-  onHit: [{ type: "applyStatus", status: "bleeding", duration: 4, value: 5 }],
+  knockback: 0,
   visual: { color: 0xc060b0, trailEffect: "thrust", screenShake: 0.9 },
 };
 
@@ -369,7 +368,7 @@ const CRYSTALBACK_REX_SHARD_ROAR: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 85, halfAngle: Math.PI / 2 },
   damage: 28,
-  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.4 }],
+  knockback: 0,
   visual: { color: 0xe760c9, trailEffect: "slash", screenShake: 0.5 },
 };
 
@@ -639,7 +638,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 75, halfAngle: Math.PI / 3 },
       damage: 20,
-      onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
+      knockback: 0,
       visual: { color: 0xe760c9, trailEffect: "slash", screenShake: 0.3 },
     } satisfies AttackAbility, {
       id: "crystal-jab",
@@ -648,6 +647,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 75, width: 12 },
       damage: 12,
+      knockback: 0,
       visual: { color: 0xe760c9, trailEffect: "thrust" },
     } satisfies AttackAbility],
     animSet: "sword",
@@ -669,7 +669,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Rectangle, length: 125, width: 18 },
       damage: 24,
-      onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
+      knockback: 0,
       visual: { color: 0x6edeb8, trailEffect: "thrust", screenShake: 0.3 },
     } satisfies AttackAbility, {
       id: "stalactite-sweep",
@@ -678,6 +678,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 4 },
       damage: 10,
+      knockback: 0,
       visual: { color: 0x6edeb8, trailEffect: "slash", screenShake: 0.2 },
     } satisfies AttackAbility],
     animSet: "spear",
@@ -699,7 +700,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 2 },
       damage: 24,
-      onHit: [{ type: "applyStatus", status: "vulnerable", duration: 3, value: 0.4 }],
+      knockback: 0,
       visual: { color: 0x9b5de5, trailEffect: "slash", screenShake: 0.4 },
     } satisfies AttackAbility, {
       id: "spore-cloud-swing",
@@ -708,7 +709,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Circle, radius: 55, range: 0 },
       damage: 14,
-      onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
+      knockback: 0,
       visual: { color: 0x9b5de5, trailEffect: "explosion", screenShake: 0.35 },
     } satisfies AttackAbility, {
       id: "fungal-bash",
@@ -717,6 +718,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 60, width: 14 },
       damage: 12,
+      knockback: 0,
       visual: { color: 0x9b5de5, trailEffect: "thrust", screenShake: 0.2 },
     } satisfies AttackAbility],
     animSet: "sword",
@@ -738,7 +740,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 4 },
       damage: 28,
-      onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.4 }],
+      knockback: 0,
       visual: { color: 0x9b5de5, trailEffect: "slash", screenShake: 0.4 },
     } satisfies AttackAbility, {
       id: "geode-flurry",
@@ -747,7 +749,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 50, halfAngle: Math.PI / 3 },
       damage: 14,
-      onHit: [{ type: "knockback", distance: 25 }],
+      knockback: 25,
       visual: { color: 0xe760c9, trailEffect: "slash", screenShake: 0.25 },
     } satisfies AttackAbility, {
       id: "geode-cross",
@@ -756,6 +758,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 55, width: 14 },
       damage: 12,
+      knockback: 0,
       visual: { color: 0x9b5de5, trailEffect: "thrust", screenShake: 0.2 },
     } satisfies AttackAbility],
     animSet: "sword",

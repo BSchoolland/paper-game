@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import type { AimDirection, AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, TrailEffect, Vec2 } from "shared";
-import { ShapeKind, normalize, length as vecLength, raycast } from "shared";
+import { ShapeKind, normalize, length as vecLength, raycast, STATUS_META } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark, drawRoughCircle } from "./sketch-utils.js";
 import { FloatingTextManager } from "./floating-text.js";
@@ -22,15 +22,6 @@ interface DelayedHit {
 }
 
 export type ShakeRequest = { intensity: number };
-
-const STATUS_COLORS: Record<string, number> = {
-  slowed: 0x5b9bd5,
-  weak: 0x9b59b6,
-  vulnerable: 0xe67e22,
-  burning: 0xe74c3c,
-  bleeding: 0xc0392b,
-  poisoned: 0x2ecc71,
-};
 
 export class EntityManager {
   private visuals = new Map<string, EntityVisual>();
@@ -229,18 +220,8 @@ export class EntityManager {
         const statusVisual = this.visuals.get(event.entityId);
         if (statusVisual) {
           const pos = statusVisual.container.position;
-          const color = STATUS_COLORS[event.status.type] ?? 0xffffff;
-          this.floatingText.spawn(pos.x, pos.y - 50, event.status.type, color);
-        }
-        break;
-      }
-      case "dotTick": {
-        const dotVisual = this.visuals.get(event.entityId);
-        if (dotVisual) {
-          const pos = dotVisual.container.position;
-          const color = STATUS_COLORS[event.status] ?? 0xe74c3c;
-          this.floatingText.spawn(pos.x, pos.y - 50, `-${event.damage}`, color);
-          dotVisual.triggerHit();
+          const meta = STATUS_META[event.status.type];
+          this.floatingText.spawn(pos.x, pos.y - 50, meta?.label ?? event.status.type, meta?.color ?? 0xffffff);
         }
         break;
       }

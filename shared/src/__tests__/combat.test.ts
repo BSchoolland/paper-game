@@ -16,7 +16,7 @@ const SHORT_SWORD_SLASH: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
   damage: 25,
-  onHit: [{ type: "knockback", distance: 30 }],
+  knockback: 30,
   visual: { color: 0xc0c0c0, trailEffect: "slash", screenShake: 0.3 },
 };
 
@@ -27,7 +27,7 @@ const SPEAR_THRUST: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Rectangle, length: 140, width: 20 },
   damage: 32,
-  onHit: [{ type: "knockback", distance: 25 }],
+  knockback: 25,
   visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.3 },
 };
 
@@ -38,6 +38,7 @@ const BOW_SHOT: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Point, range: 300 },
   damage: 20,
+  knockback: 0,
   ignoreCoverRange: 40,
   visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.15 },
 };

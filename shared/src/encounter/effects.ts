@@ -1,4 +1,5 @@
 import type { ActionResult, Entity, EntityEffect, GameEvent, StatusEffect, TeamId, UnitTemplate, Vec2, WeaponEffect } from "../core/types.js";
+import { STATUS_META } from "../core/status-meta.js";
 import { makeEntity } from "./entity-factory.js";
 import { normalize, sub, add, scale, distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds, findWalkablePosition } from "../map/collision-grid.js";
@@ -39,8 +40,13 @@ export function processEffects(result: ActionResult): ActionResult {
     if (event.type !== "attack") continue;
 
     const ability = event.ability;
-    if (ability.onHit) {
-      for (const hit of event.hits) {
+    for (const hit of event.hits) {
+      if (ability.knockback > 0) {
+        const applied = knockbackTarget(hit.targetId, event.attackerPosition, ability.knockback, state);
+        state = applied.state;
+        events.push(...applied.events);
+      }
+      if (ability.onHit) {
         for (const effect of ability.onHit) {
           const applied = applyWeaponEffect(effect, hit.targetId, event.attackerPosition, state);
           state = applied.state;
@@ -72,8 +78,6 @@ function applyWeaponEffect(
   state: ActionResult["state"]
 ): { state: ActionResult["state"]; events: GameEvent[] } {
   switch (effect.type) {
-    case "knockback":
-      return knockbackTarget(targetId, attackerPos, effect.distance, state);
     case "pull":
       return pullTarget(targetId, attackerPos, effect.distance, state);
     case "applyStatus":
@@ -219,11 +223,11 @@ function spawnEntities(
 
 export function describeWeaponEffect(effect: WeaponEffect): string {
   switch (effect.type) {
-    case "knockback":
-      return `knockback (${effect.distance})`;
     case "pull":
       return `pull (${effect.distance})`;
-    case "applyStatus":
-      return `${effect.status} (${Math.round(effect.value * 100)}%, ${effect.duration}t)`;
+    case "applyStatus": {
+      const meta = STATUS_META[effect.status];
+      return `${meta.label}: ${meta.describe(effect.value)} (${effect.duration}t)`;
+    }
   }
 }

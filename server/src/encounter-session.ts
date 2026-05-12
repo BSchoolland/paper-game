@@ -1,6 +1,7 @@
 import type { AbilityDefinition, AnimSet, GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord, ItemDefinition, AttachmentData } from "shared";
 import {
   resolveAction,
+  createGameState,
   serializeGameState,
   AiController,
   generateEncounter,
@@ -8,14 +9,12 @@ import {
   buildScenarioMap,
   placePvpEntities,
   placePveEntities,
-  assembleGameState as assembleScenarioState,
 } from "shared";
 import { loadDimension, loadEnemyTemplateRegistry } from "./db.js";
 import { loadCollisionGrid } from "./collision-loader.js";
 import {
   buildEncounterMap,
   placeEncounterEntities,
-  assembleGameState as assembleEncounterState,
 } from "./encounter-builder.js";
 
 export class EncounterSession {
@@ -45,13 +44,13 @@ export class EncounterSession {
       const map = buildEncounterMap(encounter);
       await loadCollisionGrid(map.grid, map.mapDefinition.objects, dimension.structures);
       const entities = placeEncounterEntities(encounter, map.grid, itemAbilities, animSet, equipped, attachments);
-      return new EncounterSession(assembleEncounterState(map, entities));
+      return new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
     }
 
     const map = buildScenarioMap(42);
     await loadCollisionGrid(map.grid, map.mapDefinition.objects);
     const entities = mode === "pve" ? placePveEntities(map.grid, loadEnemyTemplateRegistry(dimensionId)) : placePvpEntities(map.grid);
-    return new EncounterSession(assembleScenarioState(map, entities));
+    return new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
   }
 
   serialize(): object {

@@ -1,6 +1,5 @@
 import type { AimDirection, AttackAbility, AttackHit, Entity, GameState, GridState } from "../core/types.js";
 import { entitiesInShape } from "../geometry/index.js";
-import { getEffectiveDamage } from "./status-modifiers.js";
 
 export interface DamageResult {
   readonly state: GameState;
@@ -29,21 +28,18 @@ export function resolveWeaponAttack(
 export function applyDamage(
   state: GameState,
   targets: Entity[],
-  damage: number,
-  attackerId?: string
+  damage: number
 ): DamageResult {
   const entities = new Map(state.entities);
-  const attacker = attackerId ? state.entities.get(attackerId) : undefined;
 
   const hits: AttackHit[] = [];
   for (const target of targets) {
-    const effectiveDamage = getEffectiveDamage(damage, attacker, target);
-    const barrierAbsorbed = Math.min(target.barrier, effectiveDamage);
-    const remainingDamage = effectiveDamage - barrierAbsorbed;
+    const barrierAbsorbed = Math.min(target.barrier, damage);
+    const remainingDamage = damage - barrierAbsorbed;
     const newBarrier = target.barrier - barrierAbsorbed;
     const newHp = target.hp - remainingDamage;
     const killed = newHp <= 0;
-    hits.push({ targetId: target.id, damage: effectiveDamage, killed });
+    hits.push({ targetId: target.id, damage, killed });
     if (killed) {
       entities.set(target.id, { ...target, hp: 0, barrier: 0, dead: true });
     } else {

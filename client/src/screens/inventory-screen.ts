@@ -268,6 +268,7 @@ export class InventoryScreen implements Screen {
             <div style="margin-top:4px"><strong>${a.name}</strong> (${costParts.join(" + ")})</div>
             <div><span style="color:#8b8b7a">Damage:</span> ${a.damage}</div>
             <div><span style="color:#8b8b7a">Range:</span> ${rangeText}</div>
+            ${a.knockback > 0 ? `<div><span style="color:#8b8b7a">Knockback:</span> ${a.knockback}</div>` : ""}
             ${a.onHit?.length ? `<div><span style="color:#8b8b7a">On Hit:</span> ${a.onHit.map(e => describeWeaponEffect(e)).join(", ")}</div>` : ""}`;
         });
         statsHtml = `<div style="margin-top:8px">${lines.join("")}</div>`;

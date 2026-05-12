@@ -1,4 +1,4 @@
-import type { Entity, GameState, GridState, UnitTemplate } from "../core/types.js";
+import type { Entity, GridState, UnitTemplate } from "../core/types.js";
 import { UNIT_TEMPLATES } from "../core/items.js";
 import { createGrid } from "../map/collision-grid.js";
 import { findWalkablePosition } from "../map/collision-grid.js";
@@ -75,18 +75,5 @@ export function placePveEntities(
   entities.set("enemy9", placeEntity("enemy9", "Goblin Shield", 640, 160, "blue", gsh, grid));
 
   return entities;
-}
-
-export function assembleGameState(map: ScenarioMap, entities: Map<string, Entity>): GameState {
-  return {
-    entities,
-    grid: map.grid,
-    mapDefinition: map.mapDefinition,
-    activeTeam: "red",
-    turnNumber: 1,
-    winner: null,
-    nextSpawnId: 0,
-    actionCount: 0,
-  };
 }
 

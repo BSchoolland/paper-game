@@ -47,7 +47,7 @@ describe("turn-resolver", () => {
     expect(next.entities.get("b1")!.dead).toBe(true);
   });
 
-  it("end turn switches team and resets energy", () => {
+  it("end turn switches team and regenerates energy up to the cap", () => {
     const state = makeState([
       makeEntity("r1", 100, 100, "red"),
       makeEntity("b1", 500, 100, "blue"),
@@ -55,9 +55,23 @@ describe("turn-resolver", () => {
     const { state: moved } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "move", destination: { x: 150, y: 100 } });
     const { state: next } = resolveAction(moved, { type: "endTurn" });
     expect(next.activeTeam).toBe("blue");
-    expect(next.entities.get("b1")!.energy.red).toBe(2);
-    expect(next.entities.get("b1")!.energy.blue).toBe(2);
+    expect(next.entities.get("b1")!.energy.red).toBe(4);
+    expect(next.entities.get("b1")!.energy.blue).toBe(4);
     expect(next.turnNumber).toBe(2);
+  });
+
+  it("unspent energy banks across turns up to the cap", () => {
+    const state = makeState([
+      makeEntity("r1", 100, 100, "red", { energy: { red: 1, blue: 1, regenRed: 2, regenBlue: 2, maxRed: 4, maxBlue: 4 } }),
+      makeEntity("b1", 500, 100, "blue"),
+    ]);
+    // red ends turn -> blue's turn; blue ends turn -> red's turn-start regen fires
+    const after1 = resolveAction(resolveAction(state, { type: "endTurn" }).state, { type: "endTurn" }).state;
+    expect(after1.entities.get("r1")!.energy.red).toBe(3); // 1 + 2 regen
+    expect(after1.entities.get("r1")!.energy.blue).toBe(3);
+    const after2 = resolveAction(resolveAction(after1, { type: "endTurn" }).state, { type: "endTurn" }).state;
+    expect(after2.entities.get("r1")!.energy.red).toBe(4); // 3 + 2 regen, clamped to 4
+    expect(after2.entities.get("r1")!.energy.blue).toBe(4);
   });
 
   it("detects winner when team eliminated", () => {
@@ -81,7 +95,7 @@ describe("turn-resolver", () => {
 
   it("rejects action when out of energy", () => {
     const state = makeState([
-      makeEntity("r1", 100, 100, "red", { energy: { red: 0, blue: 0, maxRed: 2, maxBlue: 2 } }),
+      makeEntity("r1", 100, 100, "red", { energy: { red: 0, blue: 0, regenRed: 2, regenBlue: 2, maxRed: 4, maxBlue: 4 } }),
       makeEntity("b1", 500, 100, "blue"),
     ]);
     const { state: next } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "move", destination: { x: 120, y: 100 } });
@@ -129,26 +143,6 @@ describe("turn-resolver", () => {
     expect(events).toHaveLength(0);
   });
 
-  it("weak attacker deals reduced damage", () => {
-    const weakStatus: StatusEffect = { type: "weak", duration: 1, value: 0.5 };
-    const state = makeState([
-      makeEntity("r1", 100, 100, "red", { statusEffects: [weakStatus] }),
-      makeEntity("b1", 140, 100, "blue"),
-    ]);
-    const { state: next } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "short-sword-slash", aimDirection: { x: 1, y: 0 } });
-    expect(next.entities.get("b1")!.hp).toBe(87);
-  });
-
-  it("vulnerable target takes increased damage", () => {
-    const vulnStatus: StatusEffect = { type: "vulnerable", duration: 1, value: 0.5 };
-    const state = makeState([
-      makeEntity("r1", 100, 100, "red"),
-      makeEntity("b1", 140, 100, "blue", { statusEffects: [vulnStatus] }),
-    ]);
-    const { state: next } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "short-sword-slash", aimDirection: { x: 1, y: 0 } });
-    expect(next.entities.get("b1")!.hp).toBe(62);
-  });
-
   it("slowed entity has reduced move range", () => {
     const slowStatus: StatusEffect = { type: "slowed", duration: 1, value: 0.5 };
     const state = makeState([
@@ -161,60 +155,74 @@ describe("turn-resolver", () => {
     expect(rejected).toBe(state);
   });
 
-  it("DoT ticks damage on turn start and decrements duration", () => {
-    const burn: StatusEffect = { type: "burning", duration: 2, value: 10 };
-    const state = makeState([
-      makeEntity("r1", 100, 100, "red"),
-      makeEntity("b1", 500, 100, "blue", { statusEffects: [burn] }),
-    ]);
-    const { state: next, events } = resolveAction(state, { type: "endTurn" });
-    expect(next.entities.get("b1")!.hp).toBe(90);
-    expect(events.some(e => e.type === "dotTick")).toBe(true);
-    const remaining = next.entities.get("b1")!.statusEffects;
-    expect(remaining).toHaveLength(1);
-    expect(remaining![0]!.duration).toBe(1);
-  });
-
-  it("DoT can kill an entity", () => {
-    const poison: StatusEffect = { type: "poisoned", duration: 3, value: 15 };
-    const state = makeState([
-      makeEntity("r1", 100, 100, "red"),
-      makeEntity("b1", 500, 100, "blue", { hp: 10, statusEffects: [poison] }),
-    ]);
-    const { state: next } = resolveAction(state, { type: "endTurn" });
-    expect(next.entities.get("b1")!.dead).toBe(true);
-    expect(next.winner).toBe("red");
-  });
-
   it("status effects expire after duration runs out", () => {
-    const weak: StatusEffect = { type: "weak", duration: 1, value: 0.5 };
+    const slow: StatusEffect = { type: "slowed", duration: 1, value: 0.5 };
     const state = makeState([
       makeEntity("r1", 100, 100, "red"),
-      makeEntity("b1", 500, 100, "blue", { statusEffects: [weak] }),
+      makeEntity("b1", 500, 100, "blue", { statusEffects: [slow] }),
     ]);
     const { state: next } = resolveAction(state, { type: "endTurn" });
     expect(next.entities.get("b1")!.statusEffects).toBeUndefined();
   });
 
   it("applyStatus on-hit applies status to target", () => {
-    const poisonSlash: AttackAbility = {
-      id: "poison-slash",
-      name: "Poison Slash",
+    const slowSlash: AttackAbility = {
+      id: "slow-slash",
+      name: "Slow Slash",
       kind: "attack",
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
       damage: 10,
-      onHit: [{ type: "applyStatus", status: "poisoned", duration: 2, value: 5 }],
+      knockback: 0,
+      onHit: [{ type: "applyStatus", status: "slowed", duration: 2, value: 0.5 }],
     };
     const state = makeState([
-      makeEntity("r1", 100, 100, "red", { abilities: [poisonSlash] }),
+      makeEntity("r1", 100, 100, "red", { abilities: [slowSlash] }),
       makeEntity("b1", 140, 100, "blue"),
     ]);
-    const { state: next, events } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "poison-slash", aimDirection: { x: 1, y: 0 } });
+    const { state: next, events } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "slow-slash", aimDirection: { x: 1, y: 0 } });
     const b1 = next.entities.get("b1")!;
     expect(b1.statusEffects).toHaveLength(1);
-    expect(b1.statusEffects![0]!.type).toBe("poisoned");
+    expect(b1.statusEffects![0]!.type).toBe("slowed");
     expect(events.some(e => e.type === "statusApplied")).toBe(true);
+  });
+
+  it("suppressed reduces attack-energy (red) regen on turn start", () => {
+    const suppressed: StatusEffect = { type: "suppressed", duration: 2, value: 1 };
+    const state = makeState([
+      makeEntity("r1", 100, 100, "red"),
+      makeEntity("b1", 500, 100, "blue", { statusEffects: [suppressed] }),
+    ]);
+    const { state: next } = resolveAction(state, { type: "endTurn" });
+    const b1 = next.entities.get("b1")!;
+    // base regenRed is 2; suppressed value 1 → +1 instead of +2 (from 2 → 3)
+    expect(b1.energy.red).toBe(3);
+    expect(b1.energy.blue).toBe(4);
+  });
+
+  it("winded reduces movement-energy (blue) regen on turn start", () => {
+    const winded: StatusEffect = { type: "winded", duration: 2, value: 1 };
+    const state = makeState([
+      makeEntity("r1", 100, 100, "red"),
+      makeEntity("b1", 500, 100, "blue", { statusEffects: [winded] }),
+    ]);
+    const { state: next } = resolveAction(state, { type: "endTurn" });
+    const b1 = next.entities.get("b1")!;
+    expect(b1.energy.blue).toBe(3);
+    expect(b1.energy.red).toBe(4);
+  });
+
+  it("regen penalty never drops regen below zero", () => {
+    const winded: StatusEffect = { type: "winded", duration: 2, value: 2 };
+    const state = makeState([
+      makeEntity("r1", 100, 100, "red"),
+      makeEntity("b1", 500, 100, "blue", {
+        energy: { red: 2, blue: 2, regenRed: 2, regenBlue: 1, maxRed: 4, maxBlue: 4 },
+        statusEffects: [winded],
+      }),
+    ]);
+    const { state: next } = resolveAction(state, { type: "endTurn" });
+    expect(next.entities.get("b1")!.energy.blue).toBe(2);
   });
 
   it("pull on-hit moves target toward attacker", () => {
@@ -225,6 +233,7 @@ describe("turn-resolver", () => {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 120, halfAngle: Math.PI / 4 },
       damage: 5,
+      knockback: 0,
       onHit: [{ type: "pull", distance: 40 }],
     };
     const state = makeState([

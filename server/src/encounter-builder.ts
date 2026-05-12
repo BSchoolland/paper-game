@@ -1,4 +1,4 @@
-import type { AbilityDefinition, AnimSet, Entity, GameState, GridState, ItemDefinition, AttachmentData } from "shared";
+import type { AbilityDefinition, AnimSet, Entity, GridState, ItemDefinition, AttachmentData } from "shared";
 import { UNIT_TEMPLATES, PLAYER_INNATE_ABILITIES, makeEntity, findWalkablePosition } from "shared";
 import { createCombatGrid } from "shared";
 import type { GeneratedEncounter } from "shared";
@@ -62,17 +62,4 @@ function placeEntity(
 ): Entity {
   const pos = findWalkablePosition(grid, { x, y }, template.collisionRadius);
   return makeEntity(id, name, pos.x, pos.y, teamId, template, equipped, attachments);
-}
-
-export function assembleGameState(map: EncounterMap, entities: Map<string, Entity>): GameState {
-  return {
-    entities,
-    grid: map.grid,
-    mapDefinition: map.mapDefinition,
-    activeTeam: "red",
-    turnNumber: 1,
-    winner: null,
-    nextSpawnId: 0,
-    actionCount: 0,
-  };
 }

@@ -1,7 +1,7 @@
 import { ShapeKind } from "shared";
 import type { AttackAbility, MoveAbility, SpriteSet, UnitTemplate, ItemDefinition } from "shared";
 import type { StructureEntry } from "shared";
-import { saveDimension, saveEnemyTemplates, saveItems, getDimensionCount, withStructureIndices } from "./db.js";
+import { saveDimension, saveEnemyTemplates, saveItems, withStructureIndices } from "./db.js";
 
 function enemySprites(dimension: number, name: string): SpriteSet {
   const base = `/api/sprites/enemies/dimension-${dimension}/${name}/${name}`;
@@ -26,7 +26,7 @@ const GOBLIN_SPEAR_THRUST: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 100, width: 18 },
   damage: 25,
-  onHit: [{ type: "knockback", distance: 20 }],
+  knockback: 20,
   visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.2 },
 };
 
@@ -37,6 +37,7 @@ const GOBLIN_BOW_SHOT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 260 },
   damage: 15,
+  knockback: 0,
   visual: { color: 0xd4a857, trailEffect: "projectile" },
 };
 
@@ -47,7 +48,7 @@ const SHIELD_BASH_ATTACK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 60, halfAngle: Math.PI / 4 },
   damage: 15,
-  onHit: [{ type: "knockback", distance: 45 }],
+  knockback: 45,
   visual: { color: 0x8899aa, trailEffect: "slash", screenShake: 0.35 },
 };
 
@@ -58,7 +59,7 @@ const BRUTE_SLAM_ATTACK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 2 },
   damage: 40,
-  onHit: [{ type: "knockback", distance: 50 }],
+  knockback: 50,
   visual: { color: 0x7a6040, trailEffect: "slash", screenShake: 0.6 },
 };
 
@@ -69,7 +70,7 @@ const GOLEM_SMASH_ATTACK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 70, range: 60 },
   damage: 50,
-  onHit: [{ type: "knockback", distance: 60 }],
+  knockback: 60,
   visual: { color: 0x8b7355, trailEffect: "explosion", screenShake: 0.8 },
 };
 
@@ -80,6 +81,7 @@ const SLIME_SPIT_ATTACK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 180 },
   damage: 12,
+  knockback: 0,
   visual: { color: 0x5cb85c, trailEffect: "projectile" },
 };
 
@@ -90,7 +92,7 @@ const SLIME_LASH_ATTACK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 3 },
   damage: 20,
-  onHit: [{ type: "knockback", distance: 20 }],
+  knockback: 20,
   visual: { color: 0x5cb85c, trailEffect: "splash", screenShake: 0.2 },
 };
 
@@ -101,7 +103,7 @@ const SLIME_WAVE_ATTACK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 80, range: 50 },
   damage: 35,
-  onHit: [{ type: "knockback", distance: 35 }],
+  knockback: 35,
   visual: { color: 0x5cb85c, trailEffect: "splash", screenShake: 0.5 },
 };
 
@@ -252,7 +254,7 @@ const SHORT_SWORD_SLASH: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
   damage: 25,
-  onHit: [{ type: "knockback", distance: 30 }],
+  knockback: 30,
   visual: { color: 0xc0c0c0, trailEffect: "slash", screenShake: 0.3 },
 };
 
@@ -263,6 +265,7 @@ const SHORT_SWORD_STAB: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Rectangle, length: 90, width: 12 },
   damage: 11,
+  knockback: 0,
   visual: { color: 0xc0c0c0, trailEffect: "thrust" },
 };
 
@@ -273,7 +276,7 @@ const SPEAR_THRUST: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Rectangle, length: 140, width: 20 },
   damage: 32,
-  onHit: [{ type: "knockback", distance: 25 }],
+  knockback: 25,
   visual: { color: 0xa89070, trailEffect: "thrust", screenShake: 0.3 },
 };
 
@@ -284,7 +287,7 @@ const SPEAR_JAB: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 4 },
   damage: 10,
-  onHit: [{ type: "knockback", distance: 45 }],
+  knockback: 45,
   visual: { color: 0xa89070, trailEffect: "slash", screenShake: 0.2 },
 };
 
@@ -295,6 +298,7 @@ const BOW_SHOT: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Point, range: 300 },
   damage: 20,
+  knockback: 0,
   ignoreCoverRange: 40,
   visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.15 },
 };
@@ -306,6 +310,7 @@ const BOW_VOLLEY: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 40, range: 250 },
   damage: 12,
+  knockback: 0,
   visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.1 },
 };
 
@@ -341,7 +346,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 100, halfAngle: Math.PI / 3 },
       damage: 35,
-      onHit: [{ type: "knockback", distance: 35 }],
+      knockback: 35,
       visual: { color: 0xc0c0c0, trailEffect: "slash", screenShake: 0.35 },
     } satisfies AttackAbility, {
       id: "long-sword-halfsword",
@@ -350,6 +355,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 65, width: 22 },
       damage: 20,
+      knockback: 0,
       visual: { color: 0xc0c0c0, trailEffect: "thrust", screenShake: 0.2 },
     } satisfies AttackAbility, {
       id: "long-sword-crosscut",
@@ -358,6 +364,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 2 },
       damage: 14,
+      knockback: 0,
       visual: { color: 0xc0c0c0, trailEffect: "slash", screenShake: 0.15 },
     } satisfies AttackAbility],
     animSet: "sword",
@@ -390,7 +397,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 75, halfAngle: Math.PI / 6 },
       damage: 40,
-      onHit: [{ type: "knockback", distance: 40 }],
+      knockback: 40,
       visual: { color: 0x9a8060, trailEffect: "slash", screenShake: 0.45 },
     } satisfies AttackAbility, {
       id: "axe-hack",
@@ -399,6 +406,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 2 },
       damage: 16,
+      knockback: 0,
       visual: { color: 0x9a8060, trailEffect: "slash", screenShake: 0.2 },
     } satisfies AttackAbility],
     animSet: "sword",
@@ -420,6 +428,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 220, width: 14 },
       damage: 14,
+      knockback: 0,
       visual: { color: 0xd4a857, trailEffect: "projectile", screenShake: 0.1 },
     } satisfies AttackAbility],
     animSet: "bow",
@@ -440,7 +449,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 2 },
       damage: 30,
-      onHit: [{ type: "knockback", distance: 30 }],
+      knockback: 30,
       visual: { color: 0xb0b0b0, trailEffect: "slash", screenShake: 0.5 },
     } satisfies AttackAbility, {
       id: "broadsword-halfsword",
@@ -449,6 +458,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Rectangle, length: 115, width: 18 },
       damage: 42,
+      knockback: 0,
       visual: { color: 0xb0b0b0, trailEffect: "thrust", screenShake: 0.4 },
     } satisfies AttackAbility, {
       id: "broadsword-pommel-strike",
@@ -457,7 +467,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 50, halfAngle: Math.PI / 4 },
       damage: 12,
-      onHit: [{ type: "knockback", distance: 60 }],
+      knockback: 60,
       visual: { color: 0xb0b0b0, trailEffect: "slash", screenShake: 0.3 },
     } satisfies AttackAbility],
     animSet: "two-handed",
@@ -478,7 +488,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 85, halfAngle: Math.PI / 3 },
       damage: 45,
-      onHit: [{ type: "knockback", distance: 50 }],
+      knockback: 50,
       visual: { color: 0x8a7050, trailEffect: "slash", screenShake: 0.6 },
     } satisfies AttackAbility, {
       id: "battle-axe-hook",
@@ -487,7 +497,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 90, width: 35 },
       damage: 14,
-      onHit: [{ type: "knockback", distance: 75 }],
+      knockback: 75,
       visual: { color: 0x8a7050, trailEffect: "slash", screenShake: 0.35 },
     } satisfies AttackAbility, {
       id: "battle-axe-rend",
@@ -496,6 +506,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 2 },
       damage: 20,
+      knockback: 0,
       visual: { color: 0x8a7050, trailEffect: "slash", screenShake: 0.3 },
     } satisfies AttackAbility],
     animSet: "two-handed",
@@ -516,7 +527,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 4 },
       damage: 30,
-      onHit: [{ type: "knockback", distance: 55 }],
+      knockback: 55,
       visual: { color: 0x707070, trailEffect: "explosion", screenShake: 0.5 },
     } satisfies AttackAbility, {
       id: "mace-overhead",
@@ -525,6 +536,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Circle, radius: 55, range: 0 },
       damage: 18,
+      knockback: 0,
       visual: { color: 0x707070, trailEffect: "explosion", screenShake: 0.35 },
     } satisfies AttackAbility, {
       id: "mace-lunge",
@@ -533,7 +545,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Rectangle, length: 85, width: 20 },
       damage: 15,
-      onHit: [{ type: "knockback", distance: 35 }],
+      knockback: 35,
       visual: { color: 0x707070, trailEffect: "thrust", screenShake: 0.25 },
     } satisfies AttackAbility],
     animSet: "sword",
@@ -560,7 +572,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 55, halfAngle: Math.PI / 4 },
       damage: 12,
-      onHit: [{ type: "knockback", distance: 40 }],
+      knockback: 40,
       visual: { color: 0x8899aa, trailEffect: "slash", screenShake: 0.3 },
     } satisfies AttackAbility],
   },
@@ -586,7 +598,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 65, halfAngle: Math.PI / 4 },
       damage: 15,
-      onHit: [{ type: "knockback", distance: 50 }],
+      knockback: 50,
       visual: { color: 0x8899aa, trailEffect: "slash", screenShake: 0.35 },
     } satisfies AttackAbility, {
       id: "kite-shield-wall",
@@ -618,7 +630,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 45, halfAngle: Math.PI / 4 },
       damage: 8,
-      onHit: [{ type: "knockback", distance: 35 }],
+      knockback: 35,
       visual: { color: 0x8899aa, trailEffect: "slash", screenShake: 0.2 },
     } satisfies AttackAbility],
   },
@@ -649,6 +661,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Circle, radius: 60, range: 200 },
       damage: 25,
+      knockback: 0,
       visual: { color: 0x7b68ee, trailEffect: "explosion", screenShake: 0.3 },
     } satisfies AttackAbility, {
       id: "staff-bolt",
@@ -657,6 +670,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Point, range: 200 },
       damage: 11,
+      knockback: 0,
       visual: { color: 0x7b68ee, trailEffect: "projectile" },
     } satisfies AttackAbility, {
       id: "staff-push",
@@ -665,7 +679,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
       damage: 10,
-      onHit: [{ type: "knockback", distance: 65 }],
+      knockback: 65,
       visual: { color: 0x7b68ee, trailEffect: "explosion", screenShake: 0.25 },
     } satisfies AttackAbility],
     animSet: "staff",
@@ -708,8 +722,8 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
 // --- Seed ---
 
 export function seedDimension0(): void {
-  if (getDimensionCount() > 0) return;
-
+  // Static content is derived from source — re-upsert it on every boot (like seedDimension1/2/3),
+  // so changes to enemy templates / items / structures take effect without wiping the database.
   saveDimension(0, "Greenlands", DIMENSION_0_STRUCTURES, "sprites/map-objects/backgrounds/background-grass.png", "sprites/map-decorations");
   saveEnemyTemplates(0, ENEMY_TEMPLATES);
   saveItems(0, DIMENSION_0_ITEMS);

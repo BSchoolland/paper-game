@@ -19,6 +19,7 @@ export const INNATE_PUNCH: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 50, halfAngle: Math.PI / 4 },
   damage: 10,
+  knockback: 0,
   visual: { trailEffect: "slash", screenShake: 0.15 },
 };
 

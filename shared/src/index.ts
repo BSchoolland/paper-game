@@ -1,4 +1,5 @@
 export * from "./core/types.js";
+export * from "./core/status-meta.js";
 export * from "./core/items.js";
 export * from "./core/inventory.js";
 export * from "./core/vec2.js";

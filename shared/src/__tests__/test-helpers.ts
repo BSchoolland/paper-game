@@ -18,7 +18,7 @@ const TEST_SLASH: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 },
   damage: 25,
-  onHit: [{ type: "knockback", distance: 30 }],
+  knockback: 30,
   visual: { color: 0xc0c0c0, trailEffect: "slash", screenShake: 0.3 },
 };
 
@@ -38,7 +38,7 @@ export function makeEntity(
     maxHp: 100,
     barrier: 0,
     teamId,
-    energy: { red: 2, blue: 2, maxRed: 2, maxBlue: 2 },
+    energy: { red: 2, blue: 2, regenRed: 2, regenBlue: 2, maxRed: 4, maxBlue: 4 },
     abilities: [TEST_MOVE, TEST_SLASH],
     ...overrides,
   };
