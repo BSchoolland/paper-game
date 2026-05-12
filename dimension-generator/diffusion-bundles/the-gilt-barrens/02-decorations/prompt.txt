@@ -1,0 +1,14 @@
+Dimension: The Gilt Barrens
+Biome: scorched savanna and trade-route desert
+Mood: Blinding heat and deceptive beauty. The golden landscape looks serene until the sand shifts and something fast, toothy, and perfectly camouflaged lunges. Trust nothing you see — the barrens lie.
+Palette: primary #d4a533, secondary #c2541d, accent #f5e0a0
+
+Description: A world of sun-scorched savannas, vast trade-route deserts, and crumbling merchant cities half-buried in golden sand. Herds of swift antelope-beasts stampede across shimmering plains, ambush predators lie coiled beneath sugar-crystal oases, and scavengers circle the skeletal remains of lost caravans. Heat mirages twist the horizon into false promises — phantom cities, illusory water, shapes that weren't there a moment ago. The few settlements that survive are fortified waystation-towns built around deep wells, their sandstone walls scarred by claw marks.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color saturation, same isometric three-quarter perspective, same drop shadows.
+
+Each decoration should be a single distinct object with clear space around it, suitable for cutting out individually. A mix of organic decorations (plants/natural objects) and structural decorations (walls/ruins/built objects) — choose what fits this dimension's biome and mood.
+
+Important: Use a variety of colors across the decorations — not everything should be the same color as the dimension palette. Natural environments have diverse coloring, so include variety (e.g. different plant greens, browns, grays for rocks, varied flower colors).

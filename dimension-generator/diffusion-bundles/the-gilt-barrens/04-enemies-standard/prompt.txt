@@ -1,0 +1,24 @@
+Dimension: The Gilt Barrens
+Biome: scorched savanna and trade-route desert
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "standard" tier: Backbone of mid-tier encounters. Each has 2 distinct abilities and a clear role.
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Gilt Viper — fast melee, applies bleeding + hit-and-run lunge. A large golden serpent with metallic scales that flash in the sun, camouflaged in the sand.
+
+  Carrion Vulture — ranged, swooping dive attack + applies vulnerable. A massive vulture with a red-orange ruff and dark wingspan, circling overhead.
+
+  Sandsworn Raider — melee, dual-blade combo + applies bleeding. A bandaged humanoid desert raider wielding two curved scimitars, wrapped in sand-colored cloth.
+
+  Shimmer Stalker — ranged, signature CONFUSED application + mirage clones. A translucent lizard-like predator that bends light around its body, creating false copies of itself.

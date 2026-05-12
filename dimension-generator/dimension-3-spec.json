@@ -1,0 +1,135 @@
+{
+  "id": 3,
+  "name": "The Gilt Barrens",
+  "description": "A world of sun-scorched savannas, vast trade-route deserts, and crumbling merchant cities half-buried in golden sand. Herds of swift antelope-beasts stampede across shimmering plains, ambush predators lie coiled beneath sugar-crystal oases, and scavengers circle the skeletal remains of lost caravans. Heat mirages twist the horizon into false promises — phantom cities, illusory water, shapes that weren't there a moment ago. The few settlements that survive are fortified waystation-towns built around deep wells, their sandstone walls scarred by claw marks.",
+  "palette": { "primary": "#d4a533", "secondary": "#c2541d", "accent": "#f5e0a0" },
+  "mood": "Blinding heat and deceptive beauty. The golden landscape looks serene until the sand shifts and something fast, toothy, and perfectly camouflaged lunges. Trust nothing you see — the barrens lie.",
+  "biome": "scorched savanna and trade-route desert",
+  "mechanicalIdentity": "Status effects — confused from heat mirages and disorienting sandstorms, bleeding from fast predators with raking claws and serrated fangs. Less poison than earlier dimensions, more about burst ambush damage and scrambled player actions.",
+
+  "enemyBatches": [
+    {
+      "name": "fodder",
+      "description": "Small, cheap enemies that swarm in numbers. Each is fragile but contributes to a cumulative threat.",
+      "enemies": [
+        {
+          "name": "Sand Skitter",
+          "role": "melee swarm, applies bleeding",
+          "description": "A small scorpion-like creature with golden carapace and oversized pincers."
+        },
+        {
+          "name": "Mirage Wisp",
+          "role": "ranged swarm, applies confused",
+          "description": "A flickering heat-shimmer that coalesces into a darting luminous shape."
+        },
+        {
+          "name": "Dune Jackal",
+          "role": "melee swarm, applies bleeding",
+          "description": "A lean canine with tawny fur and a ridge of sandy spines along its back."
+        },
+        {
+          "name": "Dust Devil",
+          "role": "ranged swarm, applies confused + minor knockback",
+          "description": "A tiny whirling sand vortex with glinting debris caught in its spin."
+        }
+      ]
+    },
+    {
+      "name": "standard",
+      "description": "Backbone of mid-tier encounters. Each has 2 distinct abilities and a clear role.",
+      "enemies": [
+        {
+          "name": "Gilt Viper",
+          "role": "fast melee, applies bleeding + hit-and-run lunge",
+          "description": "A large golden serpent with metallic scales that flash in the sun, camouflaged in the sand."
+        },
+        {
+          "name": "Carrion Vulture",
+          "role": "ranged, swooping dive attack + applies vulnerable",
+          "description": "A massive vulture with a red-orange ruff and dark wingspan, circling overhead."
+        },
+        {
+          "name": "Sandsworn Raider",
+          "role": "melee, dual-blade combo + applies bleeding",
+          "description": "A bandaged humanoid desert raider wielding two curved scimitars, wrapped in sand-colored cloth."
+        },
+        {
+          "name": "Shimmer Stalker",
+          "role": "ranged, signature CONFUSED application + mirage clones",
+          "description": "A translucent lizard-like predator that bends light around its body, creating false copies of itself."
+        }
+      ]
+    },
+    {
+      "name": "elite",
+      "description": "Tougher, signature encounters with distinct mechanics. Each feels like a meaningful threat.",
+      "enemies": [
+        {
+          "name": "Dune Reaver",
+          "role": "ambush elite, bursts from sand + heavy bleeding combo",
+          "description": "A massive centipede-like burrower with golden armor plates and rows of hooked legs."
+        },
+        {
+          "name": "Oasis Guardian",
+          "role": "tank elite, AoE confused aura + knockback slam",
+          "description": "A towering golem of crystallized sugar-sand, vaguely humanoid, shimmering with mirage heat."
+        },
+        {
+          "name": "Gazelle Matriarch",
+          "role": "fast kite elite, stampede charge + applies bleeding + summons Dune Jackals",
+          "description": "An enormous antelope with gilded horns and battle-scarred hide, leading a herd."
+        },
+        {
+          "name": "Sandwraith",
+          "role": "assassin elite, phases through mirage + applies confused + bleeding",
+          "description": "A hooded figure made of swirling sand, wielding a curved blade that reforms after each strike."
+        }
+      ]
+    },
+    {
+      "name": "boss",
+      "description": "Centerpiece fights — each boss has a signature multi-ability identity and onDeath effects.",
+      "enemies": [
+        {
+          "name": "The Caravan King",
+          "role": "summon boss, calls Sandsworn Raiders + AoE gold-coin shrapnel (bleeding)",
+          "description": "A massive armored warlord atop a howdah of looted treasure, draped in golden chains and wielding a jeweled war-flail."
+        },
+        {
+          "name": "Sunscorch Wyrm",
+          "role": "melee boss, burrowing charges + sandstorm breath (confused) + tail swipe (bleeding + knockback)",
+          "description": "A colossal serpentine dragon with golden scales, half-buried in the dunes, radiating visible heat."
+        },
+        {
+          "name": "The False Oasis",
+          "role": "stationary boss, massive AoE confused + pull toward center + bleeding thorns",
+          "description": "An enormous mirage given form — a shimmering pool that is actually a vast living trap, its edges lined with crystalline teeth."
+        },
+        {
+          "name": "Pharaoh of the Sands",
+          "role": "final boss, sandstorm phase shifts + summons Sandwraiths + AoE confused + devastating melee bleeding combos",
+          "description": "An ancient undead ruler wrapped in golden burial cloth, crowned with a cracked sun-disk. Commands the desert itself — sand rises and falls at their gesture."
+        }
+      ]
+    }
+  ],
+
+  "items": [
+    { "name": "Dune Cleaver", "type": "weapon (sword)", "rarity": "common", "description": "A broad-bladed machete forged from dark iron, with a sand-leather grip. The edge has a faint golden tint from desert dust." },
+    { "name": "Scorpion Spear", "type": "weapon (spear)", "rarity": "common", "description": "A long spear tipped with a scorpion stinger, barbed and slightly curved. Bone shaft wrapped in sinew." },
+    { "name": "Sandhorn Bow", "type": "weapon (bow)", "rarity": "common", "description": "A recurve bow made from polished antelope horn, strung with braided gut. Quiver of flint-tipped arrows." },
+    { "name": "Raider's Twinblade", "type": "weapon (sword anim)", "rarity": "uncommon", "description": "A pair of short curved scimitars connected by a chain at the pommels. Sand-etched steel." },
+    { "name": "Mirage Staff", "type": "weapon (staff)", "rarity": "rare", "description": "A staff of petrified desert wood capped with a floating shard of crystal that bends light around it." },
+    { "name": "Viper Fang Dagger", "type": "weapon (sword)", "rarity": "uncommon", "description": "A curved dagger carved from a giant serpent's fang, still faintly warm. Golden sheen on the blade." },
+    { "name": "Wyrm-Spine Lance", "type": "weapon (spear)", "rarity": "uncommon", "description": "A lance made from a vertebra of the Sunscorch Wyrm, mounted on an ironwood shaft. Radiates heat." },
+    { "name": "Pharaoh's Crescent", "type": "weapon (two-handed)", "rarity": "rare", "description": "A massive crescent-bladed polearm of blackened gold, inscribed with ancient glyphs. The blade hums faintly in sunlight." },
+    { "name": "Sandstone Buckler", "type": "shield", "rarity": "common", "description": "A round shield carved from dense sandstone, rimmed with hammered copper. Surprisingly light." },
+    { "name": "Gilt Kite Shield", "type": "shield", "rarity": "uncommon", "description": "A tall kite shield covered in beaten gold leaf over hardwood, dented and scarred from desert combat." },
+    { "name": "Dust Devil Charm", "type": "accessory", "rarity": "common", "description": "A tiny sealed glass vial containing a pinch of ever-swirling sand. Hangs from a leather cord." },
+    { "name": "Golden Scarab", "type": "accessory", "rarity": "uncommon", "description": "A palm-sized beetle carved from solid gold, warm to the touch. Its legs twitch occasionally." },
+    { "name": "Eye of the Barrens", "type": "accessory", "rarity": "rare", "description": "A polished amber orb set in a gold claw-mount. Looking through it dispels mirages — the world appears stark and true." },
+    { "name": "Desert Salve", "type": "consumable (heal)", "rarity": "common", "description": "A clay pot of thick aloe-like paste mixed with crushed minerals. Cools burns and closes wounds." },
+    { "name": "Flash Powder", "type": "consumable (damage AoE)", "rarity": "uncommon", "description": "A pouch of reactive golden dust that ignites on impact, creating a blinding burst of heat and light." },
+    { "name": "Sandtrap Rune", "type": "consumable (AoE pull + damage)", "rarity": "rare", "description": "A flat stone etched with a spiral glyph. When thrown, the ground collapses into a sucking sand vortex." }
+  ]
+}

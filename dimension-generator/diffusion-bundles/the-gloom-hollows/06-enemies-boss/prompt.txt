@@ -1,0 +1,25 @@
+Dimension: The Gloom Hollows
+Biome: crystal caverns and fungal grottos
+Mood: Oppressive darkness punctuated by sudden neon flashes. The crystals are beautiful but the things that live among them will scramble your senses and tear you apart while you're reeling.
+Palette: primary #e760c9, secondary #6edeb8, accent #9b5de5
+
+Description: A dimension of vast underground caverns lit by pulsing magenta crystals and carpeted in luminous fungi. Stalactites drip with phosphorescent slime, and the air shimmers with spore haze. Creatures here are cave-adapted — blind salamanders that hunt by vibration, crystal-shelled beetles, predatory fungi, and massive hippo-like beasts that guard the deepest grottos. The ground is uneven stone studded with geode clusters that shatter into disorienting prismatic bursts.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+
+This batch is the "boss" tier: Centerpiece fights — each boss has a signature multi-ability identity and onDeath effects.
+
+The 4 enemies in this batch (one per column, in this order):
+
+  The Gemwarden — ranged boss caster, signature PRISM STORM AoE confused + vulnerable. An ancient salamander shaman fused with a massive crystal formation on its back, wielding refracted light as a weapon.
+
+  Grotto Titan — tank boss, hardest single-hit damage in dimension. An enormous cave hippo armored in fused geode plates, with a crystalline horn that splits into prismatic fractures.
+
+  The Mycelium — stationary horror boss, AoE confused + knockback + vulnerable. A massive fungal network that has overtaken an entire cavern, with a pulsing magenta core surrounded by writhing tendrils.
+
+  Crystalback Rex — fast melee boss apex predator, Crystal Charge + vulnerable + bleeding. A colossal reptilian predator covered in razor-sharp crystal growths, the apex hunter of the deep caverns.

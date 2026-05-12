@@ -1,0 +1,24 @@
+Dimension: The Gilt Barrens
+Biome: scorched savanna and trade-route desert
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "elite" tier: Tougher, signature encounters with distinct mechanics. Each feels like a meaningful threat.
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Dune Reaver — ambush elite, bursts from sand + heavy bleeding combo. A massive centipede-like burrower with golden armor plates and rows of hooked legs.
+
+  Oasis Guardian — tank elite, AoE confused aura + knockback slam. A towering golem of crystallized sugar-sand, vaguely humanoid, shimmering with mirage heat.
+
+  Gazelle Matriarch — fast kite elite, stampede charge + applies bleeding + summons Dune Jackals. An enormous antelope with gilded horns and battle-scarred hide, leading a herd.
+
+  Sandwraith — assassin elite, phases through mirage + applies confused + bleeding. A hooded figure made of swirling sand, wielding a curved blade that reforms after each strike.

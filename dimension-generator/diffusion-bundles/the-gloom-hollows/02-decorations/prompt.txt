@@ -1,0 +1,10 @@
+Dimension: The Gloom Hollows
+Biome: crystal caverns and fungal grottos
+Mood: Oppressive darkness punctuated by sudden neon flashes. The crystals are beautiful but the things that live among them will scramble your senses and tear you apart while you're reeling.
+Palette: primary #e760c9, secondary #6edeb8, accent #9b5de5
+
+Description: A dimension of vast underground caverns lit by pulsing magenta crystals and carpeted in luminous fungi. Stalactites drip with phosphorescent slime, and the air shimmers with spore haze. Creatures here are cave-adapted — blind salamanders that hunt by vibration, crystal-shelled beetles, predatory fungi, and massive hippo-like beasts that guard the deepest grottos. The ground is uneven stone studded with geode clusters that shatter into disorienting prismatic bursts.
+
+Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color saturation, same isometric three-quarter perspective, same drop shadows.
+
+Each decoration should be a single distinct object with clear space around it, suitable for cutting out individually. A mix of organic decorations (plants/natural objects) and structural decorations (walls/ruins/built objects) — choose what fits this dimension's biome and mood.

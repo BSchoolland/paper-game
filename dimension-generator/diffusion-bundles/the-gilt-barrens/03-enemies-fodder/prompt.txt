@@ -1,0 +1,24 @@
+Dimension: The Gilt Barrens
+Biome: scorched savanna and trade-route desert
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "fodder" tier: Small, cheap enemies that swarm in numbers. Each is fragile but contributes to a cumulative threat.
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Sand Skitter — melee swarm, applies bleeding. A small scorpion-like creature with golden carapace and oversized pincers.
+
+  Mirage Wisp — ranged swarm, applies confused. A flickering heat-shimmer that coalesces into a darting luminous shape.
+
+  Dune Jackal — melee swarm, applies bleeding. A lean canine with tawny fur and a ridge of sandy spines along its back.
+
+  Dust Devil — ranged swarm, applies confused + minor knockback. A tiny whirling sand vortex with glinting debris caught in its spin.

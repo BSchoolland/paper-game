@@ -28,17 +28,21 @@ import {
 } from "./db.js";
 import { seedDimension0 } from "./seed.js";
 import { seedDimension1 } from "./seed-dimension-1.js";
+import { seedDimension2 } from "./seed-dimension-2.js";
+import { seedDimension3 } from "./seed-dimension-3.js";
 import { join } from "path";
 
 seedDiscovery(15);
 seedDimension0();
 seedDimension1();
+seedDimension2();
+seedDimension3();
 
 type GameMode = "pvp" | "pve";
 type Phase = "map" | "combat";
 
 // Dim 1 weapons mixed into starting inventory for playtesting (no loot system yet)
-const DIM1_STARTER_EXTRAS = ["coral-blade", "barbed-harpoon", "urchin-flail", "crab-claw-gauntlet"];
+const DIM1_STARTER_EXTRAS = ["coral-blade", "barbed-harpoon", "urchin-flail", "crab-claw-gauntlet", "crystal-shard-blade", "fungal-mace", "geode-knuckles", "dune-cleaver", "raiders-twinblade", "mirage-staff"];
 
 function buildDefaultInventory(dimensionId: number): InventoryState {
   const dimItems = loadItems(dimensionId);

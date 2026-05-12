@@ -1,0 +1,28 @@
+Dimension: The Gloom Hollows
+Biome: crystal caverns and fungal grottos
+Mood: Oppressive darkness punctuated by sudden neon flashes. The crystals are beautiful but the things that live among them will scramble your senses and tear you apart while you're reeling.
+Palette: primary #e760c9, secondary #6edeb8, accent #9b5de5
+
+Description: A dimension of vast underground caverns lit by pulsing magenta crystals and carpeted in luminous fungi. Stalactites drip with phosphorescent slime, and the air shimmers with spore haze. Creatures here are cave-adapted — blind salamanders that hunt by vibration, crystal-shelled beetles, predatory fungi, and massive hippo-like beasts that guard the deepest grottos. The ground is uneven stone studded with geode clusters that shatter into disorienting prismatic bursts.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Crystal Shard Blade (weapon (sword), common) — A long shard of magenta crystal with a leather-wrapped base. Crude but wickedly sharp, edges glinting with internal light.
+  Stalactite Spear (weapon (spear), common) — A broken stalactite sharpened to a point and bound to a fungal-wood shaft. Drips with phosphorescent slime.
+  Fungal Mace (weapon (sword anim), uncommon) — A dense mushroom-cap hardened to stone, mounted on a stout handle. Releases disorienting spores on impact.
+  Cavern Bow (weapon (bow), common) — A bow of petrified cave-wood strung with spider silk. Fires arrows tipped with crystal shards.
+  Prism Staff (weapon (staff), rare) — A staff of dark stone crowned with a multifaceted crystal that refracts light into blinding prismatic beams.
+  Geode Knuckles (weapon (sword anim), uncommon) — A pair of cracked geode halves strapped over the fists. The crystalline interior edges cut deep.
+  Mycelium Whip (weapon (spear), uncommon) — A long bioluminescent tendril harvested from a fungal horror, still twitching. Reaches far and stings with disorienting toxins.
+  Titan Jawbone (weapon (two-handed), rare) — The massive jawbone of a Grotto Titan, studded with crystal teeth. Swinging it shatters the air.
+  Crystal Buckler (shield, common) — A round shield carved from a single geode slab. The crystalline face refracts light, disorienting attackers.
+  Fungal Bulwark (shield, uncommon) — A large shield grown from layered fungal plates, reinforced with crystal veins. Tough and slightly luminous.
+  Prism Pendant (accessory, common) — A small faceted crystal on a cord of braided spider silk. Pulses with soft magenta light.
+  Spore Sachet (accessory, uncommon) — A sealed pouch of dried cave fungus that releases a steady trickle of protective spores.
+  Salamander Eye (accessory, rare) — A preserved eye from a grotto elder, set in crystal. It still sees in total darkness.
+  Cave Moss Poultice (consumable (heal), common) — A wad of bioluminescent cave moss packed with mineral-rich mud. Glows faintly green when applied.
+  Flashbang Geode (consumable (damage AoE), uncommon) — A volatile geode packed with pressurized crystal gas. Shatters in a blinding prismatic explosion.
+  Spore Bomb (consumable (AoE confused + damage), rare) — A dense fungal pod filled with concentrated disorienting spores. When crushed, clouds the area in hallucinogenic haze.

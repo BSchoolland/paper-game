@@ -1,0 +1,18 @@
+[15:01:25] img=/home/ben/Projects/turn-based-game/dimension-generator/diffusion-bundles/the-gloom-hollows/01-background/reference.jpeg
+[15:01:25] prompt=/home/ben/Projects/turn-based-game/dimension-generator/diffusion-bundles/the-gloom-hollows/01-background/prompt.txt
+[15:01:25] mime=image/jpeg
+[15:01:25] STEP 1: load clipboard
+true
+[15:01:25] clipboard targets: image/jpeg,text/plain,UTF8_STRING,STRING,TEXT,application/x-copyq-owner,application/x-qt-image,image/png,image/bmp,image/cur,image/ico,image/jpg,image/pbm,BITMAP,image/pgm,image/ppm,PIXMAP,image/xbm,image/xpm,TARGETS,MULTIPLE,TIMESTAMP,SAVE_TARGETS,
+[15:01:25] STEP 2: snapshot existing windows
+[15:01:25] ChatGPT windows before: 44040224 62914582 
+[15:01:25] STEP 3: open https://chatgpt.com
+[15:01:25] STEP 4: wait up to 8s for new ChatGPT window
+[15:01:26] found new window: 44043022 after 1s
+[15:01:26] target window name: ChatGPT - Google Chrome
+[15:01:26] STEP 5: activate target window + small settle delay
+[15:01:28] active window after activate: 44043022 (ChatGPT - Google Chrome)
+[15:01:28] STEP 6: send Ctrl+V to active window
+[15:01:28] STEP 7: wait 8s for image upload
+[15:01:36] STEP 8: re-activate window and press Return
+[15:01:37] done. Check the browser to see what happened. Full log at: /home/ben/Projects/turn-based-game/dimension-generator/diffusion-bundles/the-gloom-hollows/debug-send.log

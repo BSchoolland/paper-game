@@ -1,0 +1,12 @@
+Dimension: The Gilt Barrens
+Biome: scorched savanna and trade-route desert
+Mood: Blinding heat and deceptive beauty. The golden landscape looks serene until the sand shifts and something fast, toothy, and perfectly camouflaged lunges. Trust nothing you see — the barrens lie.
+Palette: primary #d4a533, secondary #c2541d, accent #f5e0a0
+
+Description: A world of sun-scorched savannas, vast trade-route deserts, and crumbling merchant cities half-buried in golden sand. Herds of swift antelope-beasts stampede across shimmering plains, ambush predators lie coiled beneath sugar-crystal oases, and scavengers circle the skeletal remains of lost caravans. Heat mirages twist the horizon into false promises — phantom cities, illusory water, shapes that weren't there a moment ago. The few settlements that survive are fortified waystation-towns built around deep wells, their sandstone walls scarred by claw marks.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

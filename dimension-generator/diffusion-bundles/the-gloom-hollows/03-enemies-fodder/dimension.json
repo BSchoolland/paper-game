@@ -1,0 +1,217 @@
+{
+  "id": 2,
+  "name": "The Gloom Hollows",
+  "description": "A dimension of vast underground caverns lit by pulsing magenta crystals and carpeted in luminous fungi. Stalactites drip with phosphorescent slime, and the air shimmers with spore haze. Creatures here are cave-adapted — blind salamanders that hunt by vibration, crystal-shelled beetles, predatory fungi, and massive hippo-like beasts that guard the deepest grottos. The ground is uneven stone studded with geode clusters that shatter into disorienting prismatic bursts.",
+  "palette": {
+    "primary": "#e760c9",
+    "secondary": "#6edeb8",
+    "accent": "#9b5de5"
+  },
+  "mood": "Oppressive darkness punctuated by sudden neon flashes. The crystals are beautiful but the things that live among them will scramble your senses and tear you apart while you're reeling.",
+  "biome": "crystal caverns and fungal grottos",
+  "mechanicalIdentity": "Status effects — confused and vulnerable from disorienting crystal bursts and psychic spores, with some knockback from shattering geodes. Less poison than dimension 1, more about making enemies hit harder and the player act erratically.",
+  "enemyBatches": [
+    {
+      "name": "fodder",
+      "description": "Small, cheap enemies that swarm in numbers. Each is fragile but contributes to a cumulative threat.",
+      "enemies": [
+        {
+          "name": "Cave Mite",
+          "role": "melee swarm, applies confused",
+          "description": "A small skittering beetle with a crystalline carapace that flashes magenta when agitated."
+        },
+        {
+          "name": "Spore Puffer",
+          "role": "ranged swarm, applies confused",
+          "description": "A floating fungal polyp that drifts and releases bursts of disorienting spores."
+        },
+        {
+          "name": "Grub Crawler",
+          "role": "melee swarm, applies vulnerable",
+          "description": "A pale eyeless larva with mandibles coated in crystal-dissolving acid."
+        },
+        {
+          "name": "Crystal Scarab",
+          "role": "standard melee, signature on-death KNOCKBACK burst",
+          "description": "A beetle with a geode-cluster shell that detonates into shards when killed."
+        }
+      ]
+    },
+    {
+      "name": "standard",
+      "description": "Backbone of mid-tier encounters. Each has 2 distinct abilities and a clear role.",
+      "enemies": [
+        {
+          "name": "Grotto Salamander",
+          "role": "melee, applies vulnerable + confused combo",
+          "description": "A large eyeless amphibian with translucent skin revealing pulsing magenta veins."
+        },
+        {
+          "name": "Prism Moth",
+          "role": "ranged, AoE confused + light damage",
+          "description": "A large moth with crystal-dust wings that scatter blinding prismatic patterns."
+        },
+        {
+          "name": "Fungal Shambler",
+          "role": "melee tank, applies confused + knockback spore burst",
+          "description": "A humanoid mass of bioluminescent fungi with a heavy mushroom-cap head."
+        },
+        {
+          "name": "Geode Crab",
+          "role": "elite melee, glass-cannon burst + on-death shard explosion",
+          "description": "A crustacean with a geode shell — crystalline interior exposed through cracks that glow hot magenta."
+        }
+      ]
+    },
+    {
+      "name": "elite",
+      "description": "Tougher, signature encounters with distinct mechanics. Each feels like a meaningful threat.",
+      "enemies": [
+        {
+          "name": "Hollow Hippo",
+          "role": "elite tank, massive knockback charge + vulnerable stomp",
+          "description": "A massive cave-hippo with crystalline growths erupting from its back. Pale hide, glowing magenta eyes."
+        },
+        {
+          "name": "Crystal Weaver",
+          "role": "kite elite, AoE confused + vulnerable field",
+          "description": "A large cave spider with crystal-tipped legs that plants resonating crystal traps."
+        },
+        {
+          "name": "Mycelium Horror",
+          "role": "threat, AoE confused + knockback tendrils",
+          "description": "A towering fungal entity with a network of bioluminescent tendrils that whip and flash."
+        },
+        {
+          "name": "Shard Serpent",
+          "role": "fast assassin elite, applies vulnerable + bleeding",
+          "description": "A crystalline snake with razor-edged scales that shed cutting fragments as it moves."
+        }
+      ]
+    },
+    {
+      "name": "boss",
+      "description": "Centerpiece fights — each boss has a signature multi-ability identity and onDeath effects.",
+      "enemies": [
+        {
+          "name": "The Gemwarden",
+          "role": "ranged boss caster, signature PRISM STORM AoE confused + vulnerable",
+          "description": "An ancient salamander shaman fused with a massive crystal formation on its back, wielding refracted light as a weapon."
+        },
+        {
+          "name": "Grotto Titan",
+          "role": "tank boss, hardest single-hit damage in dimension",
+          "description": "An enormous cave hippo armored in fused geode plates, with a crystalline horn that splits into prismatic fractures."
+        },
+        {
+          "name": "The Mycelium",
+          "role": "stationary horror boss, AoE confused + knockback + vulnerable",
+          "description": "A massive fungal network that has overtaken an entire cavern, with a pulsing magenta core surrounded by writhing tendrils."
+        },
+        {
+          "name": "Crystalback Rex",
+          "role": "fast melee boss apex predator, Crystal Charge + vulnerable + bleeding",
+          "description": "A colossal reptilian predator covered in razor-sharp crystal growths, the apex hunter of the deep caverns."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Crystal Shard Blade",
+      "type": "weapon (sword)",
+      "rarity": "common",
+      "description": "A long shard of magenta crystal with a leather-wrapped base. Crude but wickedly sharp, edges glinting with internal light."
+    },
+    {
+      "name": "Stalactite Spear",
+      "type": "weapon (spear)",
+      "rarity": "common",
+      "description": "A broken stalactite sharpened to a point and bound to a fungal-wood shaft. Drips with phosphorescent slime."
+    },
+    {
+      "name": "Fungal Mace",
+      "type": "weapon (sword anim)",
+      "rarity": "uncommon",
+      "description": "A dense mushroom-cap hardened to stone, mounted on a stout handle. Releases disorienting spores on impact."
+    },
+    {
+      "name": "Cavern Bow",
+      "type": "weapon (bow)",
+      "rarity": "common",
+      "description": "A bow of petrified cave-wood strung with spider silk. Fires arrows tipped with crystal shards."
+    },
+    {
+      "name": "Prism Staff",
+      "type": "weapon (staff)",
+      "rarity": "rare",
+      "description": "A staff of dark stone crowned with a multifaceted crystal that refracts light into blinding prismatic beams."
+    },
+    {
+      "name": "Geode Knuckles",
+      "type": "weapon (sword anim)",
+      "rarity": "uncommon",
+      "description": "A pair of cracked geode halves strapped over the fists. The crystalline interior edges cut deep."
+    },
+    {
+      "name": "Mycelium Whip",
+      "type": "weapon (spear)",
+      "rarity": "uncommon",
+      "description": "A long bioluminescent tendril harvested from a fungal horror, still twitching. Reaches far and stings with disorienting toxins."
+    },
+    {
+      "name": "Titan Jawbone",
+      "type": "weapon (two-handed)",
+      "rarity": "rare",
+      "description": "The massive jawbone of a Grotto Titan, studded with crystal teeth. Swinging it shatters the air."
+    },
+    {
+      "name": "Crystal Buckler",
+      "type": "shield",
+      "rarity": "common",
+      "description": "A round shield carved from a single geode slab. The crystalline face refracts light, disorienting attackers."
+    },
+    {
+      "name": "Fungal Bulwark",
+      "type": "shield",
+      "rarity": "uncommon",
+      "description": "A large shield grown from layered fungal plates, reinforced with crystal veins. Tough and slightly luminous."
+    },
+    {
+      "name": "Prism Pendant",
+      "type": "accessory",
+      "rarity": "common",
+      "description": "A small faceted crystal on a cord of braided spider silk. Pulses with soft magenta light."
+    },
+    {
+      "name": "Spore Sachet",
+      "type": "accessory",
+      "rarity": "uncommon",
+      "description": "A sealed pouch of dried cave fungus that releases a steady trickle of protective spores."
+    },
+    {
+      "name": "Salamander Eye",
+      "type": "accessory",
+      "rarity": "rare",
+      "description": "A preserved eye from a grotto elder, set in crystal. It still sees in total darkness."
+    },
+    {
+      "name": "Cave Moss Poultice",
+      "type": "consumable (heal)",
+      "rarity": "common",
+      "description": "A wad of bioluminescent cave moss packed with mineral-rich mud. Glows faintly green when applied."
+    },
+    {
+      "name": "Flashbang Geode",
+      "type": "consumable (damage AoE)",
+      "rarity": "uncommon",
+      "description": "A volatile geode packed with pressurized crystal gas. Shatters in a blinding prismatic explosion."
+    },
+    {
+      "name": "Spore Bomb",
+      "type": "consumable (AoE confused + damage)",
+      "rarity": "rare",
+      "description": "A dense fungal pod filled with concentrated disorienting spores. When crushed, clouds the area in hallucinogenic haze."
+    }
+  ]
+}

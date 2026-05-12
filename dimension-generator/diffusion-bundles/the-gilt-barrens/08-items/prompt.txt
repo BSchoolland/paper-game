@@ -1,0 +1,26 @@
+Dimension: The Gilt Barrens
+Biome: scorched savanna and trade-route desert
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Dune Cleaver (weapon (sword), common) — A broad-bladed machete forged from dark iron, with a sand-leather grip. The edge has a faint golden tint from desert dust.
+  Scorpion Spear (weapon (spear), common) — A long spear tipped with a scorpion stinger, barbed and slightly curved. Bone shaft wrapped in sinew.
+  Sandhorn Bow (weapon (bow), common) — A recurve bow made from polished antelope horn, strung with braided gut. Quiver of flint-tipped arrows.
+  Raider's Twinblade (weapon (sword anim), uncommon) — A pair of short curved scimitars connected by a chain at the pommels. Sand-etched steel.
+  Mirage Staff (weapon (staff), rare) — A staff of petrified desert wood capped with a floating shard of crystal that bends light around it.
+  Viper Fang Dagger (weapon (sword), uncommon) — A curved dagger carved from a giant serpent's fang, still faintly warm. Golden sheen on the blade.
+  Wyrm-Spine Lance (weapon (spear), uncommon) — A lance made from a vertebra of the Sunscorch Wyrm, mounted on an ironwood shaft. Radiates heat.
+  Pharaoh's Crescent (weapon (two-handed), rare) — A massive crescent-bladed polearm of blackened gold, inscribed with ancient glyphs. The blade hums faintly in sunlight.
+  Sandstone Buckler (shield, common) — A round shield carved from dense sandstone, rimmed with hammered copper. Surprisingly light.
+  Gilt Kite Shield (shield, uncommon) — A tall kite shield covered in beaten gold leaf over hardwood, dented and scarred from desert combat.
+  Dust Devil Charm (accessory, common) — A tiny sealed glass vial containing a pinch of ever-swirling sand. Hangs from a leather cord.
+  Golden Scarab (accessory, uncommon) — A palm-sized beetle carved from solid gold, warm to the touch. Its legs twitch occasionally.
+  Eye of the Barrens (accessory, rare) — A polished amber orb set in a gold claw-mount. Looking through it dispels mirages — the world appears stark and true.
+  Desert Salve (consumable (heal), common) — A clay pot of thick aloe-like paste mixed with crushed minerals. Cools burns and closes wounds.
+  Flash Powder (consumable (damage AoE), uncommon) — A pouch of reactive golden dust that ignites on impact, creating a blinding burst of heat and light.
+  Sandtrap Rune (consumable (AoE pull + damage), rare) — A flat stone etched with a spiral glyph. When thrown, the ground collapses into a sucking sand vortex.
