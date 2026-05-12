@@ -3,6 +3,7 @@ import type { AiStrategyType, AttackAbility, Entity, GameState, MoveAbility, Pla
 import { distance, sub, normalize, add, scale } from "../core/vec2.js";
 import { pathfindMove } from "../map/pathfinding.js";
 import { canAffordAbility } from "../combat/ability-cost.js";
+import { getEffectiveDistance } from "../combat/status-modifiers.js";
 
 export interface AiStrategy {
   planActions(entity: Entity, state: GameState): PlayerAction[];
@@ -68,7 +69,8 @@ function tryMove(
 ): Vec2 | null {
   const moveAbility = getMoveAbility(entity);
   if (!moveAbility || !canAffordAbility(entity, moveAbility)) return null;
-  const destination = pathfindMove(entity, target, state.grid, state.entities, moveAbility.distance);
+  const moveDistance = getEffectiveDistance(entity, moveAbility.distance);
+  const destination = pathfindMove(entity, target, state.grid, state.entities, moveDistance);
   if (destination) {
     actions.push({ type: "ability", entityId: entity.id, abilityId: moveAbility.id, destination });
     return destination;
@@ -130,11 +132,12 @@ export const kiteStrategy: AiStrategy = {
 function findRetreatPos(entity: Entity, threat: Entity, state: GameState): Vec2 | null {
   const moveAbility = getMoveAbility(entity);
   if (!moveAbility || !canAffordAbility(entity, moveAbility)) return null;
+  const moveDistance = getEffectiveDistance(entity, moveAbility.distance);
 
   const awayDir = normalize(sub(entity.position, threat.position));
-  const retreatTarget = add(entity.position, scale(awayDir, moveAbility.distance));
+  const retreatTarget = add(entity.position, scale(awayDir, moveDistance));
 
-  const dest = pathfindMove(entity, retreatTarget, state.grid, state.entities, moveAbility.distance);
+  const dest = pathfindMove(entity, retreatTarget, state.grid, state.entities, moveDistance);
   if (dest && distance(dest, threat.position) > distance(entity.position, threat.position)) {
     return dest;
   }
@@ -143,8 +146,8 @@ function findRetreatPos(entity: Entity, threat: Entity, state: GameState): Vec2 
     const cos = Math.cos(angle);
     const sin = Math.sin(angle);
     const rotated = { x: awayDir.x * cos - awayDir.y * sin, y: awayDir.x * sin + awayDir.y * cos };
-    const altTarget = add(entity.position, scale(rotated, moveAbility.distance));
-    const altDest = pathfindMove(entity, altTarget, state.grid, state.entities, moveAbility.distance);
+    const altTarget = add(entity.position, scale(rotated, moveDistance));
+    const altDest = pathfindMove(entity, altTarget, state.grid, state.entities, moveDistance);
     if (altDest && distance(altDest, threat.position) > distance(entity.position, threat.position)) {
       return altDest;
     }
