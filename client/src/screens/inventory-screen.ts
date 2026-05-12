@@ -269,6 +269,8 @@ export class InventoryScreen implements Screen {
             <div><span style="color:#8b8b7a">Damage:</span> ${a.damage}</div>
             <div><span style="color:#8b8b7a">Range:</span> ${rangeText}</div>
             ${a.knockback > 0 ? `<div><span style="color:#8b8b7a">Knockback:</span> ${a.knockback}</div>` : ""}
+            ${a.recoil ? `<div><span style="color:#8b8b7a">Recoil:</span> ${a.recoil}</div>` : ""}
+            ${a.lungeThrough ? `<div><span style="color:#8b8b7a">Lunge:</span> ${a.lungeThrough}</div>` : ""}
             ${a.onHit?.length ? `<div><span style="color:#8b8b7a">On Hit:</span> ${a.onHit.map(e => describeWeaponEffect(e)).join(", ")}</div>` : ""}`;
         });
         statsHtml = `<div style="margin-top:8px">${lines.join("")}</div>`;

@@ -528,6 +528,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 4 },
       damage: 30,
       knockback: 55,
+      recoil: 30,
       visual: { color: 0x707070, trailEffect: "explosion", screenShake: 0.5 },
     } satisfies AttackAbility, {
       id: "mace-overhead",
@@ -546,6 +547,7 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
       shape: { kind: ShapeKind.Rectangle, length: 85, width: 20 },
       damage: 15,
       knockback: 35,
+      lungeThrough: 95,
       visual: { color: 0x707070, trailEffect: "thrust", screenShake: 0.25 },
     } satisfies AttackAbility],
     animSet: "sword",

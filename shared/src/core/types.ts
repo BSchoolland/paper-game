@@ -82,6 +82,10 @@ export interface AttackAbility extends AbilityBase {
   readonly damage: number;
   /** Distance the target is pushed away from the attacker on hit. Set to 0 for no knockback. */
   readonly knockback: number;
+  /** Distance the attacker is shoved backward (opposite the aim direction) after the attack, hit or not. */
+  readonly recoil?: number;
+  /** If the attack connects, the attacker advances this far along the aim line — lunging past the target. */
+  readonly lungeThrough?: number;
   readonly ignoreCoverRange?: number;
   readonly onHit?: readonly WeaponEffect[];
   readonly visual?: AttackVisual;

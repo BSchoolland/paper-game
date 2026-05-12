@@ -46,6 +46,37 @@ describe("turn-resolver", () => {
     expect(next.entities.get("b1")!.dead).toBe(true);
   });
 
+  it("recoil shoves the attacker backward after attacking", () => {
+    const recoilSwing: AttackAbility = {
+      id: "recoil-swing", name: "Recoil Swing", kind: "attack", cost: { red: 1 },
+      shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 }, damage: 5, knockback: 0, recoil: 30,
+    };
+    const state = makeState([
+      makeEntity("r1", 200, 200, "red", { abilities: [recoilSwing] }),
+      makeEntity("b1", 240, 200, "blue"),
+    ]);
+    const { state: next, events } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "recoil-swing", aimDirection: { x: 1, y: 0 } });
+    expect(next.entities.get("r1")!.position.x).toBeLessThan(200);
+    expect(events.some(e => e.type === "move" && e.entityId === "r1")).toBe(true);
+  });
+
+  it("lungeThrough carries the attacker forward only when the attack connects", () => {
+    const lungeStrike: AttackAbility = {
+      id: "lunge-strike", name: "Lunge Strike", kind: "attack", cost: { red: 1 },
+      shape: { kind: ShapeKind.Rectangle, length: 85, width: 20 }, damage: 5, knockback: 0, lungeThrough: 95,
+    };
+    const missState = makeState([makeEntity("r1", 200, 200, "red", { abilities: [lungeStrike] })]);
+    const missed = resolveAction(missState, { type: "ability", entityId: "r1", abilityId: "lunge-strike", aimDirection: { x: 1, y: 0 } });
+    expect(missed.state.entities.get("r1")!.position.x).toBeCloseTo(200);
+
+    const hitState = makeState([
+      makeEntity("r1", 200, 200, "red", { abilities: [lungeStrike] }),
+      makeEntity("b1", 250, 200, "blue"),
+    ]);
+    const hit = resolveAction(hitState, { type: "ability", entityId: "r1", abilityId: "lunge-strike", aimDirection: { x: 1, y: 0 } });
+    expect(hit.state.entities.get("r1")!.position.x).toBeGreaterThan(200);
+  });
+
   it("end turn switches team and regenerates energy up to the cap", () => {
     const state = makeState([
       makeEntity("r1", 100, 100, "red"),

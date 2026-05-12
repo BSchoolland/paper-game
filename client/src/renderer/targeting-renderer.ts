@@ -95,14 +95,15 @@ export function drawTargetingPreview(
 
 /**
  * Draws preview indicators for the *consequences* of an action, off the same `GameEvent`s the
- * authoritative resolver produces. Today that means displacement (knockback / pull): a dotted
- * line from where the target stands to where it lands, plus a ghost ring at the landing spot.
- * Any future positional effect that emits an event is previewed by adding a case here — no
- * second implementation, no drift from the server.
+ * authoritative resolver produces. Today that's displacement — knockback / pull of a target,
+ * or recoil / lunge of the attacker (both of which surface as `move` events): a dotted line
+ * from where the entity stands to where it lands, plus a ghost ring at the landing spot. Any
+ * future positional effect that emits an event is previewed by adding a case here — no second
+ * implementation, no drift from the server.
  */
 export function drawEffectPreview(g: Graphics, events: readonly GameEvent[]): void {
   for (const event of events) {
-    if (event.type === "knockback" || event.type === "pull") {
+    if (event.type === "knockback" || event.type === "pull" || event.type === "move") {
       drawDisplacementGhost(g, event.from, event.to);
     }
   }

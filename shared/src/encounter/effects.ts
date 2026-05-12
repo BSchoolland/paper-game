@@ -55,6 +55,22 @@ export function processEffects(result: ActionResult): ActionResult {
       }
     }
 
+    // Attacker repositioning: recoil shoves the attacker back along the reverse of the aim
+    // line whether or not the swing connected; lungeThrough carries the attacker forward only
+    // when it did. Both surface as ordinary "move" events, so the renderer animates and
+    // previews them with no special-casing.
+    const asMove = (entityId: string, from: Vec2, to: Vec2): GameEvent => ({ type: "move", entityId, from, to });
+    if (ability.recoil && ability.recoil > 0) {
+      const recoiled = slideEntity(event.attackerId, scale(event.aimDirection, -1), ability.recoil, asMove, state);
+      state = recoiled.state;
+      events.push(...recoiled.events);
+    }
+    if (ability.lungeThrough && ability.lungeThrough > 0 && event.hits.length > 0) {
+      const lunged = slideEntity(event.attackerId, event.aimDirection, ability.lungeThrough, asMove, state);
+      state = lunged.state;
+      events.push(...lunged.events);
+    }
+
     for (const hit of event.hits) {
       if (!hit.killed) continue;
       const dead = state.entities.get(hit.targetId);
@@ -85,6 +101,42 @@ function applyWeaponEffect(
   }
 }
 
+/**
+ * Slide an entity along `direction` as far as it can go, up to `maxDist`, stepping inward in
+ * 5-unit increments until it finds a spot that's walkable, in-bounds, and not overlapping
+ * anyone. The single primitive behind knockback, pull, recoil, and lunge — callers just supply
+ * the direction and which event to emit for the move that lands.
+ */
+function slideEntity(
+  entityId: string,
+  direction: Vec2,
+  maxDist: number,
+  makeEvent: (entityId: string, from: Vec2, to: Vec2) => GameEvent,
+  state: ActionResult["state"]
+): { state: ActionResult["state"]; events: GameEvent[] } {
+  const entity = state.entities.get(entityId);
+  if (!entity) return { state, events: [] };
+
+  const dir = normalize(direction);
+  if (dir.x === 0 && dir.y === 0) return { state, events: [] };
+
+  for (let d = maxDist; d > 0; d -= 5) {
+    const dest = add(entity.position, scale(dir, d));
+    if (
+      isPositionWalkable(state.grid, dest, entity.collisionRadius) &&
+      isWithinBounds(state.grid, dest, entity.collisionRadius) &&
+      !entitiesOverlap(dest, entity.collisionRadius, state.entities, entity.id)
+    ) {
+      const from = entity.position;
+      const entities = new Map(state.entities);
+      entities.set(entity.id, { ...entity, position: dest });
+      return { state: { ...state, entities }, events: [makeEvent(entity.id, from, dest)] };
+    }
+  }
+
+  return { state, events: [] };
+}
+
 function knockbackTarget(
   targetId: string,
   attackerPos: Vec2,
@@ -93,28 +145,8 @@ function knockbackTarget(
 ): { state: ActionResult["state"]; events: GameEvent[] } {
   const target = state.entities.get(targetId);
   if (!target) return { state, events: [] };
-
-  const dir = normalize(sub(target.position, attackerPos));
-  if (dir.x === 0 && dir.y === 0) return { state, events: [] };
-
-  for (let d = maxDist; d > 0; d -= 5) {
-    const dest = add(target.position, scale(dir, d));
-    if (
-      isPositionWalkable(state.grid, dest, target.collisionRadius) &&
-      isWithinBounds(state.grid, dest, target.collisionRadius) &&
-      !entitiesOverlap(dest, target.collisionRadius, state.entities, target.id)
-    ) {
-      const from = target.position;
-      const entities = new Map(state.entities);
-      entities.set(target.id, { ...target, position: dest });
-      return {
-        state: { ...state, entities },
-        events: [{ type: "knockback", entityId: target.id, from, to: dest }],
-      };
-    }
-  }
-
-  return { state, events: [] };
+  return slideEntity(targetId, sub(target.position, attackerPos), maxDist,
+    (entityId, from, to) => ({ type: "knockback", entityId, from, to }), state);
 }
 
 function pullTarget(
@@ -125,28 +157,8 @@ function pullTarget(
 ): { state: ActionResult["state"]; events: GameEvent[] } {
   const target = state.entities.get(targetId);
   if (!target) return { state, events: [] };
-
-  const dir = normalize(sub(attackerPos, target.position));
-  if (dir.x === 0 && dir.y === 0) return { state, events: [] };
-
-  for (let d = maxDist; d > 0; d -= 5) {
-    const dest = add(target.position, scale(dir, d));
-    if (
-      isPositionWalkable(state.grid, dest, target.collisionRadius) &&
-      isWithinBounds(state.grid, dest, target.collisionRadius) &&
-      !entitiesOverlap(dest, target.collisionRadius, state.entities, target.id)
-    ) {
-      const from = target.position;
-      const entities = new Map(state.entities);
-      entities.set(target.id, { ...target, position: dest });
-      return {
-        state: { ...state, entities },
-        events: [{ type: "pull", entityId: target.id, from, to: dest }],
-      };
-    }
-  }
-
-  return { state, events: [] };
+  return slideEntity(targetId, sub(attackerPos, target.position), maxDist,
+    (entityId, from, to) => ({ type: "pull", entityId, from, to }), state);
 }
 
 function applyStatusEffect(
