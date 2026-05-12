@@ -29,12 +29,3 @@ export function getEffectiveDistance(entity: Pick<EntityCombat, "statusEffects">
   }
   return baseDistance;
 }
-
-export function isConfused(entity: Pick<EntityCombat, "statusEffects"> & { readonly id: string }, turnNumber: number, actionIndex: number): boolean {
-  const effect = entity.statusEffects?.find(s => s.type === "confused");
-  if (!effect) return false;
-  let h = 5381;
-  const s = `${entity.id}-${turnNumber}-${actionIndex}`;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) & 0x7fffffff;
-  return (h % 100) / 100 < effect.value;
-}

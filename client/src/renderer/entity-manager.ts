@@ -27,7 +27,6 @@ const STATUS_COLORS: Record<string, number> = {
   slowed: 0x5b9bd5,
   weak: 0x9b59b6,
   vulnerable: 0xe67e22,
-  confused: 0xe6d922,
   burning: 0xe74c3c,
   bleeding: 0xc0392b,
   poisoned: 0x2ecc71,

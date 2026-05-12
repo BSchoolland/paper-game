@@ -1,10 +1,10 @@
-import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, StatusEffectType, TeamId, Vec2 } from "../core/types.js";
+import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, StatusEffectType, TeamId } from "../core/types.js";
 import { distance } from "../core/vec2.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { processEffects } from "../encounter/effects.js";
-import { getEffectiveDistance, isConfused } from "./status-modifiers.js";
+import { getEffectiveDistance } from "./status-modifiers.js";
 
 const DOT_TYPES: readonly StatusEffectType[] = ["burning", "bleeding", "poisoned"];
 
@@ -153,18 +153,6 @@ function resolveBarrier(
   };
 }
 
-function flipDirection(dir: Vec2): Vec2 {
-  return { x: -dir.x, y: -dir.y };
-}
-
-function flipDestination(entity: Entity, dest: Vec2): Vec2 {
-  return {
-    x: entity.position.x - (dest.x - entity.position.x),
-    y: entity.position.y - (dest.y - entity.position.y),
-  };
-}
-
-
 function resolveAbility(
   state: GameState,
   entityId: string,
@@ -181,20 +169,17 @@ function resolveAbility(
   if (!canAffordAbility(entity, ability)) return NO_CHANGE(state);
 
   const nextCount = state.actionCount + 1;
-  const confused = isConfused(entity, state.turnNumber, nextCount);
 
   let result: ActionResult;
   switch (ability.kind) {
     case "move": {
       if (!destination) return NO_CHANGE(state);
-      const dest = confused ? flipDestination(entity, destination) : destination;
-      result = resolveMove(state, entity, ability, dest);
+      result = resolveMove(state, entity, ability, destination);
       break;
     }
     case "attack": {
       if (!aimDirection) return NO_CHANGE(state);
-      const aim = confused ? flipDirection(aimDirection) : aimDirection;
-      result = resolveAttack(state, entity, ability, aim);
+      result = resolveAttack(state, entity, ability, aimDirection);
       break;
     }
     case "barrier":

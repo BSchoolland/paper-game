@@ -33,7 +33,6 @@ export type StatusEffectType =
   | "slowed"
   | "weak"
   | "vulnerable"
-  | "confused"
   | "burning"
   | "bleeding"
   | "poisoned";
