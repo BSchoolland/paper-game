@@ -97,7 +97,7 @@ export function drawRoughLine(
 
 export function drawRoughRect(
   g: Graphics,
-  corners: Vec2[],
+  corners: readonly Vec2[],
   wobble: number,
   seed: number
 ) {

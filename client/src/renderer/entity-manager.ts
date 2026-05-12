@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
-import type { AimDirection, AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, TrailEffect, Vec2 } from "shared";
-import { ShapeKind, normalize, length as vecLength, raycast, STATUS_META } from "shared";
+import type { AimDirection, AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, ShapeFootprint, TrailEffect, Vec2 } from "shared";
+import { ShapeKind, computeShapeFootprint, normalize, length as vecLength, raycast, STATUS_META } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark, drawRoughCircle } from "./sketch-utils.js";
 import { FloatingTextManager } from "./floating-text.js";
@@ -245,7 +245,12 @@ export class EntityManager {
     const trail = visual?.trailEffect;
     const circleDist = shape.kind === ShapeKind.Circle ? Math.min(aimLen, shape.range) : 0;
 
-    this.drawShapeFlash(gfx, pos, norm, baseAngle, shape, color, attackerId, ability, state, circleDist);
+    const footprint = computeShapeFootprint(
+      shape, pos, aimDirection,
+      state.entities, state.grid,
+      attackerId, ability.ignoreCoverRange
+    );
+    this.drawShapeFlash(gfx, footprint, color);
 
     if (trail) {
       this.drawTrailEffect(gfx, pos, norm, baseAngle, shape, color, trail, attackerId, ability, state, circleDist);
@@ -255,77 +260,36 @@ export class EntityManager {
     this.attackFlashes.push({ gfx, timer: FLASH_DURATION });
   }
 
-  private drawShapeFlash(
-    gfx: Graphics,
-    pos: Vec2,
-    norm: Vec2,
-    baseAngle: number,
-    shape: CombatShapeDefinition,
-    color: number,
-    attackerId: string,
-    ability: AttackAbility,
-    state: GameState,
-    circleDist: number
-  ) {
-    switch (shape.kind) {
+  private drawShapeFlash(gfx: Graphics, footprint: ShapeFootprint, color: number) {
+    switch (footprint.kind) {
       case ShapeKind.Sector: {
-        gfx.moveTo(pos.x, pos.y);
-        drawRoughArc(
-          gfx, pos.x, pos.y,
-          shape.radius,
-          baseAngle - shape.halfAngle,
-          baseAngle + shape.halfAngle,
-          1.5, 24, 71
-        );
-        gfx.lineTo(pos.x, pos.y);
+        gfx.moveTo(footprint.origin.x, footprint.origin.y);
+        drawRoughArc(gfx, footprint.origin.x, footprint.origin.y, footprint.radius, footprint.startAngle, footprint.endAngle, 1.5, 24, 71);
+        gfx.lineTo(footprint.origin.x, footprint.origin.y);
         gfx.fill({ color, alpha: 0.25 });
         gfx.stroke({ color, alpha: 0.7, width: 1.5 });
         break;
       }
       case ShapeKind.Rectangle: {
-        const perpX = -norm.y;
-        const perpY = norm.x;
-        const hw = shape.width / 2;
-
-        const corners = [
-          { x: pos.x + perpX * hw, y: pos.y + perpY * hw },
-          { x: pos.x + norm.x * shape.length + perpX * hw, y: pos.y + norm.y * shape.length + perpY * hw },
-          { x: pos.x + norm.x * shape.length - perpX * hw, y: pos.y + norm.y * shape.length - perpY * hw },
-          { x: pos.x - perpX * hw, y: pos.y - perpY * hw },
-        ];
-
-        drawRoughRect(gfx, corners, 1, 73);
+        drawRoughRect(gfx, footprint.corners, 1, 73);
         gfx.fill({ color, alpha: 0.25 });
         gfx.stroke({ color, alpha: 0.7, width: 1.5 });
         break;
       }
       case ShapeKind.Point: {
-        const result = raycast(
-          pos, norm, shape.range,
-          state.entities, state.grid,
-          attackerId, ability.ignoreCoverRange
-        );
-
-        drawRoughLine(gfx, pos.x, pos.y, result.endPoint.x, result.endPoint.y, 0.8, 77);
+        drawRoughLine(gfx, footprint.from.x, footprint.from.y, footprint.to.x, footprint.to.y, 0.8, 77);
         gfx.stroke({ color, alpha: 0.8, width: 2 });
-
-        if (result.hit) {
-          drawXMark(gfx, result.endPoint.x, result.endPoint.y, 7, 79);
+        if (footprint.hitEntityId) {
+          drawXMark(gfx, footprint.to.x, footprint.to.y, 7, 79);
           gfx.stroke({ color, alpha: 0.9, width: 2 });
         }
         break;
       }
       case ShapeKind.Circle: {
-        const targetX = pos.x + norm.x * circleDist;
-        const targetY = pos.y + norm.y * circleDist;
-        drawRoughArc(gfx, targetX, targetY, shape.radius, 0, Math.PI * 2, 1.5, 24, 83);
+        drawRoughArc(gfx, footprint.center.x, footprint.center.y, footprint.radius, 0, Math.PI * 2, 1.5, 24, 83);
         gfx.fill({ color, alpha: 0.2 });
         gfx.stroke({ color, alpha: 0.7, width: 1.5 });
         break;
-      }
-      default: {
-        const _exhaustive: never = shape;
-        throw new Error(`Unhandled shape kind: ${(_exhaustive as CombatShapeDefinition).kind}`);
       }
     }
   }

@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Sprite, Text } from "pixi.js";
 import type { AttackAbility, BarrierAbility, GameEvent, GridState, Vec2 } from "shared";
-import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, getAbilityCost, resolveWeaponAttack, sub, length as vecLength } from "shared";
+import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, getAbilityCost, resolveAction, sub, length as vecLength } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
   createBackground,
@@ -8,7 +8,7 @@ import {
   getBottomY,
 } from "./grid-renderer.js";
 import { EntityManager } from "./entity-manager.js";
-import { drawTargetingPreview } from "./targeting-renderer.js";
+import { drawTargetingPreview, drawEffectPreview } from "./targeting-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
 import type { FramePacer, PacerToken } from "./frame-pacer.js";
 
@@ -214,14 +214,17 @@ export class GameRenderer {
 
       const dir = sub(mouseWorld, entity.position);
       if (vecLength(dir) >= 1) {
-        const targets = resolveWeaponAttack(entity, dir, state.entities, atk, state.grid);
-        this.entities!.setDamagePreview(targets.map(t => ({
-          entityId: t.id,
-          damage: atk.damage,
-          currentHp: t.hp,
-          maxHp: t.maxHp,
-          barrier: t.barrier,
-        })));
+        // Dry-run the real resolver: preview = "what events would this action produce".
+        // Damage numbers, knockback, pull, status — all derived from the same code path
+        // the server runs, so new mechanics are previewed the moment they emit events.
+        const preview = resolveAction(state, { type: "ability", entityId: selectedId, abilityId: atk.id, aimDirection: dir });
+        const attackEvt = preview.events.find(e => e.type === "attack");
+        const hits = attackEvt && attackEvt.type === "attack" ? attackEvt.hits : [];
+        this.entities!.setDamagePreview(hits.flatMap(h => {
+          const t = state.entities.get(h.targetId);
+          return t ? [{ entityId: h.targetId, damage: h.damage, currentHp: t.hp, maxHp: t.maxHp, barrier: t.barrier }] : [];
+        }));
+        drawEffectPreview(this.targetingGfx, preview.events);
       } else {
         this.entities!.clearDamagePreview();
       }

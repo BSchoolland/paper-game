@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveAction } from "../combat/turn-resolver.js";
+import { resolveAction, isActionLegal } from "../combat/turn-resolver.js";
 import { makeEntity, makeState } from "./test-helpers.js";
 import type { AttackAbility, StatusEffect } from "../core/types.js";
 import { ShapeKind } from "../core/types.js";
@@ -23,10 +23,9 @@ describe("turn-resolver", () => {
     expect(next).toBe(state);
   });
 
-  it("rejects wrong team action", () => {
+  it("flags a wrong-team action as illegal", () => {
     const state = makeState([makeEntity("b1", 100, 100, "blue")]);
-    const { state: next } = resolveAction(state, { type: "ability", entityId: "b1", abilityId: "move", destination: { x: 150, y: 100 } });
-    expect(next).toBe(state);
+    expect(isActionLegal(state, { type: "ability", entityId: "b1", abilityId: "move", destination: { x: 150, y: 100 } })).toBe(false);
   });
 
   it("attack damages enemy in range", () => {

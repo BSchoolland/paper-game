@@ -1,5 +1,5 @@
 import type { GameState, PlayerAction } from "shared";
-import { resolveAction, shouldAutoEndTurn } from "shared";
+import { resolveAction, isActionLegal, shouldAutoEndTurn } from "shared";
 
 type Listener = () => void;
 
@@ -25,6 +25,7 @@ export class LocalGameStore implements GameStore {
   }
 
   dispatch(action: PlayerAction) {
+    if (!isActionLegal(this.state, action)) return;
     const result = resolveAction(this.state, action);
     if (result.state !== this.state) {
       this.state = result.state;

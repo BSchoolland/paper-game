@@ -1,6 +1,7 @@
 import type { AbilityDefinition, AnimSet, GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord, ItemDefinition, AttachmentData } from "shared";
 import {
   resolveAction,
+  isActionLegal,
   createGameState,
   serializeGameState,
   AiController,
@@ -58,6 +59,7 @@ export class EncounterSession {
   }
 
   applyAction(action: PlayerAction): { changed: boolean; events: readonly GameEvent[] } {
+    if (!isActionLegal(this.state, action)) return { changed: false, events: [] };
     const result = resolveAction(this.state, action);
     if (result.state !== this.state) {
       this.state = result.state;

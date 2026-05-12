@@ -160,7 +160,6 @@ function resolveAbility(
 ): ActionResult {
   const entity = state.entities.get(entityId);
   if (!entity || entity.dead) return NO_CHANGE(state);
-  if (entity.teamId !== state.activeTeam) return NO_CHANGE(state);
 
   const ability = findAbility(entity, abilityId);
   if (!ability) return NO_CHANGE(state);
@@ -288,6 +287,19 @@ export function createGameState(init: {
     },
     team,
   ).state;
+}
+
+/**
+ * Whether the active team is allowed to take `action` right now. The pure resolver no longer
+ * enforces turn order — that's a session-layer rule — so authoritative callers (the server,
+ * the offline store) gate on this before applying, while the preview path runs the resolver
+ * directly so it can show what *would* happen on your turn.
+ */
+export function isActionLegal(state: GameState, action: PlayerAction): boolean {
+  if (state.winner) return false;
+  if (action.type === "endTurn") return true;
+  const entity = state.entities.get(action.entityId);
+  return !!entity && !entity.dead && entity.teamId === state.activeTeam;
 }
 
 export function resolveAction(
