@@ -1,7 +1,7 @@
 import { ShapeKind } from "shared";
 import type { AttackAbility, MoveAbility, SpriteSet, UnitTemplate, ItemDefinition } from "shared";
 import type { StructureEntry } from "shared";
-import { saveDimension, saveEnemyTemplates, saveItems, getDimensionCount } from "./db.js";
+import { saveDimension, saveEnemyTemplates, saveItems, getDimensionCount, withStructureIndices } from "./db.js";
 
 function enemySprites(dimension: number, name: string): SpriteSet {
   const base = `/api/sprites/enemies/dimension-${dimension}/${name}/${name}`;
@@ -215,33 +215,33 @@ function dim0Sprite(folder: string, name: string): string {
   return `sprites/map-objects/${sub}${name}.webp`;
 }
 
-const DIMENSION_0_STRUCTURES: StructureEntry[] = [
-  { name: "tree-oak-small", category: "decoration", cost: 1, scale: 0.35, spritePath: dim0Sprite("plants", "tree-oak-small") },
-  { name: "tree-oak-medium", category: "decoration", cost: 2, scale: 0.4, spritePath: dim0Sprite("plants", "tree-oak-medium") },
-  { name: "tree-oak-large", category: "decoration", cost: 3, scale: 0.45, spritePath: dim0Sprite("plants", "tree-oak-large") },
-  { name: "tree-pine", category: "decoration", cost: 2, scale: 0.45, spritePath: dim0Sprite("plants", "tree-pine") },
-  { name: "bush-small", category: "decoration", cost: 1, scale: 0.3, spritePath: dim0Sprite("plants", "bush-small") },
-  { name: "bush-medium", category: "decoration", cost: 1, scale: 0.35, spritePath: dim0Sprite("plants", "bush-medium") },
-  { name: "bush-large", category: "decoration", cost: 2, scale: 0.35, spritePath: dim0Sprite("plants", "bush-large") },
-  { name: "grass-small", category: "decoration", cost: 1, scale: 0.25, spritePath: dim0Sprite("plants", "grass-small") },
-  { name: "grass-medium", category: "decoration", cost: 1, scale: 0.25, spritePath: dim0Sprite("plants", "grass-medium") },
-  { name: "grass-large", category: "decoration", cost: 1, scale: 0.3, spritePath: dim0Sprite("plants", "grass-large") },
-  { name: "rock-small", category: "decoration", cost: 1, scale: 0.25, spritePath: dim0Sprite("rocks", "rock-small") },
-  { name: "rock-medium", category: "decoration", cost: 2, scale: 0.3, spritePath: dim0Sprite("rocks", "rock-medium") },
-  { name: "rock-large", category: "decoration", cost: 3, scale: 0.35, spritePath: dim0Sprite("rocks", "rock-large") },
-  { name: "rock-pile", category: "decoration", cost: 2, scale: 0.3, spritePath: dim0Sprite("rocks", "rock-pile") },
-  { name: "ruins-rubble", category: "decoration", cost: 2, scale: 0.35, spritePath: dim0Sprite("", "ruins-rubble") },
-  { name: "stone-block", category: "wall", cost: 2, scale: 0.25, spritePath: dim0Sprite("walls", "stone-block") },
-  { name: "stone-brick", category: "wall", cost: 2, scale: 0.25, spritePath: dim0Sprite("walls", "stone-brick") },
-  { name: "stone-pillar", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "stone-pillar") },
-  { name: "wall-corner", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-corner") },
-  { name: "wall-enclosure", category: "wall", cost: 4, scale: 0.35, spritePath: dim0Sprite("walls", "wall-enclosure") },
-  { name: "wall-long", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-long") },
-  { name: "wall-medium", category: "wall", cost: 2, scale: 0.3, spritePath: dim0Sprite("walls", "wall-medium") },
-  { name: "wall-short", category: "wall", cost: 1, scale: 0.25, spritePath: dim0Sprite("walls", "wall-short") },
-  { name: "wall-t-junction", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-t-junction") },
-  { name: "wall-u-shape", category: "wall", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-u-shape") },
-];
+const DIMENSION_0_STRUCTURES: StructureEntry[] = withStructureIndices([
+  { name: "tree-oak-small", cost: 1, scale: 0.35, spritePath: dim0Sprite("plants", "tree-oak-small") },
+  { name: "tree-oak-medium", cost: 2, scale: 0.4, spritePath: dim0Sprite("plants", "tree-oak-medium") },
+  { name: "tree-oak-large", cost: 3, scale: 0.45, spritePath: dim0Sprite("plants", "tree-oak-large") },
+  { name: "tree-pine", cost: 2, scale: 0.45, spritePath: dim0Sprite("plants", "tree-pine") },
+  { name: "bush-small", cost: 1, scale: 0.3, spritePath: dim0Sprite("plants", "bush-small") },
+  { name: "bush-medium", cost: 1, scale: 0.35, spritePath: dim0Sprite("plants", "bush-medium") },
+  { name: "bush-large", cost: 2, scale: 0.35, spritePath: dim0Sprite("plants", "bush-large") },
+  { name: "grass-small", cost: 1, scale: 0.25, spritePath: dim0Sprite("plants", "grass-small") },
+  { name: "grass-medium", cost: 1, scale: 0.25, spritePath: dim0Sprite("plants", "grass-medium") },
+  { name: "grass-large", cost: 1, scale: 0.3, spritePath: dim0Sprite("plants", "grass-large") },
+  { name: "rock-small", cost: 1, scale: 0.25, spritePath: dim0Sprite("rocks", "rock-small") },
+  { name: "rock-medium", cost: 2, scale: 0.3, spritePath: dim0Sprite("rocks", "rock-medium") },
+  { name: "rock-large", cost: 3, scale: 0.35, spritePath: dim0Sprite("rocks", "rock-large") },
+  { name: "rock-pile", cost: 2, scale: 0.3, spritePath: dim0Sprite("rocks", "rock-pile") },
+  { name: "ruins-rubble", cost: 2, scale: 0.35, spritePath: dim0Sprite("", "ruins-rubble") },
+  { name: "stone-block", cost: 2, scale: 0.25, spritePath: dim0Sprite("walls", "stone-block") },
+  { name: "stone-brick", cost: 2, scale: 0.25, spritePath: dim0Sprite("walls", "stone-brick") },
+  { name: "stone-pillar", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "stone-pillar") },
+  { name: "wall-corner", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-corner") },
+  { name: "wall-enclosure", cost: 4, scale: 0.35, spritePath: dim0Sprite("walls", "wall-enclosure") },
+  { name: "wall-long", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-long") },
+  { name: "wall-medium", cost: 2, scale: 0.3, spritePath: dim0Sprite("walls", "wall-medium") },
+  { name: "wall-short", cost: 1, scale: 0.25, spritePath: dim0Sprite("walls", "wall-short") },
+  { name: "wall-t-junction", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-t-junction") },
+  { name: "wall-u-shape", cost: 3, scale: 0.3, spritePath: dim0Sprite("walls", "wall-u-shape") },
+]);
 
 // --- Weapon Abilities (dimension 0) ---
 

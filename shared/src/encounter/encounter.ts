@@ -87,57 +87,49 @@ function rollStructures(
   if (pool.length === 0) return [];
 
   const style = profile.structureStyle;
-  const filtered = filterStructuresByStyle(pool, style);
-  if (filtered.length === 0) return [];
+  const maxIndex = pool.reduce((m, s) => Math.max(m, s.index), 0) || 1;
 
   const picks: StructureEntry[] = [];
   let budgetRemaining = profile.structureBudget;
 
-  const affordable = () => filtered.filter((s) => s.cost <= budgetRemaining);
+  const affordable = () => pool.filter((s) => s.cost <= budgetRemaining);
 
   let candidates = affordable();
   while (candidates.length > 0) {
-    const idx = Math.floor(rng.next() * candidates.length);
-    const entry = candidates[idx]!;
-    picks.push(entry);
-    budgetRemaining -= entry.cost;
+    const weights = candidates.map((s) => structureWeight(s.index, maxIndex, style));
+    const totalWeight = weights.reduce((a, b) => a + b, 0);
+    let roll = rng.next() * totalWeight;
+    let picked = candidates[0]!;
+    for (let i = 0; i < candidates.length; i++) {
+      roll -= weights[i]!;
+      if (roll <= 0) { picked = candidates[i]!; break; }
+    }
+    picks.push(picked);
+    budgetRemaining -= picked.cost;
     candidates = affordable();
   }
 
   return placeObjects(
-    picks.map((e) => ({ name: e.name, category: e.category, scale: e.scale })),
+    picks.map((e) => ({ name: e.name, scale: e.scale })),
     800,
     600,
     rng
   );
 }
 
-function filterStructuresByStyle(
-  pool: readonly StructureEntry[],
+function structureWeight(
+  index: number,
+  maxIndex: number,
   style: EncounterProfile["structureStyle"]
-): StructureEntry[] {
+): number {
+  const t = maxIndex > 0 ? index / maxIndex : 0.5;
   switch (style) {
     case "natural":
-      return pool.filter((s) => s.category === "decoration");
-    case "ruins":
-      return pool.filter(
-        (s) =>
-          s.name.includes("ruins") ||
-          s.name.includes("rock") ||
-          s.name.includes("stone") ||
-          s.category === "wall"
-      );
+      return 1 + 3 * (1 - t);
     case "fortified":
-      return pool.filter(
-        (s) => s.category === "wall" || s.name.includes("stone")
-      );
     case "arena":
-      return pool.filter(
-        (s) =>
-          s.category === "wall" &&
-          (s.name.includes("enclosure") ||
-            s.name.includes("u-shape") ||
-            s.name.includes("long"))
-      );
+      return 1 + 3 * t;
+    case "ruins":
+      return 1;
   }
 }

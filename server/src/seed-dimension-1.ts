@@ -1,7 +1,7 @@
 import { ShapeKind } from "shared";
 import type { AttackAbility, MoveAbility, SpriteSet, UnitTemplate, ItemDefinition } from "shared";
 import type { StructureEntry } from "shared";
-import { saveDimension, saveEnemyTemplates, saveItems } from "./db.js";
+import { saveDimension, saveEnemyTemplates, saveItems, withStructureIndices } from "./db.js";
 
 function enemySprites(name: string): SpriteSet {
   const base = `/api/sprites/enemies/dimension-1/${name}/${name}`;
@@ -586,38 +586,38 @@ function dim1Sprite(folder: string, name: string): string {
   return `sprites/map-objects/dimension-1/${folder}/${name}.webp`;
 }
 
-const DIMENSION_1_STRUCTURES: StructureEntry[] = [
+const DIMENSION_1_STRUCTURES: StructureEntry[] = withStructureIndices([
   // Decorations
-  { name: "coral-small", category: "decoration", cost: 1, scale: 0.35, spritePath: dim1Sprite("plants", "coral-small") },
-  { name: "coral-medium", category: "decoration", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "coral-medium") },
-  { name: "coral-tube", category: "decoration", cost: 3, scale: 0.45, spritePath: dim1Sprite("plants", "coral-tube") },
-  { name: "coral-brain", category: "decoration", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "coral-brain") },
-  { name: "coral-fan", category: "decoration", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "coral-fan") },
-  { name: "kelp-tall", category: "decoration", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "kelp-tall") },
-  { name: "reed-cluster", category: "decoration", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "reed-cluster") },
-  { name: "algae-glow", category: "decoration", cost: 1, scale: 0.3, spritePath: dim1Sprite("plants", "algae-glow") },
-  { name: "tidepool-small", category: "decoration", cost: 1, scale: 0.35, spritePath: dim1Sprite("plants", "tidepool-small") },
-  { name: "tidepool-large", category: "decoration", cost: 3, scale: 0.45, spritePath: dim1Sprite("plants", "tidepool-large") },
-  { name: "shell-pile", category: "decoration", cost: 1, scale: 0.3, spritePath: dim1Sprite("plants", "shell-pile") },
-  { name: "driftwood", category: "decoration", cost: 2, scale: 0.35, spritePath: dim1Sprite("plants", "driftwood") },
-  { name: "barnacle-rock", category: "decoration", cost: 2, scale: 0.35, spritePath: dim1Sprite("plants", "barnacle-rock") },
-  { name: "tidal-crystal", category: "decoration", cost: 2, scale: 0.3, spritePath: dim1Sprite("rocks", "tidal-crystal") },
+  { name: "coral-small", cost: 1, scale: 0.35, spritePath: dim1Sprite("plants", "coral-small") },
+  { name: "coral-medium", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "coral-medium") },
+  { name: "coral-tube", cost: 3, scale: 0.45, spritePath: dim1Sprite("plants", "coral-tube") },
+  { name: "coral-brain", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "coral-brain") },
+  { name: "coral-fan", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "coral-fan") },
+  { name: "kelp-tall", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "kelp-tall") },
+  { name: "reed-cluster", cost: 2, scale: 0.4, spritePath: dim1Sprite("plants", "reed-cluster") },
+  { name: "algae-glow", cost: 1, scale: 0.3, spritePath: dim1Sprite("plants", "algae-glow") },
+  { name: "tidepool-small", cost: 1, scale: 0.35, spritePath: dim1Sprite("plants", "tidepool-small") },
+  { name: "tidepool-large", cost: 3, scale: 0.45, spritePath: dim1Sprite("plants", "tidepool-large") },
+  { name: "shell-pile", cost: 1, scale: 0.3, spritePath: dim1Sprite("plants", "shell-pile") },
+  { name: "driftwood", cost: 2, scale: 0.35, spritePath: dim1Sprite("plants", "driftwood") },
+  { name: "barnacle-rock", cost: 2, scale: 0.35, spritePath: dim1Sprite("plants", "barnacle-rock") },
+  { name: "tidal-crystal", cost: 2, scale: 0.3, spritePath: dim1Sprite("rocks", "tidal-crystal") },
   // Walls
-  { name: "sandstone-block", category: "wall", cost: 2, scale: 0.25, spritePath: dim1Sprite("walls", "sandstone-block") },
-  { name: "sandstone-brick", category: "wall", cost: 2, scale: 0.25, spritePath: dim1Sprite("walls", "sandstone-brick") },
-  { name: "sandstone-pillar", category: "wall", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "sandstone-pillar") },
-  { name: "coral-wall-corner", category: "wall", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "coral-wall-corner") },
-  { name: "coral-wall-medium", category: "wall", cost: 2, scale: 0.3, spritePath: dim1Sprite("walls", "coral-wall-medium") },
-  { name: "coral-wall-long", category: "wall", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "coral-wall-long") },
-  { name: "wall-l-shape", category: "wall", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "wall-l-shape") },
-  { name: "wall-corner", category: "wall", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "wall-corner") },
-  { name: "wall-t-junction", category: "wall", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "wall-t-junction") },
-  { name: "wall-u-shape", category: "wall", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "wall-u-shape") },
-  { name: "wall-enclosure", category: "wall", cost: 4, scale: 0.35, spritePath: dim1Sprite("walls", "wall-enclosure") },
-  { name: "ruins-rubble", category: "decoration", cost: 2, scale: 0.35, spritePath: dim1Sprite("walls", "ruins-rubble") },
-  { name: "turret-ruin", category: "wall", cost: 4, scale: 0.35, spritePath: dim1Sprite("walls", "turret-ruin") },
-  { name: "wooden-gate", category: "wall", cost: 2, scale: 0.3, spritePath: dim1Sprite("walls", "wooden-gate") },
-];
+  { name: "sandstone-block", cost: 2, scale: 0.25, spritePath: dim1Sprite("walls", "sandstone-block") },
+  { name: "sandstone-brick", cost: 2, scale: 0.25, spritePath: dim1Sprite("walls", "sandstone-brick") },
+  { name: "sandstone-pillar", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "sandstone-pillar") },
+  { name: "coral-wall-corner", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "coral-wall-corner") },
+  { name: "coral-wall-medium", cost: 2, scale: 0.3, spritePath: dim1Sprite("walls", "coral-wall-medium") },
+  { name: "coral-wall-long", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "coral-wall-long") },
+  { name: "wall-l-shape", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "wall-l-shape") },
+  { name: "wall-corner", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "wall-corner") },
+  { name: "wall-t-junction", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "wall-t-junction") },
+  { name: "wall-u-shape", cost: 3, scale: 0.3, spritePath: dim1Sprite("walls", "wall-u-shape") },
+  { name: "wall-enclosure", cost: 4, scale: 0.35, spritePath: dim1Sprite("walls", "wall-enclosure") },
+  { name: "ruins-rubble", cost: 2, scale: 0.35, spritePath: dim1Sprite("walls", "ruins-rubble") },
+  { name: "turret-ruin", cost: 4, scale: 0.35, spritePath: dim1Sprite("walls", "turret-ruin") },
+  { name: "wooden-gate", cost: 2, scale: 0.3, spritePath: dim1Sprite("walls", "wooden-gate") },
+]);
 
 // =============================================================================
 // ITEMS — The Shallows

@@ -19,7 +19,7 @@ function makeMove(distance: number): MoveAbility {
 
 // =============================================================================
 // ENEMIES — The Gilt Barrens
-// Mechanical identity: confused + bleeding. Ambush predators, mirages, desert heat.
+// Mechanical identity: bleeding. Ambush predators, mirages, desert heat.
 // =============================================================================
 
 // --- Fodder ---
@@ -42,7 +42,7 @@ const MIRAGE_WISP_SHIMMER_BOLT: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 200 },
   damage: 7,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 2, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "bleeding", duration: 2, value: 3 }],
   visual: { color: 0xf0d060, trailEffect: "projectile" },
 };
 
@@ -65,7 +65,7 @@ const DUST_DEVIL_GUST: AttackAbility = {
   shape: { kind: ShapeKind.Point, range: 180 },
   damage: 6,
   onHit: [
-    { type: "applyStatus", status: "confused", duration: 2, value: 1 },
+    { type: "applyStatus", status: "bleeding", duration: 2, value: 3 },
     { type: "knockback", distance: 25 },
   ],
   visual: { color: 0xd4a533, trailEffect: "projectile", screenShake: 0.15 },
@@ -144,7 +144,7 @@ const SHIMMER_STALKER_MIRAGE_FLASH: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 220 },
   damage: 12,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "bleeding", duration: 3, value: 4 }],
   visual: { color: 0xe0c870, trailEffect: "projectile", screenShake: 0.2 },
 };
 
@@ -189,7 +189,7 @@ const OASIS_GUARDIAN_MIRAGE_PULSE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 80, range: 0 },
   damage: 12,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "bleeding", duration: 3, value: 4 }],
   visual: { color: 0xf0d060, trailEffect: "explosion", screenShake: 0.4 },
 };
 
@@ -244,7 +244,7 @@ const SANDWRAITH_MIRAGE_STEP: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 55, range: 0 },
   damage: 15,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 2, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "bleeding", duration: 2, value: 3 }],
   visual: { color: 0xd4a533, trailEffect: "explosion", screenShake: 0.3 },
 };
 
@@ -279,7 +279,7 @@ const SUNSCORCH_WYRM_SANDSTORM_BREATH: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Sector, radius: 100, halfAngle: Math.PI / 3 },
   damage: 35,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "bleeding", duration: 3, value: 4 }],
   visual: { color: 0xd4a533, trailEffect: "splash", screenShake: 0.7 },
 };
 
@@ -316,7 +316,7 @@ const FALSE_OASIS_MIRAGE_PULL: AttackAbility = {
   damage: 5,
   onHit: [
     { type: "pull", distance: 90 },
-    { type: "applyStatus", status: "confused", duration: 3, value: 1 },
+    { type: "applyStatus", status: "bleeding", duration: 3, value: 4 },
   ],
   visual: { color: 0x5090c0, trailEffect: "projectile", screenShake: 0.2 },
 };
@@ -339,7 +339,7 @@ const FALSE_OASIS_SHIMMER_WAVE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 90, range: 0 },
   damage: 15,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "bleeding", duration: 3, value: 4 }],
   visual: { color: 0x5090c0, trailEffect: "splash", screenShake: 0.4 },
 };
 
@@ -350,7 +350,7 @@ const PHARAOH_SANDSTORM: AttackAbility = {
   cost: { red: 2 },
   shape: { kind: ShapeKind.Circle, radius: 95, range: 180 },
   damage: 30,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "bleeding", duration: 3, value: 4 }],
   visual: { color: 0xd4a533, trailEffect: "splash", screenShake: 0.7 },
 };
 
@@ -590,46 +590,25 @@ const ENEMY_TEMPLATES: Record<string, UnitTemplate> = {
 // STRUCTURES — The Gilt Barrens
 // =============================================================================
 
-function dim3Sprite(name: string): string {
-  return `sprites/map-objects/dimension-3/${name}.webp`;
+const STRUCTURE_COUNT = 29;
+
+function buildDim3Structures(): StructureEntry[] {
+  const entries: StructureEntry[] = [];
+  for (let i = 0; i < STRUCTURE_COUNT; i++) {
+    const id = String(i).padStart(2, "0");
+    const t = STRUCTURE_COUNT > 1 ? i / (STRUCTURE_COUNT - 1) : 0;
+    entries.push({
+      name: `structure-${id}`,
+      index: i,
+      cost: t < 0.33 ? 1 : t < 0.66 ? 2 : 3,
+      scale: 0.25 + t * 0.15,
+      spritePath: `sprites/map-objects/dimension-3/sprite-${id}.webp`,
+    });
+  }
+  return entries;
 }
 
-const DIMENSION_3_STRUCTURES: StructureEntry[] = [
-  // Trees
-  { name: "dead-tree", category: "decoration", cost: 2, scale: 0.4, spritePath: dim3Sprite("sprite-00") },
-  { name: "palm-tree", category: "decoration", cost: 3, scale: 0.45, spritePath: dim3Sprite("sprite-01") },
-  { name: "acacia-large", category: "decoration", cost: 3, scale: 0.45, spritePath: dim3Sprite("sprite-02") },
-  { name: "acacia-small", category: "decoration", cost: 2, scale: 0.35, spritePath: dim3Sprite("sprite-03") },
-  // Bushes / plants
-  { name: "dry-scrub", category: "decoration", cost: 1, scale: 0.3, spritePath: dim3Sprite("sprite-04") },
-  { name: "yellow-bush", category: "decoration", cost: 1, scale: 0.3, spritePath: dim3Sprite("sprite-05") },
-  { name: "bush-cluster", category: "decoration", cost: 2, scale: 0.35, spritePath: dim3Sprite("sprite-06") },
-  { name: "agave", category: "decoration", cost: 1, scale: 0.3, spritePath: dim3Sprite("sprite-07") },
-  // Rocks
-  { name: "rock-small", category: "decoration", cost: 1, scale: 0.3, spritePath: dim3Sprite("sprite-08") },
-  { name: "rock-medium", category: "decoration", cost: 2, scale: 0.35, spritePath: dim3Sprite("sprite-09") },
-  { name: "boulder", category: "decoration", cost: 2, scale: 0.4, spritePath: dim3Sprite("sprite-10") },
-  { name: "rock-pile", category: "decoration", cost: 2, scale: 0.35, spritePath: dim3Sprite("sprite-11") },
-  { name: "crystal-cluster", category: "decoration", cost: 2, scale: 0.35, spritePath: dim3Sprite("sprite-12") },
-  { name: "crystal-small", category: "decoration", cost: 1, scale: 0.25, spritePath: dim3Sprite("sprite-13") },
-  { name: "grass-tuft", category: "decoration", cost: 1, scale: 0.25, spritePath: dim3Sprite("sprite-14") },
-  // Walls
-  { name: "sandstone-block", category: "wall", cost: 2, scale: 0.25, spritePath: dim3Sprite("sprite-15") },
-  { name: "sandstone-brick", category: "wall", cost: 2, scale: 0.25, spritePath: dim3Sprite("sprite-16") },
-  { name: "sandstone-pillar", category: "wall", cost: 3, scale: 0.3, spritePath: dim3Sprite("sprite-17") },
-  { name: "wall-short", category: "wall", cost: 2, scale: 0.3, spritePath: dim3Sprite("sprite-18") },
-  { name: "wall-medium", category: "wall", cost: 3, scale: 0.3, spritePath: dim3Sprite("sprite-19") },
-  { name: "wall-long", category: "wall", cost: 3, scale: 0.3, spritePath: dim3Sprite("sprite-20") },
-  { name: "wall-l-shape", category: "wall", cost: 3, scale: 0.3, spritePath: dim3Sprite("sprite-21") },
-  { name: "wall-corner", category: "wall", cost: 3, scale: 0.3, spritePath: dim3Sprite("sprite-22") },
-  { name: "wall-t-junction", category: "wall", cost: 3, scale: 0.3, spritePath: dim3Sprite("sprite-23") },
-  { name: "wall-u-shape", category: "wall", cost: 3, scale: 0.3, spritePath: dim3Sprite("sprite-24") },
-  { name: "wall-enclosure", category: "wall", cost: 4, scale: 0.35, spritePath: dim3Sprite("sprite-25") },
-  // Structures
-  { name: "ruins-rubble", category: "decoration", cost: 2, scale: 0.35, spritePath: dim3Sprite("sprite-26") },
-  { name: "camp-ruin", category: "decoration", cost: 3, scale: 0.4, spritePath: dim3Sprite("sprite-27") },
-  { name: "well", category: "decoration", cost: 3, scale: 0.4, spritePath: dim3Sprite("sprite-28") },
-];
+const DIMENSION_3_STRUCTURES = buildDim3Structures();
 
 // =============================================================================
 // ITEMS — The Gilt Barrens
@@ -781,7 +760,7 @@ const DIMENSION_3_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Circle, radius: 70, range: 200 },
       damage: 18,
-      onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+      onHit: [{ type: "applyStatus", status: "bleeding", duration: 3, value: 4 }],
       visual: { color: 0xf0d060, trailEffect: "splash", screenShake: 0.35 },
     } satisfies AttackAbility, {
       id: "mirage-staff-crystal-bolt",
@@ -798,7 +777,7 @@ const DIMENSION_3_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 1 },
       shape: { kind: ShapeKind.Circle, radius: 55, range: 0 },
       damage: 10,
-      onHit: [{ type: "applyStatus", status: "confused", duration: 2, value: 1 }],
+      onHit: [{ type: "applyStatus", status: "bleeding", duration: 2, value: 3 }],
       visual: { color: 0xf0d060, trailEffect: "explosion", screenShake: 0.3 },
     } satisfies AttackAbility],
     animSet: "staff",

@@ -127,6 +127,13 @@ export function saveDimension(
   insertDimensionStmt.run(id, name, JSON.stringify(structures), backgroundPath ?? null, hexDecorationsPath ?? null);
 }
 
+/** Assigns each structure an `index` matching its position (sprite-sheet order). */
+export function withStructureIndices(
+  entries: readonly Omit<StructureEntry, "index">[],
+): StructureEntry[] {
+  return entries.map((s, index) => ({ ...s, index }));
+}
+
 export function saveEnemyTemplate(
   id: string,
   dimensionId: number,

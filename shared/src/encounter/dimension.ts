@@ -1,9 +1,8 @@
 import type { UnitTemplate } from "../core/types.js";
-import type { MapObjectCategory } from "../map/map-definition.js";
 
 export interface StructureEntry {
   readonly name: string;
-  readonly category: MapObjectCategory;
+  readonly index: number;
   readonly cost: number;
   readonly scale: number;
   readonly spritePath?: string;

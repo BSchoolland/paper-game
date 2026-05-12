@@ -89,10 +89,6 @@ export function stampMapObjects(
     const image = getImage(obj.name);
     if (!image) continue;
 
-    if (obj.category === "wall") {
-      stampWallCollision(walls, grid, obj.position, obj.scale, anchorX, anchorY, image);
-    } else {
-      stampDecorationCollision(walls, grid, obj.position, obj.scale, anchorX, anchorY, image);
-    }
+    stampDecorationCollision(walls, grid, obj.position, obj.scale, anchorX, anchorY, image);
   }
 }

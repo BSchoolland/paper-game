@@ -43,7 +43,7 @@ export class EncounterSession {
       setTemplateRegistry(registry);
       const encounter = generateEncounter(hexType, dimension, hexCoord.q, hexCoord.r, runId);
       const map = buildEncounterMap(encounter);
-      await loadCollisionGrid(map.grid, map.mapDefinition.objects);
+      await loadCollisionGrid(map.grid, map.mapDefinition.objects, dimension.structures);
       const entities = placeEncounterEntities(encounter, map.grid, itemAbilities, animSet, equipped, attachments);
       return new EncounterSession(assembleEncounterState(map, entities));
     }

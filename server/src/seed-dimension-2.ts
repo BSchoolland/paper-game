@@ -1,7 +1,7 @@
 import { ShapeKind } from "shared";
 import type { AttackAbility, MoveAbility, SpriteSet, UnitTemplate, ItemDefinition } from "shared";
 import type { StructureEntry } from "shared";
-import { saveDimension, saveEnemyTemplates, saveItems } from "./db.js";
+import { saveDimension, saveEnemyTemplates, saveItems, withStructureIndices } from "./db.js";
 
 function enemySprites(name: string): SpriteSet {
   const base = `/api/sprites/enemies/dimension-2/${name}/${name}`;
@@ -19,7 +19,7 @@ function makeMove(distance: number): MoveAbility {
 
 // =============================================================================
 // ENEMIES — The Gloom Hollows
-// Mechanical identity: confused, vulnerable, knockback from crystal bursts.
+// Mechanical identity: vulnerable, knockback from crystal bursts.
 // =============================================================================
 
 // --- Fodder ---
@@ -31,7 +31,7 @@ const CAVE_MITE_CRYSTAL_BITE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 45, halfAngle: Math.PI / 4 },
   damage: 7,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 2, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
   visual: { color: 0xc060b0, trailEffect: "slash", screenShake: 0.15 },
 };
 
@@ -42,7 +42,7 @@ const SPORE_PUFFER_SPORE_BURST: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Point, range: 200 },
   damage: 6,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 2, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
   visual: { color: 0x9b5de5, trailEffect: "projectile" },
 };
 
@@ -98,7 +98,7 @@ const GROTTO_SALAMANDER_DISORIENTING_LICK: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 65, halfAngle: Math.PI / 3 },
   damage: 10,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 2, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
   visual: { color: 0x9b5de5, trailEffect: "splash", screenShake: 0.2 },
 };
 
@@ -109,7 +109,7 @@ const PRISM_MOTH_PRISMATIC_DUST: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 60, range: 170 },
   damage: 12,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 3, value: 0.4 }],
   visual: { color: 0xe760c9, trailEffect: "splash", screenShake: 0.2 },
 };
 
@@ -130,7 +130,7 @@ const FUNGAL_SHAMBLER_SPORE_SLAM: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 2 },
   damage: 16,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 2, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
   visual: { color: 0x6edeb8, trailEffect: "slash", screenShake: 0.35 },
 };
 
@@ -198,7 +198,6 @@ const CRYSTAL_WEAVER_RESONANCE_FIELD: AttackAbility = {
   shape: { kind: ShapeKind.Circle, radius: 70, range: 170 },
   damage: 15,
   onHit: [
-    { type: "applyStatus", status: "confused", duration: 3, value: 1 },
     { type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 },
   ],
   visual: { color: 0x9b5de5, trailEffect: "splash", screenShake: 0.4 },
@@ -232,7 +231,7 @@ const MYCELIUM_HORROR_MIND_SPORE: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 80, range: 160 },
   damage: 10,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 3, value: 0.4 }],
   visual: { color: 0x9b5de5, trailEffect: "splash", screenShake: 0.3 },
 };
 
@@ -270,7 +269,6 @@ const GEMWARDEN_PRISM_STORM: AttackAbility = {
   shape: { kind: ShapeKind.Circle, radius: 85, range: 180 },
   damage: 30,
   onHit: [
-    { type: "applyStatus", status: "confused", duration: 3, value: 1 },
     { type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 },
   ],
   visual: { color: 0xe760c9, trailEffect: "splash", screenShake: 0.7 },
@@ -327,7 +325,7 @@ const THE_MYCELIUM_SPORE_NOVA: AttackAbility = {
   cost: { red: 1 },
   shape: { kind: ShapeKind.Circle, radius: 90, range: 170 },
   damage: 12,
-  onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+  onHit: [{ type: "applyStatus", status: "vulnerable", duration: 3, value: 0.4 }],
   visual: { color: 0x9b5de5, trailEffect: "splash", screenShake: 0.4 },
 };
 
@@ -587,38 +585,38 @@ function dim2Sprite(folder: string, name: string): string {
   return `sprites/map-objects/dimension-2/${folder}/${name}.webp`;
 }
 
-const DIMENSION_2_STRUCTURES: StructureEntry[] = [
+const DIMENSION_2_STRUCTURES: StructureEntry[] = withStructureIndices([
   // Decorations (plants)
-  { name: "mushroom-cluster-pink", category: "decoration", cost: 2, scale: 0.4, spritePath: dim2Sprite("plants", "mushroom-cluster-pink") },
-  { name: "mushroom-cluster-teal", category: "decoration", cost: 2, scale: 0.4, spritePath: dim2Sprite("plants", "mushroom-cluster-teal") },
-  { name: "shelf-fungi", category: "decoration", cost: 2, scale: 0.4, spritePath: dim2Sprite("plants", "shelf-fungi") },
-  { name: "crystal-cluster-small", category: "decoration", cost: 2, scale: 0.35, spritePath: dim2Sprite("plants", "crystal-cluster-small") },
-  { name: "crystal-cluster-medium", category: "decoration", cost: 2, scale: 0.35, spritePath: dim2Sprite("plants", "crystal-cluster-medium") },
-  { name: "crystal-cluster-large", category: "decoration", cost: 3, scale: 0.4, spritePath: dim2Sprite("plants", "crystal-cluster-large") },
-  { name: "glowing-puddle", category: "decoration", cost: 1, scale: 0.3, spritePath: dim2Sprite("plants", "glowing-puddle") },
+  { name: "mushroom-cluster-pink", cost: 2, scale: 0.4, spritePath: dim2Sprite("plants", "mushroom-cluster-pink") },
+  { name: "mushroom-cluster-teal", cost: 2, scale: 0.4, spritePath: dim2Sprite("plants", "mushroom-cluster-teal") },
+  { name: "shelf-fungi", cost: 2, scale: 0.4, spritePath: dim2Sprite("plants", "shelf-fungi") },
+  { name: "crystal-cluster-small", cost: 2, scale: 0.35, spritePath: dim2Sprite("plants", "crystal-cluster-small") },
+  { name: "crystal-cluster-medium", cost: 2, scale: 0.35, spritePath: dim2Sprite("plants", "crystal-cluster-medium") },
+  { name: "crystal-cluster-large", cost: 3, scale: 0.4, spritePath: dim2Sprite("plants", "crystal-cluster-large") },
+  { name: "glowing-puddle", cost: 1, scale: 0.3, spritePath: dim2Sprite("plants", "glowing-puddle") },
   // Decorations (rocks)
-  { name: "stalagmite-cluster", category: "decoration", cost: 3, scale: 0.4, spritePath: dim2Sprite("rocks", "stalagmite-cluster") },
-  { name: "stalagmite-small", category: "decoration", cost: 1, scale: 0.25, spritePath: dim2Sprite("rocks", "stalagmite-small") },
-  { name: "stalagmite-tall", category: "decoration", cost: 2, scale: 0.35, spritePath: dim2Sprite("rocks", "stalagmite-tall") },
-  { name: "geode-boulder", category: "decoration", cost: 3, scale: 0.4, spritePath: dim2Sprite("rocks", "geode-boulder") },
-  { name: "cracked-boulder", category: "decoration", cost: 2, scale: 0.35, spritePath: dim2Sprite("rocks", "cracked-boulder") },
-  { name: "crystal-rubble", category: "decoration", cost: 2, scale: 0.35, spritePath: dim2Sprite("rocks", "crystal-rubble") },
+  { name: "stalagmite-cluster", cost: 3, scale: 0.4, spritePath: dim2Sprite("rocks", "stalagmite-cluster") },
+  { name: "stalagmite-small", cost: 1, scale: 0.25, spritePath: dim2Sprite("rocks", "stalagmite-small") },
+  { name: "stalagmite-tall", cost: 2, scale: 0.35, spritePath: dim2Sprite("rocks", "stalagmite-tall") },
+  { name: "geode-boulder", cost: 3, scale: 0.4, spritePath: dim2Sprite("rocks", "geode-boulder") },
+  { name: "cracked-boulder", cost: 2, scale: 0.35, spritePath: dim2Sprite("rocks", "cracked-boulder") },
+  { name: "crystal-rubble", cost: 2, scale: 0.35, spritePath: dim2Sprite("rocks", "crystal-rubble") },
   // Walls
-  { name: "stone-block-small", category: "wall", cost: 2, scale: 0.25, spritePath: dim2Sprite("walls", "stone-block-small") },
-  { name: "stone-block-medium", category: "wall", cost: 2, scale: 0.25, spritePath: dim2Sprite("walls", "stone-block-medium") },
-  { name: "cave-wall-long", category: "wall", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "cave-wall-long") },
-  { name: "stone-brick-small", category: "wall", cost: 2, scale: 0.25, spritePath: dim2Sprite("walls", "stone-brick-small") },
-  { name: "stone-brick-medium", category: "wall", cost: 2, scale: 0.25, spritePath: dim2Sprite("walls", "stone-brick-medium") },
-  { name: "crystal-pillar", category: "wall", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "crystal-pillar") },
-  { name: "wall-l-shape", category: "wall", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "wall-l-shape") },
-  { name: "wall-t-junction", category: "wall", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "wall-t-junction") },
-  { name: "wall-u-shape", category: "wall", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "wall-u-shape") },
-  { name: "wall-enclosure", category: "wall", cost: 4, scale: 0.35, spritePath: dim2Sprite("walls", "wall-enclosure") },
-  { name: "wall-enclosure-large", category: "wall", cost: 4, scale: 0.35, spritePath: dim2Sprite("walls", "wall-enclosure-large") },
-  { name: "ruins-rubble", category: "decoration", cost: 2, scale: 0.35, spritePath: dim2Sprite("walls", "ruins-rubble") },
-  { name: "crystal-gate", category: "wall", cost: 4, scale: 0.35, spritePath: dim2Sprite("walls", "crystal-gate") },
-  { name: "crystal-obelisk", category: "decoration", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "crystal-obelisk") },
-];
+  { name: "stone-block-small", cost: 2, scale: 0.25, spritePath: dim2Sprite("walls", "stone-block-small") },
+  { name: "stone-block-medium", cost: 2, scale: 0.25, spritePath: dim2Sprite("walls", "stone-block-medium") },
+  { name: "cave-wall-long", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "cave-wall-long") },
+  { name: "stone-brick-small", cost: 2, scale: 0.25, spritePath: dim2Sprite("walls", "stone-brick-small") },
+  { name: "stone-brick-medium", cost: 2, scale: 0.25, spritePath: dim2Sprite("walls", "stone-brick-medium") },
+  { name: "crystal-pillar", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "crystal-pillar") },
+  { name: "wall-l-shape", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "wall-l-shape") },
+  { name: "wall-t-junction", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "wall-t-junction") },
+  { name: "wall-u-shape", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "wall-u-shape") },
+  { name: "wall-enclosure", cost: 4, scale: 0.35, spritePath: dim2Sprite("walls", "wall-enclosure") },
+  { name: "wall-enclosure-large", cost: 4, scale: 0.35, spritePath: dim2Sprite("walls", "wall-enclosure-large") },
+  { name: "ruins-rubble", cost: 2, scale: 0.35, spritePath: dim2Sprite("walls", "ruins-rubble") },
+  { name: "crystal-gate", cost: 4, scale: 0.35, spritePath: dim2Sprite("walls", "crystal-gate") },
+  { name: "crystal-obelisk", cost: 3, scale: 0.3, spritePath: dim2Sprite("walls", "crystal-obelisk") },
+]);
 
 // =============================================================================
 // ITEMS — The Gloom Hollows
@@ -641,7 +639,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 75, halfAngle: Math.PI / 3 },
       damage: 20,
-      onHit: [{ type: "applyStatus", status: "confused", duration: 2, value: 1 }],
+      onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
       visual: { color: 0xe760c9, trailEffect: "slash", screenShake: 0.3 },
     } satisfies AttackAbility, {
       id: "crystal-jab",
@@ -701,7 +699,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 2 },
       damage: 24,
-      onHit: [{ type: "applyStatus", status: "confused", duration: 3, value: 1 }],
+      onHit: [{ type: "applyStatus", status: "vulnerable", duration: 3, value: 0.4 }],
       visual: { color: 0x9b5de5, trailEffect: "slash", screenShake: 0.4 },
     } satisfies AttackAbility, {
       id: "spore-cloud-swing",
@@ -710,7 +708,7 @@ const DIMENSION_2_ITEMS: Record<string, ItemDefinition> = {
       cost: { red: 2 },
       shape: { kind: ShapeKind.Circle, radius: 55, range: 0 },
       damage: 14,
-      onHit: [{ type: "applyStatus", status: "confused", duration: 2, value: 1 }],
+      onHit: [{ type: "applyStatus", status: "vulnerable", duration: 2, value: 0.3 }],
       visual: { color: 0x9b5de5, trailEffect: "explosion", screenShake: 0.35 },
     } satisfies AttackAbility, {
       id: "fungal-bash",

@@ -1,11 +1,8 @@
 import type { Vec2 } from "../core/types.js";
 import { Rng } from "../core/rng.js";
 
-export type MapObjectCategory = "wall" | "decoration";
-
 export interface MapObjectPlacement {
   readonly name: string;
-  readonly category: MapObjectCategory;
   readonly position: Vec2;
   readonly scale: number;
 }
@@ -17,7 +14,6 @@ export interface MapDefinition {
 
 export interface PlaceableObject {
   readonly name: string;
-  readonly category: MapObjectCategory;
   readonly scale: number;
 }
 
@@ -47,7 +43,7 @@ export function placeObjects(
       )
     );
 
-    result.push({ name: obj.name, category: obj.category, position: { x, y }, scale: obj.scale });
+    result.push({ name: obj.name, position: { x, y }, scale: obj.scale });
     placed.push({ x, y, r: obj.scale * 30 });
   }
 
@@ -126,12 +122,12 @@ export function generateMapObjects(
 
   for (let i = 0; i < wallCount; i++) {
     const name = WALL_OBJECTS[Math.floor(rng.next() * WALL_OBJECTS.length)]!;
-    picks.push({ name, category: "wall", scale: OBJECT_SCALES[name] ?? 0.3 });
+    picks.push({ name, scale: OBJECT_SCALES[name] ?? 0.3 });
   }
 
   for (let i = 0; i < decoCount; i++) {
     const name = DECORATION_OBJECTS[Math.floor(rng.next() * DECORATION_OBJECTS.length)]!;
-    picks.push({ name, category: "decoration", scale: OBJECT_SCALES[name] ?? 0.3 });
+    picks.push({ name, scale: OBJECT_SCALES[name] ?? 0.3 });
   }
 
   const objects = placeObjects(picks, worldWidth, worldHeight, rng);
