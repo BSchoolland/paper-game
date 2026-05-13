@@ -11,6 +11,10 @@ export function setTemplateRegistry(registry: Record<string, UnitTemplate>): voi
   activeTemplateRegistry = registry;
 }
 
+export function getTemplateRegistry(): Record<string, UnitTemplate> | null {
+  return activeTemplateRegistry;
+}
+
 function getTemplate(key: string): UnitTemplate | undefined {
   return activeTemplateRegistry?.[key];
 }

@@ -30,7 +30,7 @@ import { canAffordAbility, getEffectiveDistance } from "../../../shared/src/inde
 import { add, sub, scale, normalize, length } from "../../../shared/src/core/vec2.js";
 import {
   tryAction, resolveAction, teamOf, livingEnemies, livingAllies, nearest, centroid, dist,
-  attackAbilities, attackRange, moveAbility, attackHits, pathToward, basicScore,
+  attackAbilities, attackRange, moveAbility, attackHits, pathToward, basicScore, effectiveHp,
   simulateMyAlliesTurn, simulateScriptedTurn,
 } from "../../src/toolkit.js";
 
@@ -474,7 +474,7 @@ function foeTotals(s: GameState, myTeam: TeamId): { hp: number; max: number; ali
   for (const e of s.entities.values()) {
     if (e.teamId === myTeam) continue;
     max += e.maxHp;
-    if (!e.dead) { hp += e.hp + e.barrier; alive++; }
+    if (!e.dead) { hp += effectiveHp(e); alive++; }
   }
   return { hp, max, alive };
 }

@@ -20,7 +20,7 @@ import { canAffordAbility, getEffectiveDistance } from "../../../shared/src/inde
 import { add, sub, scale, normalize } from "../../../shared/src/core/vec2.js";
 import {
   tryAction, resolveAction, teamOf, livingEnemies, livingAllies, nearest, centroid, dist,
-  attackAbilities, attackRange, moveAbility, attackHits, pathToward,
+  attackAbilities, attackRange, moveAbility, attackHits, pathToward, effectiveHp,
   simulateMyAlliesTurn, simulateScriptedTurn,
 } from "../../src/toolkit.js";
 
@@ -398,7 +398,7 @@ function staticEval(s: GameState, heroId: EntityId, team: TeamId): number {
   let foeSqrtHp = 0;
   for (const e of s.entities.values()) {
     if (e.teamId === foeTeam && !e.dead)
-      foeSqrtHp += Math.sqrt((e.hp + e.barrier) / e.maxHp);
+      foeSqrtHp += Math.sqrt(effectiveHp(e) / e.maxHp);
   }
   v -= W_FOCUS_FIRE * (foeTot > 0 ? foeSqrtHp / foeTot : 0);
 

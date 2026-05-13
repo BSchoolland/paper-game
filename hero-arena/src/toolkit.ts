@@ -8,6 +8,7 @@ import {
   resolveAction as engineResolve,
   pathfindMove,
   getEffectiveDistance,
+  getTemplateRegistry,
 } from "../../shared/src/index.js";
 import type {
   AttackAbility, Entity, EntityId, GameState, MoveAbility, PlayerAction, TeamId, Vec2,
@@ -138,6 +139,21 @@ function closestEnemyDist(e: Entity, s: GameState): number {
 
 // --- evaluation building block ---------------------------------------------
 
+/** Current HP + barrier for a living entity, plus the HP of anything it spawns on death.
+ *  For a dead entity returns 0. This prevents evals from seeing a kill as "bad" when the
+ *  target splits into weaker units (e.g. big-slime → 2× slime). */
+export function effectiveHp(e: Entity): number {
+  if (e.dead) return 0;
+  let hp = e.hp + e.barrier;
+  const reg = getTemplateRegistry();
+  if (reg) {
+    for (const fx of e.effects ?? [])
+      if (fx.trigger === "onDeath" && fx.action.type === "spawn")
+        hp += fx.action.count * (reg[fx.action.templateKey]?.hp ?? 0);
+  }
+  return hp;
+}
+
 /**
  * A simple, symmetric board score from `team`'s point of view, in roughly [-2, +2]: team HP%
  * differential, plus a bonus for the alive-unit-count differential, plus a decisive ±10 for a
@@ -148,7 +164,7 @@ export function basicScore(s: GameState, team: TeamId): number {
   const foe: TeamId = team === "red" ? "blue" : "red";
   let ourHp = 0, ourMax = 0, ourAlive = 0, ourTot = 0, foeHp = 0, foeMax = 0, foeAlive = 0, foeTot = 0;
   for (const e of s.entities.values()) {
-    const hp = e.dead ? 0 : e.hp + e.barrier;
+    const hp = e.dead ? 0 : effectiveHp(e);
     if (e.teamId === team) { ourMax += e.maxHp; ourHp += hp; ourTot++; if (!e.dead) ourAlive++; }
     else { foeMax += e.maxHp; foeHp += hp; foeTot++; if (!e.dead) foeAlive++; }
   }
