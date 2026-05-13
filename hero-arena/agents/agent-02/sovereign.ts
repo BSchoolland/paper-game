@@ -51,15 +51,18 @@ export interface Weights {
   allyHp: number;
 }
 
+// Self-play tuned (seeds 1/7/42/99, 800ms turn budget, 70-turn cap, 2 passes vs frozen champion +
+// reference anchor). Changes from the hand-tuned start: heroHp 0.8→0.6 (less HP hoarding),
+// heroThreat 0.45→0.563 (slightly more risk-averse), allyHp 0.15→0.188 (value ally upkeep more).
 export const DEFAULT_WEIGHTS: Weights = {
-  heroHp: 0.8,
+  heroHp: 0.6,
   heroDead: 2.0,
-  heroThreat: 0.45,
+  heroThreat: 0.563,
   heroOffense: 0.7,
   enemyCluster: 0.25,
   heroDrift: 1.1,
   heroCohesion: 0.8,
-  allyHp: 0.15,
+  allyHp: 0.188,
 };
 
 // ---------------------------------------------------------------------------
