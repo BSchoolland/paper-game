@@ -1,14 +1,13 @@
 /**
- * agent-02's hero entry. Replace `hero` below with your own `HeroController` (see hero-arena/README.md).
- * Keep this file's export name `hero`. You may add more files in this folder and import them here.
+ * agent-02 — "Sovereign". A beam-search hero engine with a king-safety-aware, self-play-tuned
+ * evaluation. See `sovereign.ts` for the design notes; `tune.ts` for the weight tuner.
  *
- * Test your bot:
+ * Test:
  *   bun hero-arena/src/harness.ts agent-02 baseline       # vs the dumb baseline
- *   bun hero-arena/src/harness.ts agent-02 agent-02       # mirror — fight yourself (self-play)
  *   bun hero-arena/src/harness.ts agent-02 agent-01 42    # head to head on seed 42
- * Then watch it:  http://localhost:5173/?mode=replay
+ *   bun hero-arena/agents/agent-02/tune.ts                # self-play weight tuning
  */
-import { referenceHero } from "../../src/reference-bot.js";
 import type { HeroController } from "../../src/types.js";
+import { sovereignHero } from "./sovereign.js";
 
-export const hero: HeroController = referenceHero;
+export const hero: HeroController = sovereignHero;

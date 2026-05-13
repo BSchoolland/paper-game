@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import {
-  buildScenarioMap, createGameState, makeEntity, findWalkablePosition,
+  buildScenarioMap, createGameState, makeEntity, findWalkablePosition, setTemplateRegistry,
 } from "../../shared/src/index.js";
 import type { Entity, EntityId, GameState, TeamId, UnitTemplate } from "../../shared/src/index.js";
 import { HERO_TEMPLATE } from "./loadout.js";
@@ -52,6 +52,9 @@ export async function buildArena(seed: number): Promise<Arena> {
   await loadCollisionGrid(grid, mapDefinition.objects);
 
   const reg = loadEnemyTemplateRegistry(0);
+  // The engine's onDeath spawns (e.g. a big slime splitting into two slimes) look up the spawn
+  // template by key from this global registry — set it, or the split silently no-ops.
+  setTemplateRegistry(reg);
   const nonBoss = Object.keys(reg).filter(k => !(reg[k]!.tags ?? []).includes("boss")).sort();
   if (nonBoss.length === 0) throw new Error("dimension 0 has no (non-boss) enemy templates seeded — run the server seed first");
   const allyKeys = [...PREFERRED_ALLIES.filter(k => nonBoss.includes(k)), ...nonBoss.filter(k => !PREFERRED_ALLIES.includes(k))].slice(0, ALLIES_PER_SIDE);

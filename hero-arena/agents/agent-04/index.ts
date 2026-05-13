@@ -1,14 +1,15 @@
 /**
- * agent-04's hero entry. Replace `hero` below with your own `HeroController` (see hero-arena/README.md).
- * Keep this file's export name `hero`. You may add more files in this folder and import them here.
+ * agent-04 — "Vanguard".
  *
- * Test your bot:
+ * Exhaustive BFS turn enumeration + adversarial minimax with focus-fire evaluation.
+ *
+ * Test:
  *   bun hero-arena/src/harness.ts agent-04 baseline       # vs the dumb baseline
- *   bun hero-arena/src/harness.ts agent-04 agent-04       # mirror — fight yourself (self-play)
- *   bun hero-arena/src/harness.ts agent-04 agent-01 42    # head to head on seed 42
- * Then watch it:  http://localhost:5173/?mode=replay
+ *   bun hero-arena/src/harness.ts agent-04 agent-01 42    # vs Beamblade
+ *   bun hero-arena/src/harness.ts agent-04 agent-02 7     # vs Sovereign
+ *   bun hero-arena/src/harness.ts agent-04 agent-03 42    # vs Overlord
  */
-import { referenceHero } from "../../src/reference-bot.js";
 import type { HeroController } from "../../src/types.js";
+import { vanguardHero } from "./vanguard.js";
 
-export const hero: HeroController = referenceHero;
+export const hero: HeroController = vanguardHero;
