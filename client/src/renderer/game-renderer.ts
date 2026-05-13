@@ -1,5 +1,5 @@
 import { Application, Container, Graphics, Sprite, Text } from "pixi.js";
-import type { AttackAbility, BarrierAbility, GameEvent, GridState, Vec2 } from "shared";
+import type { AttackAbility, BarrierAbility, GameEvent, GridState, Vec2, ZoneAbility } from "shared";
 import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, getAbilityCost, resolveAction, sub, length as vecLength } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
@@ -9,6 +9,7 @@ import {
 } from "./grid-renderer.js";
 import { EntityManager } from "./entity-manager.js";
 import { drawTargetingPreview, drawEffectPreview } from "./targeting-renderer.js";
+import { drawZones } from "./zone-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
 import type { FramePacer, PacerToken } from "./frame-pacer.js";
 
@@ -29,6 +30,7 @@ export class GameRenderer {
   private backgroundLayer = new Container();
   private sortableLayer = new Container();
   private overlayLayer = new Container();
+  private zonesGfx = new Graphics();
   private targetingGfx = new Graphics();
   private moveGfx = new Graphics();
   private costLabel = new Text({ text: "", style: { fontSize: 11, fontFamily: "monospace", fontWeight: "bold", fill: 0x4a3728 } });
@@ -45,6 +47,7 @@ export class GameRenderer {
   private selectionToken: PacerToken | null = null;
   private shakeIntensity = 0;
   private shakeTimer = 0;
+  private playbackSpeed = 1;
   private baseOffsetX = 0;
   private baseOffsetY = 0;
   private lastMouseWorld: Vec2 = { x: 0, y: 0 };
@@ -80,6 +83,8 @@ export class GameRenderer {
     const enterState = this.clientState.getState();
     if (enterState) {
       this.entities.sync(enterState, this.clientState.selectedEntityId);
+      this.zonesGfx.clear();
+      drawZones(this.zonesGfx, enterState.zones);
     }
     this.bringToFront();
     this.outerContainer.visible = true;
@@ -88,7 +93,7 @@ export class GameRenderer {
       this.tickerActive = true;
       this.app.ticker.add((ticker) => {
         if (!this.outerContainer.visible || !this.entities) return;
-        const dt = ticker.deltaTime / 60;
+        const dt = (ticker.deltaTime / 60) * this.playbackSpeed;
         const shaking = this.shakeTimer > 0;
         const animating = this.entities.isAnimating() || shaking;
         if (animating !== this.wasAnimating) {
@@ -176,11 +181,18 @@ export class GameRenderer {
     return this.entities?.isAnimating() ?? false;
   }
 
+  /** Multiplies the animation clock — 1 = normal, 2 = twice as fast, etc. */
+  setPlaybackSpeed(speed: number) {
+    this.playbackSpeed = speed;
+  }
+
   render() {
     if (!this.entities) return;
     const renderState = this.clientState.getState();
     if (!renderState) return;
     this.entities.sync(renderState, this.clientState.selectedEntityId);
+    this.zonesGfx.clear();
+    drawZones(this.zonesGfx, renderState.zones);
     this.renderOverlay(this.lastMouseWorld);
     this.debugLayer.visible = this.clientState.showDebugWalls;
 
@@ -242,6 +254,22 @@ export class GameRenderer {
       );
       const cost = selectedAbility.cost.blue ?? 0;
       this.showCostLabel(entity, cost, entity.energy.blue, "#2980b9");
+    } else if (selectedAbility?.kind === "zone") {
+      const za = selectedAbility as ZoneAbility;
+      const usesRed = !!za.cost.red;
+      const pool = usesRed ? entity.energy.red : entity.energy.blue;
+      // Placement-range ring around the caster.
+      this.targetingGfx.circle(entity.position.x, entity.position.y, za.range);
+      this.targetingGfx.stroke({ color: 0x4a3728, alpha: 0.22, width: 1.2 });
+      const dir = sub(mouseWorld, entity.position);
+      if (vecLength(dir) >= 1 && pool >= (za.cost.red ?? za.cost.blue ?? 0)) {
+        // Dry-run: a placeable zone yields a zoneCreated event, which drawEffectPreview draws
+        // at the clamped centre; an illegal spot (wall on a body / existing wall) yields nothing.
+        const preview = resolveAction(state, { type: "ability", entityId: selectedId, abilityId: za.id, aimDirection: dir });
+        drawEffectPreview(this.targetingGfx, preview.events);
+      }
+      const cost = za.cost.red ?? za.cost.blue ?? 0;
+      this.showCostLabel(entity, cost, pool, usesRed ? "#c0392b" : "#2980b9");
     } else if (
       selectedAbility?.kind === "move" &&
       entity.energy.blue > 0
@@ -299,6 +327,7 @@ export class GameRenderer {
   private rebuildGrid() {
     this.targetingGfx.removeFromParent();
     this.moveGfx.removeFromParent();
+    this.zonesGfx.removeFromParent();
     this.costLabel.removeFromParent();
     for (const child of this.worldContainer.children) {
       child.destroy({ children: true });
@@ -311,6 +340,9 @@ export class GameRenderer {
     this.backgroundLayer = new Container();
     this.backgroundLayer.addChild(createBackground(grid));
     this.worldContainer.addChild(this.backgroundLayer);
+
+    // Persistent zone discs sit on the ground, under entities.
+    this.worldContainer.addChild(this.zonesGfx);
 
     this.sortableLayer = new Container();
     this.sortableLayer.sortableChildren = true;

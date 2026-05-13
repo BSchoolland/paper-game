@@ -269,10 +269,21 @@ export class InventoryScreen implements Screen {
             <div><span style="color:#8b8b7a">Damage:</span> ${a.damage}</div>
             <div><span style="color:#8b8b7a">Range:</span> ${rangeText}</div>
             ${a.knockback > 0 ? `<div><span style="color:#8b8b7a">Knockback:</span> ${a.knockback}</div>` : ""}
+            ${a.wallSlamDamage ? `<div><span style="color:#8b8b7a">Wall slam:</span> ${a.wallSlamDamage}</div>` : ""}
             ${a.recoil ? `<div><span style="color:#8b8b7a">Recoil:</span> ${a.recoil}</div>` : ""}
             ${a.lungeThrough ? `<div><span style="color:#8b8b7a">Lunge:</span> ${a.lungeThrough}</div>` : ""}
             ${a.onHit?.length ? `<div><span style="color:#8b8b7a">On Hit:</span> ${a.onHit.map(e => describeWeaponEffect(e)).join(", ")}</div>` : ""}`;
         });
+        const zones = w.abilities.filter(a => a.kind === "zone") as import("shared").ZoneAbility[];
+        for (const z of zones) {
+          const costParts: string[] = [];
+          if (z.cost.red) costParts.push(`${z.cost.red} red`);
+          if (z.cost.blue) costParts.push(`${z.cost.blue} blue`);
+          lines.push(`
+            <div style="margin-top:4px"><strong>${z.name}</strong> (${costParts.join(" + ")})</div>
+            <div><span style="color:#8b8b7a">Zone:</span> ${z.zone.effect} · radius ${z.zone.radius} · ${z.zone.duration} turns${z.zone.magnitude ? ` · ${z.zone.magnitude}` : ""}</div>
+            <div><span style="color:#8b8b7a">Place range:</span> ${z.range}</div>`);
+        }
         statsHtml = `<div style="margin-top:8px">${lines.join("")}</div>`;
         break;
       }

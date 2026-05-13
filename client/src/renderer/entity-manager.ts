@@ -1,5 +1,5 @@
 import { Container, Graphics } from "pixi.js";
-import type { AimDirection, AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, ShapeFootprint, TrailEffect, Vec2 } from "shared";
+import type { AimDirection, AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, ShapeFootprint, TrailEffect, Vec2, ZoneEffectKind } from "shared";
 import { ShapeKind, computeShapeFootprint, normalize, length as vecLength, raycast, STATUS_META } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark, drawRoughCircle } from "./sketch-utils.js";
@@ -9,6 +9,25 @@ const FOOT_OFFSET = 272 * 0.2 * (1 - 0.75);
 const DEFAULT_FLASH_COLOR = 0x8b2020;
 const FLASH_DURATION = 0.4;
 const HIT_DELAY = 0.2;
+
+const ZONE_TICK_LABEL: Record<ZoneEffectKind, (m: number) => string> = {
+  damage: (m) => `-${m}`,
+  heal: (m) => `+${m}`,
+  addBarrier: (m) => `+${m} shield`,
+  drainRed: () => STATUS_META.suppressed.label,
+  drainBlue: () => STATUS_META.winded.label,
+  cover: () => "",
+  wall: () => "",
+};
+const ZONE_TICK_COLOR: Record<ZoneEffectKind, number> = {
+  damage: 0xc0392b,
+  heal: 0x2ecc71,
+  addBarrier: 0x3498db,
+  drainRed: STATUS_META.suppressed.color,
+  drainBlue: STATUS_META.winded.color,
+  cover: 0xffffff,
+  wall: 0xffffff,
+};
 
 interface AttackFlash {
   gfx: Graphics;
@@ -225,7 +244,40 @@ export class EntityManager {
         }
         break;
       }
+      case "collision": {
+        this.spawnImpactBurst(event.at, 0xb0392b);
+        this.floatingText.spawn(event.at.x, event.at.y - 30, `-${event.damage}`, 0xc0392b);
+        this.delayedHits.push({ targetId: event.entityId, timer: HIT_DELAY, killed: event.killed });
+        break;
+      }
+      case "zoneTick": {
+        const v = this.visuals.get(event.entityId);
+        if (v) {
+          const pos = v.container.position;
+          this.floatingText.spawn(pos.x, pos.y - 45, ZONE_TICK_LABEL[event.effect](event.magnitude), ZONE_TICK_COLOR[event.effect]);
+        }
+        break;
+      }
+      case "zoneCreated":
+      case "zoneExpired":
+        // The persistent zone overlay is drawn straight from GameState.zones; nothing to animate.
+        break;
     }
+  }
+
+  private spawnImpactBurst(at: Vec2, color: number) {
+    const gfx = new Graphics();
+    for (let i = 0; i < 7; i++) {
+      const angle = (i / 7) * Math.PI * 2 + 0.2;
+      const len = 6 + (i % 3) * 4;
+      gfx.moveTo(at.x, at.y);
+      gfx.lineTo(at.x + Math.cos(angle) * len, at.y + Math.sin(angle) * len);
+    }
+    gfx.stroke({ color, alpha: 0.85, width: 2 });
+    drawRoughCircle(gfx, at.x, at.y, 7, 1.5, 12, 61);
+    gfx.stroke({ color, alpha: 0.6, width: 1.5 });
+    this.layer.addChild(gfx);
+    this.attackFlashes.push({ gfx, timer: FLASH_DURATION });
   }
 
   private spawnAttackFlash(

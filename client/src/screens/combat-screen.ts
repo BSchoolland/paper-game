@@ -4,11 +4,9 @@ import type { ClientState } from "../state/client-state.js";
 import type { CombatStore } from "../state/combat-store.js";
 import type { InputManager } from "../input/input-manager.js";
 import { AbilityBar } from "../renderer/ability-bar.js";
-import { CharacterDisplay } from "../renderer/character-display.js";
 
 export class CombatScreen implements Screen {
   private abilityBar: AbilityBar;
-  private characterDisplay: CharacterDisplay;
   private removeMouseListener: (() => void) | null = null;
 
   constructor(
@@ -18,7 +16,6 @@ export class CombatScreen implements Screen {
     private inputManager: InputManager
   ) {
     this.abilityBar = new AbilityBar(clientState);
-    this.characterDisplay = new CharacterDisplay(clientState, combatRenderer);
   }
 
   enter() {
@@ -27,7 +24,6 @@ export class CombatScreen implements Screen {
       this.combatRenderer.enter();
       this.inputManager.setEnabled(true);
       this.abilityBar.show();
-      this.characterDisplay.show();
       this.removeMouseListener = this.inputManager.addMouseMoveListener(
         (mouseWorld) => this.abilityBar.updateMouse(mouseWorld)
       );
@@ -41,7 +37,6 @@ export class CombatScreen implements Screen {
       this.removeMouseListener = null;
     }
     this.abilityBar.hide();
-    this.characterDisplay.hide();
     this.combatRenderer.exit();
     this.combatStore.resetDisplayState();
   }

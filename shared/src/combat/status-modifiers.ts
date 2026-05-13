@@ -10,6 +10,7 @@ export function getStatusValue(entity: Pick<EntityCombat, "statusEffects">, type
 }
 
 export function getEffectiveDistance(entity: Pick<EntityCombat, "statusEffects">, baseDistance: number): number {
+  if (hasStatus(entity, "rooted")) return 0;
   if (hasStatus(entity, "slowed")) {
     return baseDistance * (1 - getStatusValue(entity, "slowed"));
   }

@@ -29,7 +29,7 @@ export type CombatShapeDefinition =
   | { kind: ShapeKind.Circle; radius: number; range: number }
   | { kind: ShapeKind.Point; range: number };
 
-export type StatusEffectType = "slowed" | "winded" | "suppressed";
+export type StatusEffectType = "slowed" | "winded" | "suppressed" | "rooted";
 
 export interface StatusEffect {
   readonly type: StatusEffectType;
@@ -86,6 +86,8 @@ export interface AttackAbility extends AbilityBase {
   readonly recoil?: number;
   /** If the attack connects, the attacker advances this far along the aim line — lunging past the target. */
   readonly lungeThrough?: number;
+  /** Bonus damage dealt to a knocked-back target whose knockback was cut short by a wall, edge, or another entity. */
+  readonly wallSlamDamage?: number;
   readonly ignoreCoverRange?: number;
   readonly onHit?: readonly WeaponEffect[];
   readonly visual?: AttackVisual;
@@ -101,7 +103,67 @@ export interface BarrierAbility extends AbilityBase {
   readonly barrierHp: number;
 }
 
-export type AbilityDefinition = AttackAbility | MoveAbility | BarrierAbility;
+/**
+ * A persistent area effect dropped on the battlefield. Named purely by what it does, not by
+ * theme — give it a `color` and a "fire" zone is a "toxic" zone. `damage`/`heal`/`addBarrier`/
+ * `drainRed`/`drainBlue` apply to every entity standing inside at the start of each turn;
+ * `cover` and `wall` stamp the collision grid for as long as the zone lives (a `wall` may not
+ * be dropped on top of an entity or an existing wall, the others may go anywhere).
+ */
+export type ZoneEffectKind =
+  | "damage"
+  | "heal"
+  | "addBarrier"
+  | "drainRed"
+  | "drainBlue"
+  | "cover"
+  | "wall";
+
+/**
+ * Decorative motif painted over a zone disc to telegraph its intent — purely cosmetic, like
+ * `AttackVisual.trailEffect`. If omitted the renderer falls back to a sensible default for the
+ * zone's effect kind, but it can be overridden freely (a green "spikes" zone reads as poison).
+ */
+export type ZonePattern = "spikes" | "pulse" | "shield" | "drain" | "lattice" | "solid";
+
+export interface ZoneSpec {
+  readonly effect: ZoneEffectKind;
+  readonly radius: number;
+  /** Turns the zone persists (decremented at the start of every turn). */
+  readonly duration: number;
+  /** Damage / heal / barrier amount, or the status `value` for drain zones. Ignored by `cover`/`wall`. */
+  readonly magnitude: number;
+  /** Rendering tint only — the mechanic is fixed, the look is not. */
+  readonly color: number;
+  /** Decorative motif; defaults per effect kind if unset. */
+  readonly pattern?: ZonePattern;
+}
+
+export interface ZoneAbility extends AbilityBase {
+  readonly kind: "zone";
+  /** How far from the caster the zone's centre may be placed. */
+  readonly range: number;
+  readonly zone: ZoneSpec;
+}
+
+export type AbilityDefinition = AttackAbility | MoveAbility | BarrierAbility | ZoneAbility;
+
+export interface Zone {
+  readonly id: string;
+  readonly effect: ZoneEffectKind;
+  readonly center: Vec2;
+  readonly radius: number;
+  /** Turns left before the zone disappears. */
+  readonly remaining: number;
+  readonly magnitude: number;
+  readonly color: number;
+  readonly pattern?: ZonePattern;
+  /**
+   * For `cover`/`wall` zones: the grid cells this zone stamped and the value each held before,
+   * so the stamp can be reverted when the zone expires.
+   */
+  readonly stampedCells?: readonly { readonly index: number; readonly previous: number }[];
+}
 
 
 export interface EntityCore {
@@ -157,6 +219,8 @@ export interface GameState {
   readonly winner: TeamId | null;
   readonly nextSpawnId: number;
   readonly actionCount: number;
+  readonly zones: readonly Zone[];
+  readonly nextZoneId: number;
 }
 
 export type PlayerAction =
@@ -179,7 +243,13 @@ export type GameEvent =
   | { type: "spawn"; entityId: EntityId; position: Vec2; templateKey: string }
   | { type: "knockback"; entityId: EntityId; from: Vec2; to: Vec2 }
   | { type: "pull"; entityId: EntityId; from: Vec2; to: Vec2 }
-  | { type: "statusApplied"; entityId: EntityId; status: StatusEffect };
+  | { type: "statusApplied"; entityId: EntityId; status: StatusEffect }
+  /** A knockback/pull was cut short by an obstacle and the entity slammed into it for `damage`. */
+  | { type: "collision"; entityId: EntityId; at: Vec2; damage: number; killed: boolean }
+  | { type: "zoneCreated"; zone: Zone }
+  | { type: "zoneExpired"; zoneId: string }
+  /** A zone applied its per-turn effect to an entity standing inside it. */
+  | { type: "zoneTick"; zoneId: string; entityId: EntityId; effect: ZoneEffectKind; magnitude: number };
 
 export interface AttackHit {
   readonly targetId: EntityId;

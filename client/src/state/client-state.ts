@@ -53,7 +53,8 @@ export class ClientState {
     }
 
     this.selectedAbilityId = abilityId;
-    this.inputMode = ability.kind === "attack" ? "attack" : "select";
+    // Attacks and zone placements both aim at a world point; everything else uses select-mode.
+    this.inputMode = ability.kind === "attack" || ability.kind === "zone" ? "attack" : "select";
     this.notify();
   }
 

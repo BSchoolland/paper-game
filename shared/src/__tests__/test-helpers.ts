@@ -59,6 +59,8 @@ export function makeState(
     winner: null,
     nextSpawnId: 0,
     actionCount: 0,
+    zones: [],
+    nextZoneId: 0,
     ...overrides,
   };
 }

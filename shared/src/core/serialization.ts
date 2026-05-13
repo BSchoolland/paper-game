@@ -1,4 +1,4 @@
-import type { Entity, GameState, GridState } from "./types.js";
+import type { Entity, GameState, GridState, Zone } from "./types.js";
 
 export interface SerializedGameState {
   entities: Record<string, Entity>;
@@ -9,6 +9,8 @@ export interface SerializedGameState {
   winner: GameState["winner"];
   nextSpawnId: number;
   actionCount: number;
+  zones: readonly Zone[];
+  nextZoneId: number;
 }
 
 export function serializeGameState(state: GameState): SerializedGameState {
@@ -36,6 +38,8 @@ export function serializeGameState(state: GameState): SerializedGameState {
     winner: state.winner,
     nextSpawnId: state.nextSpawnId,
     actionCount: state.actionCount,
+    zones: state.zones,
+    nextZoneId: state.nextZoneId,
   };
 }
 
@@ -60,5 +64,7 @@ export function deserializeGameState(data: SerializedGameState): GameState {
     winner: data.winner,
     nextSpawnId: data.nextSpawnId ?? 0,
     actionCount: data.actionCount ?? 0,
+    zones: data.zones ?? [],
+    nextZoneId: data.nextZoneId ?? 0,
   };
 }

@@ -11,6 +11,7 @@ import {
   drawRoughCircle,
   drawXMark,
 } from "./sketch-utils.js";
+import { drawZonePreview } from "./zone-renderer.js";
 
 export function getActiveAttackAbility(entity: Entity): AttackAbility | undefined {
   return entity.abilities.find(a => a.kind === "attack") as AttackAbility | undefined;
@@ -105,6 +106,11 @@ export function drawEffectPreview(g: Graphics, events: readonly GameEvent[]): vo
   for (const event of events) {
     if (event.type === "knockback" || event.type === "pull" || event.type === "move") {
       drawDisplacementGhost(g, event.from, event.to);
+    } else if (event.type === "collision") {
+      drawXMark(g, event.at.x, event.at.y, 7, 67);
+      g.stroke({ color: PENCIL_HIT, alpha: 0.75, width: 1.6 });
+    } else if (event.type === "zoneCreated") {
+      drawZonePreview(g, event.zone, true);
     }
   }
 }

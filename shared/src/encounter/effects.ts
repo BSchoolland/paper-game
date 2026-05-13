@@ -1,6 +1,7 @@
 import type { ActionResult, Entity, EntityEffect, GameEvent, StatusEffect, TeamId, UnitTemplate, Vec2, WeaponEffect } from "../core/types.js";
 import { STATUS_META } from "../core/status-meta.js";
 import { makeEntity } from "./entity-factory.js";
+import { applyDamage } from "../combat/combat.js";
 import { normalize, sub, add, scale, distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds, findWalkablePosition } from "../map/collision-grid.js";
 
@@ -45,6 +46,15 @@ export function processEffects(result: ActionResult): ActionResult {
         const applied = knockbackTarget(hit.targetId, event.attackerPosition, ability.knockback, state);
         state = applied.state;
         events.push(...applied.events);
+        // Knocked into a wall, an edge, or another body: pay the slam toll.
+        if (applied.blocked && ability.wallSlamDamage && ability.wallSlamDamage > 0) {
+          const target = state.entities.get(hit.targetId);
+          if (target && !target.dead) {
+            const slam = applyDamage(state, [target], ability.wallSlamDamage);
+            state = slam.state;
+            events.push({ type: "collision", entityId: target.id, at: target.position, damage: ability.wallSlamDamage, killed: slam.hits[0]!.killed });
+          }
+        }
       }
       if (ability.onHit) {
         for (const effect of ability.onHit) {
@@ -101,11 +111,14 @@ function applyWeaponEffect(
   }
 }
 
+type SlideResult = { state: ActionResult["state"]; events: GameEvent[]; blocked: boolean };
+
 /**
  * Slide an entity along `direction` as far as it can go, up to `maxDist`, stepping inward in
  * 5-unit increments until it finds a spot that's walkable, in-bounds, and not overlapping
- * anyone. The single primitive behind knockback, pull, recoil, and lunge — callers just supply
- * the direction and which event to emit for the move that lands.
+ * anyone. The single primitive behind knockback, pull, recoil, and lunge — callers supply the
+ * direction and which event to emit for the move that lands. `blocked` is true when the entity
+ * couldn't travel the full `maxDist` (it slammed into a wall, an edge, or another entity).
  */
 function slideEntity(
   entityId: string,
@@ -113,13 +126,14 @@ function slideEntity(
   maxDist: number,
   makeEvent: (entityId: string, from: Vec2, to: Vec2) => GameEvent,
   state: ActionResult["state"]
-): { state: ActionResult["state"]; events: GameEvent[] } {
+): SlideResult {
   const entity = state.entities.get(entityId);
-  if (!entity) return { state, events: [] };
+  if (!entity) return { state, events: [], blocked: false };
 
   const dir = normalize(direction);
-  if (dir.x === 0 && dir.y === 0) return { state, events: [] };
+  if (dir.x === 0 && dir.y === 0) return { state, events: [], blocked: false };
 
+  let full = true;
   for (let d = maxDist; d > 0; d -= 5) {
     const dest = add(entity.position, scale(dir, d));
     if (
@@ -130,11 +144,12 @@ function slideEntity(
       const from = entity.position;
       const entities = new Map(state.entities);
       entities.set(entity.id, { ...entity, position: dest });
-      return { state: { ...state, entities }, events: [makeEvent(entity.id, from, dest)] };
+      return { state: { ...state, entities }, events: [makeEvent(entity.id, from, dest)], blocked: !full };
     }
+    full = false;
   }
 
-  return { state, events: [] };
+  return { state, events: [], blocked: true };
 }
 
 function knockbackTarget(
@@ -142,9 +157,9 @@ function knockbackTarget(
   attackerPos: Vec2,
   maxDist: number,
   state: ActionResult["state"]
-): { state: ActionResult["state"]; events: GameEvent[] } {
+): SlideResult {
   const target = state.entities.get(targetId);
-  if (!target) return { state, events: [] };
+  if (!target) return { state, events: [], blocked: false };
   return slideEntity(targetId, sub(target.position, attackerPos), maxDist,
     (entityId, from, to) => ({ type: "knockback", entityId, from, to }), state);
 }
@@ -154,9 +169,9 @@ function pullTarget(
   attackerPos: Vec2,
   maxDist: number,
   state: ActionResult["state"]
-): { state: ActionResult["state"]; events: GameEvent[] } {
+): SlideResult {
   const target = state.entities.get(targetId);
-  if (!target) return { state, events: [] };
+  if (!target) return { state, events: [], blocked: false };
   return slideEntity(targetId, sub(attackerPos, target.position), maxDist,
     (entityId, from, to) => ({ type: "pull", entityId, from, to }), state);
 }

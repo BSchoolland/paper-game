@@ -1,10 +1,11 @@
-import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, TeamId } from "../core/types.js";
-import { distance } from "../core/vec2.js";
+import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, TeamId, Vec2, ZoneAbility } from "../core/types.js";
+import { distance, add, scale, normalize, length } from "../core/vec2.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { processEffects } from "../encounter/effects.js";
 import { getEffectiveDistance, getEffectiveRegen } from "./status-modifiers.js";
+import { createZone, canPlaceWallZone, tickZones } from "./zones.js";
 
 function checkWinner(state: GameState): TeamId | null {
   let hasRed = false;
@@ -151,6 +152,27 @@ function resolveBarrier(
   };
 }
 
+function resolveZone(
+  state: GameState,
+  entity: Entity,
+  ability: ZoneAbility,
+  aim: AimDirection
+): ActionResult {
+  const aimLen = length(aim);
+  if (aimLen < 0.01) return NO_CHANGE(state);
+  const dist = Math.min(aimLen, ability.range);
+  const center: Vec2 = add(entity.position, scale(normalize(aim), dist));
+  if (ability.zone.effect === "wall" && !canPlaceWallZone(state, center, ability.zone.radius)) return NO_CHANGE(state);
+
+  const { state: withZone, zone } = createZone(state, center, ability.zone);
+  const entities = new Map(withZone.entities);
+  entities.set(entity.id, { ...entity, energy: spendEnergy(entity.energy, ability.cost) });
+  return {
+    state: { ...withZone, entities },
+    events: [{ type: "zoneCreated", zone }],
+  };
+}
+
 function resolveAbility(
   state: GameState,
   entityId: string,
@@ -182,6 +204,11 @@ function resolveAbility(
     case "barrier":
       result = resolveBarrier(state, entity, ability);
       break;
+    case "zone": {
+      if (!aimDirection) return NO_CHANGE(state);
+      result = resolveZone(state, entity, ability, aimDirection);
+      break;
+    }
   }
 
   if (result.state === state) return result;
@@ -257,9 +284,13 @@ export function startTurn(state: GameState, team: TeamId): ActionResult {
 
   const tick = tickStatusEffects(entities, team);
 
+  // Persistent zones resolve after the active team's regen / barrier-clear / status-tick, so a
+  // barrier zone can top players back up the same turn it would otherwise have been wiped.
+  const zoned = tickZones({ ...state, entities: tick.entities });
+
   return {
-    state: { ...state, entities: tick.entities },
-    events: [{ type: "turnStart", team }, ...tick.events],
+    state: zoned.state,
+    events: [{ type: "turnStart", team }, ...tick.events, ...zoned.events],
   };
 }
 
@@ -284,6 +315,8 @@ export function createGameState(init: {
       winner: null,
       nextSpawnId: 0,
       actionCount: 0,
+      zones: [],
+      nextZoneId: 0,
     },
     team,
   ).state;

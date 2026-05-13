@@ -90,6 +90,7 @@ export class AbilityBar {
     document.body.appendChild(this.energyEl);
 
     this.load();
+    window.addEventListener("resize", () => this.render());
   }
 
   private async load() {
@@ -198,17 +199,32 @@ export class AbilityBar {
     const count = allCards.length;
     const fanRadius = 2400;
     const liftAmount = 30;
-    const minStep = (this.cardWidth / fanRadius) * (180 / Math.PI);
+    // Step that leaves cards edge-to-edge with no overlap.
+    const noOverlapStep = (this.cardWidth / fanRadius) * (180 / Math.PI);
+    // Cap the fan so it never spills past the viewport or covers the End Turn
+    // button: the container origin sits at 62.5% of the window, the End Turn
+    // button is anchored bottom-right, so the right side is the tight constraint.
+    const endTurnWidth = this.endTurnBtn.offsetWidth || 130;
+    const rightRoom = window.innerWidth * 0.375 - 24 - endTurnWidth - 16;
+    const leftRoom = window.innerWidth * 0.625 - 24;
+    const maxHalfWidth = Math.max(this.cardWidth * 0.6, Math.min(rightRoom, leftRoom));
+    const maxAngleRad = Math.asin(Math.min(1, Math.max(0, (maxHalfWidth - this.cardWidth / 2) / fanRadius)));
+    const maxStep = count > 1 ? (2 * maxAngleRad * (180 / Math.PI)) / (count - 1) : noOverlapStep;
+    const step = Math.min(noOverlapStep, maxStep);
     for (let i = 0; i < count; i++) {
       const { el: card, selected } = allCards[i]!;
       const t = count > 1 ? (i / (count - 1)) - 0.5 : 0;
-      const angle = t * minStep * (count - 1);
+      const angle = t * step * (count - 1);
       const lift = selected ? -liftAmount : 0;
       card.style.position = "absolute";
       card.style.left = `${-this.cardWidth / 2}px`;
       card.style.bottom = "0";
       card.style.transformOrigin = `center ${CARD_HEIGHT + fanRadius}px`;
       card.style.transform = `rotate(${angle}deg) translateY(${lift}px)`;
+      card.style.zIndex = selected ? "20" : `${i}`;
+      // When cards overlap, hovering one brings it to the front so it stays usable.
+      card.addEventListener("mouseenter", () => { if (!selected) card.style.zIndex = "10"; });
+      card.addEventListener("mouseleave", () => { if (!selected) card.style.zIndex = `${i}`; });
       this.container.appendChild(card);
     }
   }
@@ -364,6 +380,7 @@ export class AbilityBar {
     if (ability.kind === "attack") return `${ability.damage} damage`;
     if (ability.kind === "move") return `Move up to ${ability.distance} units`;
     if (ability.kind === "barrier") return `+${ability.barrierHp} barrier HP`;
+    if (ability.kind === "zone") return `${ability.zone.effect} zone · r${ability.zone.radius} · ${ability.zone.duration}t`;
     return "";
   }
 

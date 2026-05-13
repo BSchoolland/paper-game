@@ -42,26 +42,20 @@ seedDimension3();
 type GameMode = "pvp" | "pve";
 type Phase = "map" | "combat";
 
-// Dim 1 weapons mixed into starting inventory for playtesting (no loot system yet)
-const DIM1_STARTER_EXTRAS = ["coral-blade", "barbed-harpoon", "urchin-flail", "crab-claw-gauntlet", "crystal-shard-blade", "fungal-mace", "geode-knuckles", "dune-cleaver", "raiders-twinblade", "mirage-staff"];
+// Trimmed playtest loadout: the debug Test Rod plus a few familiar items, nothing else.
+const STARTER_ITEM_IDS = ["abilitytest", "short-sword", "bow", "staff", "round-shield"];
 
 function buildDefaultInventory(dimensionId: number): InventoryState {
   const dimItems = loadItems(dimensionId);
   const fallbackItems = dimensionId !== 0 ? loadItems(0) : dimItems;
   const merged = { ...fallbackItems, ...dimItems };
 
-  // Prepend dim 1 starter weapons so they don't get truncated past BAG_SIZE
-  const dim1Items = loadItems(1);
-  const starters: ItemDefinition[] = [];
-  for (const id of DIM1_STARTER_EXTRAS) {
-    const item = dim1Items[id];
-    if (item) {
-      starters.push(item);
-      delete merged[id];
-    }
+  const picked: ItemDefinition[] = [];
+  for (const id of STARTER_ITEM_IDS) {
+    const item = merged[id];
+    if (item) picked.push(item);
   }
-
-  return createInventory([...starters, ...Object.values(merged)]);
+  return createInventory(picked);
 }
 
 interface SocketData {

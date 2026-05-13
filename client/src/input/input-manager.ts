@@ -53,8 +53,8 @@ export class InputManager {
       if (!state || state.winner) return;
 
       const selectedAbility = this.clientState.getSelectedAbility();
-      if (selectedAbility?.kind === "attack") {
-        this.doAttack(pos);
+      if (selectedAbility?.kind === "attack" || selectedAbility?.kind === "zone") {
+        this.doAimedAbility(pos);
         return;
       }
       if (selectedAbility?.kind === "barrier") {
@@ -131,7 +131,8 @@ export class InputManager {
     this.clientState.selectAbility(abilities[currentIndex]!.id);
   }
 
-  private doAttack(mousePos: Vec2) {
+  /** Fire the selected aim-at-a-point ability (attack or zone placement) toward `mousePos`. */
+  private doAimedAbility(mousePos: Vec2) {
     const entityId = this.clientState.selectedEntityId;
     if (!entityId) return;
     const state = this.clientState.getState();

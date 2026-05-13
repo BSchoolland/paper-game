@@ -36,4 +36,9 @@ export const STATUS_META: Record<StatusEffectType, StatusMeta> = {
     describe: (v) => `-${v} attack energy / turn`,
     regenPenalty: "red",
   },
+  rooted: {
+    label: "Rooted",
+    color: 0x6b4f2a,
+    describe: () => "cannot move",
+  },
 };

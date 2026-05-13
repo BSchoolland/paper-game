@@ -1,5 +1,5 @@
 import { ShapeKind } from "shared";
-import type { AttackAbility, MoveAbility, SpriteSet, UnitTemplate, ItemDefinition } from "shared";
+import type { AttackAbility, MoveAbility, SpriteSet, UnitTemplate, ItemDefinition, ZoneAbility } from "shared";
 import type { StructureEntry } from "shared";
 import { saveDimension, saveEnemyTemplates, saveItems, withStructureIndices } from "./db.js";
 
@@ -316,7 +316,62 @@ const BOW_VOLLEY: AttackAbility = {
 
 // --- Items (dimension 0) ---
 
+// Debug-only weapon: every new combat mechanic on one stick, cheap to use, so each can be tried
+// in isolation. Prepended to the starting bag in server/src/index.ts.
+const ABILITY_TEST_WEAPON: ItemDefinition = {
+  type: "weapon",
+  id: "abilitytest",
+  name: "Test Rod",
+  description: "Debug weapon — exercises every new ability mechanic.",
+  rarity: "common",
+  sprite: "short-sword",
+  dimensionId: 0,
+  slotCost: { hand: 1 },
+  animSet: "sword",
+  abilities: [
+    {
+      id: "test-slam", name: "Wall Slam", kind: "attack", cost: { red: 1 },
+      shape: { kind: ShapeKind.Rectangle, length: 90, width: 24 },
+      damage: 12, knockback: 90, wallSlamDamage: 25,
+      visual: { color: 0xcaa15a, trailEffect: "thrust", screenShake: 0.3 },
+    } satisfies AttackAbility,
+    {
+      id: "test-recoil", name: "Recoil Blast", kind: "attack", cost: { red: 1 },
+      shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 3 },
+      damage: 12, knockback: 25, recoil: 55,
+      visual: { color: 0xcaa15a, trailEffect: "explosion", screenShake: 0.4 },
+    } satisfies AttackAbility,
+    {
+      id: "test-lunge", name: "Lunge Strike", kind: "attack", cost: { red: 1 },
+      shape: { kind: ShapeKind.Rectangle, length: 80, width: 18 },
+      damage: 12, knockback: 0, lungeThrough: 100,
+      visual: { color: 0xcaa15a, trailEffect: "thrust", screenShake: 0.2 },
+    } satisfies AttackAbility,
+    {
+      id: "test-root", name: "Root Shot", kind: "attack", cost: { red: 1 },
+      shape: { kind: ShapeKind.Point, range: 280 },
+      damage: 8, knockback: 0, onHit: [{ type: "applyStatus", status: "rooted", duration: 2, value: 1 }],
+      visual: { color: 0xcaa15a, trailEffect: "projectile", screenShake: 0.1 },
+    } satisfies AttackAbility,
+    { id: "test-zone-damage", name: "Damage Zone", kind: "zone", cost: { blue: 1 }, range: 220,
+      zone: { effect: "damage", radius: 60, duration: 3, magnitude: 12, color: 0xc0392b } } satisfies ZoneAbility,
+    { id: "test-zone-heal", name: "Heal Zone", kind: "zone", cost: { blue: 1 }, range: 220,
+      zone: { effect: "heal", radius: 60, duration: 3, magnitude: 15, color: 0x2ecc71 } } satisfies ZoneAbility,
+    { id: "test-zone-barrier", name: "Barrier Zone", kind: "zone", cost: { blue: 1 }, range: 220,
+      zone: { effect: "addBarrier", radius: 60, duration: 3, magnitude: 12, color: 0x3498db } } satisfies ZoneAbility,
+    { id: "test-zone-drain-red", name: "Drain Attack Zone", kind: "zone", cost: { blue: 1 }, range: 220,
+      zone: { effect: "drainRed", radius: 60, duration: 3, magnitude: 1, color: 0xe67e22 } } satisfies ZoneAbility,
+    { id: "test-zone-drain-blue", name: "Drain Move Zone", kind: "zone", cost: { blue: 1 }, range: 220,
+      zone: { effect: "drainBlue", radius: 60, duration: 3, magnitude: 1, color: 0x5b9bd5 } } satisfies ZoneAbility,
+    { id: "test-zone-cover", name: "Cover Zone", kind: "zone", cost: { blue: 1 }, range: 220,
+      zone: { effect: "cover", radius: 50, duration: 4, magnitude: 0, color: 0x8b7355 } } satisfies ZoneAbility,
+    { id: "test-zone-wall", name: "Wall Zone", kind: "zone", cost: { blue: 1 }, range: 220,
+      zone: { effect: "wall", radius: 40, duration: 4, magnitude: 0, color: 0x555555 } } satisfies ZoneAbility,
+  ],
+};
+
 const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
+  "abilitytest": ABILITY_TEST_WEAPON,
   "short-sword": {
     type: "weapon",
     id: "short-sword",

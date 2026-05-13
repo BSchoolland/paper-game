@@ -3,6 +3,7 @@ import { resolveAction, isActionLegal } from "../combat/turn-resolver.js";
 import { makeEntity, makeState } from "./test-helpers.js";
 import type { AttackAbility, StatusEffect } from "../core/types.js";
 import { ShapeKind } from "../core/types.js";
+import { createGrid, CELL_WALL } from "../map/collision-grid.js";
 
 describe("turn-resolver", () => {
   it("move updates position", () => {
@@ -75,6 +76,42 @@ describe("turn-resolver", () => {
     ]);
     const hit = resolveAction(hitState, { type: "ability", entityId: "r1", abilityId: "lunge-strike", aimDirection: { x: 1, y: 0 } });
     expect(hit.state.entities.get("r1")!.position.x).toBeGreaterThan(200);
+  });
+
+  it("a rooted entity cannot move", () => {
+    const state = makeState([makeEntity("r1", 100, 100, "red", { statusEffects: [{ type: "rooted", duration: 2, value: 1 }] })]);
+    const { state: next } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "move", destination: { x: 150, y: 100 } });
+    expect(next).toBe(state);
+  });
+
+  it("knockback into a wall deals wall-slam damage", () => {
+    const grid = createGrid(100, 100, 8);
+    for (let cy = 10; cy <= 14; cy++) for (let cx = 26; cx <= 35; cx++) grid.walls[cy * grid.width + cx] = CELL_WALL;
+    const slam: AttackAbility = {
+      id: "slam", name: "Slam", kind: "attack", cost: { red: 1 },
+      shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 }, damage: 5, knockback: 90, wallSlamDamage: 25,
+    };
+    const state = makeState([
+      makeEntity("r1", 100, 100, "red", { abilities: [slam] }),
+      makeEntity("b1", 140, 100, "blue"),
+    ], { grid });
+    const { state: next, events } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "slam", aimDirection: { x: 1, y: 0 } });
+    expect(next.entities.get("b1")!.hp).toBe(70); // 5 from the hit + 25 from the slam
+    expect(events.some(e => e.type === "collision" && e.entityId === "b1")).toBe(true);
+  });
+
+  it("knockback into open space deals no wall-slam", () => {
+    const slam: AttackAbility = {
+      id: "slam2", name: "Slam", kind: "attack", cost: { red: 1 },
+      shape: { kind: ShapeKind.Sector, radius: 80, halfAngle: Math.PI / 3 }, damage: 5, knockback: 60, wallSlamDamage: 25,
+    };
+    const state = makeState([
+      makeEntity("r1", 100, 100, "red", { abilities: [slam] }),
+      makeEntity("b1", 140, 100, "blue"),
+    ]);
+    const { state: next, events } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "slam2", aimDirection: { x: 1, y: 0 } });
+    expect(next.entities.get("b1")!.hp).toBe(95);
+    expect(events.some(e => e.type === "collision")).toBe(false);
   });
 
   it("end turn switches team and regenerates energy up to the cap", () => {
