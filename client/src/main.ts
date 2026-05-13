@@ -12,6 +12,8 @@ import { ScreenManager } from "./screens/screen-manager.js";
 import { MapScreen } from "./screens/map-screen.js";
 import { CombatScreen } from "./screens/combat-screen.js";
 import { InventoryScreen } from "./screens/inventory-screen.js";
+import { ReplayScreen } from "./screens/replay-screen.js";
+import { ReplayStore } from "./state/replay-store.js";
 import type { HexCoord, HexMapState } from "shared";
 import { hexKey, isAdjacent, getAnimSet } from "shared";
 
@@ -29,11 +31,17 @@ async function init() {
   container.appendChild(app.canvas);
 
   const params = new URLSearchParams(window.location.search);
-  const mode = params.get("mode") === "pvp" ? "pvp" : "pve";
+  const rawMode = params.get("mode");
+  const mode = rawMode === "pvp" ? "pvp" : "pve";
   const dim = parseInt(params.get("dim") ?? "0", 10) || 0;
 
   await Promise.all([loadSpriteAssets(), loadMapAssets(), loadMapIconAssets()]);
   await loadDimensionSprites(dim);
+
+  if (rawMode === "replay") {
+    await runReplay(app, pacer, params.get("log") ?? "/replay.json");
+    return;
+  }
 
   const conn = new Connection(
     `ws://${window.location.hostname}:3001/ws?mode=${mode}&dim=${dim}`
@@ -145,6 +153,59 @@ async function init() {
   } else {
     screens.switchTo("combat");
   }
+}
+
+async function runReplay(app: Application, pacer: FramePacer, logUrl: string) {
+  const store = new ReplayStore();
+  const clientState = new ClientState(store);
+  const renderer = new GameRenderer(app, clientState, pacer);
+  store.setAnimatingCheck(() => renderer.isAnimating());
+  store.subscribeEvents((events) => renderer.pushEvents(events));
+  clientState.subscribe(() => { if (store.hasState()) renderer.render(); });
+
+  const screens = new ScreenManager();
+  screens.register("replay", new ReplayScreen(renderer));
+
+  const res = await fetch(logUrl);
+  if (!res.ok) {
+    console.error(`Replay log not found at ${logUrl} — run \`bun scripts/sim-battle.ts\` first.`);
+    return;
+  }
+  const data = await res.json();
+  if (Array.isArray(data.dimensions)) {
+    await Promise.all(data.dimensions.map((d: number) => loadDimensionSprites(d)));
+  }
+  store.loadFrames(data.frames);
+  screens.switchTo("replay");
+
+  const SPEEDS = [0.5, 1, 2, 4];
+  let speedIdx = Math.max(0, SPEEDS.indexOf(Number(localStorage.getItem("replaySpeed") ?? "1")));
+  if (speedIdx < 0) speedIdx = 1;
+  const applySpeed = () => {
+    renderer.setPlaybackSpeed(SPEEDS[speedIdx]!);
+    localStorage.setItem("replaySpeed", String(SPEEDS[speedIdx]!));
+    refreshHud();
+  };
+
+  const hud = document.createElement("div");
+  hud.style.cssText = "position:fixed;left:8px;bottom:8px;font:12px monospace;color:#4a3728;background:rgba(239,221,172,0.85);padding:4px 8px;border-radius:4px;pointer-events:none;white-space:pre;";
+  document.body.appendChild(hud);
+  function refreshHud() {
+    const f = store.current();
+    hud.textContent =
+      `frame ${store.position}/${store.total - 1}   turn ${f?.turnNumber ?? "?"} ${f?.team ?? ""}   speed ${SPEEDS[speedIdx]}×${store.atEnd ? "   [END]" : ""}\n` +
+      `[.] step   [Enter] play turn   [,] restart   [ and ] adjust speed`;
+  }
+  store.subscribe(refreshHud);
+  applySpeed();
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "." || e.key === " ") { e.preventDefault(); store.step(); }
+    else if (e.key === "Enter") { e.preventDefault(); store.playTurn(); }
+    else if (e.key === ",") { e.preventDefault(); store.reset(); }
+    else if (e.key === "]") { e.preventDefault(); speedIdx = Math.min(SPEEDS.length - 1, speedIdx + 1); applySpeed(); }
+    else if (e.key === "[") { e.preventDefault(); speedIdx = Math.max(0, speedIdx - 1); applySpeed(); }
+  });
 }
 
 init();

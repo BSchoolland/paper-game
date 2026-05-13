@@ -8,3 +8,4 @@ bun.lock
 *.sqlite-shm
 ScriptableByteArray*
 scripts/__pycache__/
+client/public/replay.json
