@@ -39,16 +39,22 @@ seedDimension1();
 seedDimension2();
 seedDimension3();
 
-type GameMode = "pvp" | "pve";
+type GameMode = "pvp" | "pve" | "duel";
 type Phase = "map" | "combat";
 
 // Trimmed playtest loadout: the debug Test Rod plus a few familiar items, nothing else.
-const STARTER_ITEM_IDS = ["abilitytest", "short-sword", "bow", "staff", "round-shield"];
+const STARTER_ITEM_IDS = [
+  "abilitytest", "short-sword", "bow", "staff", "round-shield",
+  // dimension 1 – The Shallows
+  "barbed-harpoon", "urchin-flail", "crab-claw-gauntlet",
+  // dimension 2 – The Gloom Hollows
+  "stalactite-spear", "fungal-mace", "geode-knuckles",
+  // dimension 3 – The Gilt Barrens
+  "sandhorn-bow", "raiders-twinblade", "mirage-staff",
+];
 
 function buildDefaultInventory(dimensionId: number): InventoryState {
-  const dimItems = loadItems(dimensionId);
-  const fallbackItems = dimensionId !== 0 ? loadItems(0) : dimItems;
-  const merged = { ...fallbackItems, ...dimItems };
+  const merged = { ...loadItems(0), ...loadItems(1), ...loadItems(2), ...loadItems(3), ...loadItems(dimensionId) };
 
   const picked: ItemDefinition[] = [];
   for (const id of STARTER_ITEM_IDS) {
@@ -163,9 +169,9 @@ function checkCombatEnd(ws: ServerWebSocket<SocketData>) {
 }
 
 function runAiTurn(ws: ServerWebSocket<SocketData>) {
-  if (gameMode !== "pve") return;
+  if (gameMode !== "pve" && gameMode !== "duel") return;
 
-  const results = session.runAi(aiTeam);
+  const results = gameMode === "duel" ? session.runHeroAi(aiTeam) : session.runAi(aiTeam);
   for (const { serializedState, events, won } of results) {
     broadcast({ type: "state", state: serializedState, events });
     if (won) {
@@ -278,7 +284,7 @@ Bun.serve({
     async open(ws: ServerWebSocket<SocketData>) {
       const newMode = ws.data.mode;
 
-      if (newMode !== gameMode || (newMode === "pve" && players.has("red"))) {
+      if (newMode !== gameMode || ((newMode === "pve" || newMode === "duel") && players.has("red"))) {
         const old = players.get("red");
         if (old) {
           old.close();

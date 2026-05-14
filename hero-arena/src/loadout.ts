@@ -43,5 +43,7 @@ export const HERO_TEMPLATE: UnitTemplate = {
   energy: { red: 2, blue: 2 },
   collisionRadius: 16,
   className: "Hero",
-  // `strategy` is irrelevant — the arena overrides the hero with its registered HeroController.
+  // Flagged for HeroController-driven AI. The scripted runner falls back to "rush" if invoked,
+  // and the rollout-opponent classifier (e.g. Sovereign's isHeroLike) uses this to recognize heroes.
+  strategy: "smart",
 };

@@ -32,7 +32,7 @@ async function init() {
 
   const params = new URLSearchParams(window.location.search);
   const rawMode = params.get("mode");
-  const mode = rawMode === "pvp" ? "pvp" : "pve";
+  const mode = rawMode === "pvp" ? "pvp" : rawMode === "duel" ? "duel" : "pve";
   const dim = parseInt(params.get("dim") ?? "0", 10) || 0;
 
   await Promise.all([loadSpriteAssets(), loadMapAssets(), loadMapIconAssets()]);

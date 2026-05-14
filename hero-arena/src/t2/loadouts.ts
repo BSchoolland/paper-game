@@ -28,6 +28,7 @@ const TANK_ABILITIES: AbilityDefinition[] = [
 
 export const TANK_TEMPLATE: UnitTemplate = {
   abilities: TANK_ABILITIES, hp: 120, energy: { red: 2, blue: 2 }, collisionRadius: 16, className: "Tank",
+  strategy: "smart",
 };
 
 // ── Fighter: existing hero template ──────────────────────────────────────────
@@ -57,6 +58,7 @@ const RANGED_ABILITIES: AbilityDefinition[] = [
 
 export const RANGED_TEMPLATE: UnitTemplate = {
   abilities: RANGED_ABILITIES, hp: 120, energy: { red: 2, blue: 2 }, collisionRadius: 16, className: "Ranged",
+  strategy: "smart",
 };
 
 // ── Boss: battle-axe + kite-shield, beefy ────────────────────────────────────
@@ -80,6 +82,7 @@ const BOSS_ABILITIES: AbilityDefinition[] = [
 
 export const BOSS_TEMPLATE: UnitTemplate = {
   abilities: BOSS_ABILITIES, hp: 300, energy: { red: 3, blue: 3 }, collisionRadius: 22, className: "Boss",
+  strategy: "smart",
 };
 
 // ── Role lookup ──────────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import type { HexCoord, HexStatus, UnitTemplate, ItemDefinition } from "shared";
 import type { StructureEntry, Dimension } from "shared";
 
 const db = new Database("hex-discovery.sqlite", { create: true });
+db.exec("PRAGMA busy_timeout = 30000");
 db.exec("PRAGMA journal_mode = WAL");
 db.exec(`
   CREATE TABLE IF NOT EXISTS explored_hexes (

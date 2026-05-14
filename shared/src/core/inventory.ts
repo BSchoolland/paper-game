@@ -1,6 +1,6 @@
 import type { AnimSet, ItemDefinition, SlotType, SlotCost } from "./items.js";
 
-export const BAG_SIZE = 12;
+export const BAG_SIZE = 16;
 
 export const PLAYER_SLOTS: Record<SlotType, number> = {
   hand: 2,

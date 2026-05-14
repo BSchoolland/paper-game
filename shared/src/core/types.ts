@@ -283,7 +283,7 @@ export const ENEMY_TAGS = [
 
 export type EnemyTag = (typeof ENEMY_TAGS)[number];
 
-export type AiStrategyType = "rush" | "kite" | "threat";
+export type AiStrategyType = "rush" | "kite" | "threat" | "smart";
 
 export interface UnitTemplate {
   readonly abilities: readonly AbilityDefinition[];

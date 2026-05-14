@@ -190,5 +190,8 @@ export function strategyForEntity(entity: Entity): AiStrategy {
     case "kite": return kiteStrategy;
     case "threat": return new ThreatStrategy();
     case "rush": return rushStrategy;
+    // "smart" entities are meant to be driven by a HeroController (e.g. Sovereign). If the
+    // scripted AI ends up running one (rollout fallback, etc.), behave as a basic rusher.
+    case "smart": return rushStrategy;
   }
 }
