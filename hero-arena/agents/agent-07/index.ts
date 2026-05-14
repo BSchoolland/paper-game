@@ -1,14 +1,33 @@
 /**
- * agent-07's hero entry. Replace `hero` below with your own `HeroController` (see hero-arena/README.md).
- * Keep this file's export name `hero`. You may add more files in this folder and import them here.
+ * agent-07 — "Concord".
  *
- * Test your bot:
- *   bun hero-arena/src/harness.ts agent-07 baseline       # vs the dumb baseline
- *   bun hero-arena/src/harness.ts agent-07 agent-07       # mirror — fight yourself (self-play)
- *   bun hero-arena/src/harness.ts agent-07 agent-01 42    # head to head on seed 42
- * Then watch it:  http://localhost:5173/?mode=replay
+ * Identity: where everyone else runs three independent single-hero brains on the same turn,
+ * Concord runs a single JOINT PLANNER across the whole squad. When the first hero in the
+ * action order is invoked, we compute a coordinated plan for the entire squad (tank →
+ * fighter → ranged), publish it via module-level state, and the later controllers just
+ * execute their pre-assigned slice (re-verifying against the live state).
+ *
+ * Solo: kit-archetype classifier picks one of a few hand-tuned policies based on the
+ * abilities drawn — beam search wastes 2s of budget on weird kits, a focused policy doesn't.
+ *
+ * Boss: positional brain that bullies raid heroes with knockback and stays near minions.
+ * Raid: reuses the squad joint planner with the boss as priority target.
  */
-import { referenceHero } from "../../src/reference-bot.js";
-import type { HeroController } from "../../src/types.js";
+import type { MultiFormatAgent } from "../../src/t2/types.js";
+import { makeSquadControllers, makeRaidControllers } from "./squad.js";
+import { makeSoloController } from "./solo.js";
+import { bossController } from "./boss.js";
 
-export const hero: HeroController = referenceHero;
+const squad = makeSquadControllers("squad");
+const raid = makeRaidControllers("raid");
+
+export const agent: MultiFormatAgent = {
+  name: "agent-07",
+  solo: (abilities) => makeSoloController(abilities),
+  squad,
+  boss: bossController,
+  raid,
+};
+
+// Keep T1 `hero` export so the T1 harness/registry still works.
+export { referenceHero as hero } from "../../src/reference-bot.js";

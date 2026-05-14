@@ -27,6 +27,15 @@
  *   bun hero-arena/src/harness.ts agent-06 agent-03 7     # mirror tournament-tier Overlord
  */
 import type { HeroController } from "../../src/types.js";
+import type { MultiFormatAgent } from "../../src/t2/types.js";
 import { makeOverlord, PRESETS } from "./overlord.js";
 
 export const hero: HeroController = makeOverlord(PRESETS.tournament);
+
+export const agent: MultiFormatAgent = {
+  name: "agent-06",
+  solo: () => hero,
+  squad: { tank: hero, fighter: hero, ranged: hero },
+  boss: hero,
+  raid: { tank: hero, fighter: hero, ranged: hero },
+};

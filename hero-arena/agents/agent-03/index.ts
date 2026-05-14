@@ -1,33 +1,34 @@
 /**
- * agent-03 — "Overlord".
+ * agent-03 — "Overlord" (Tournament 2).
  *
- * The other strong bots in this arena (Beamblade, Sovereign) both run a whole-turn beam search and
- * then judge each candidate turn by playing the round out against a *scripted* (or lightly
- * pessimistic) opponent. Overlord keeps the beam search but spends its turn budget on the part
- * that actually decides a mirror duel: it judges every finalist against an **adversarial opponent
- * model** — the enemy's dumb allies stay scripted, but the enemy *hero* (the only brain on that
- * side) is allowed to pick the worst-for-me of several plausible smart turns: pure scripted, an
- * all-in hunt on my hero, an all-in hunt on my weakest ally, and a 1-ply best-reply. We then take
- * the *minimum* over those replies. So Overlord never walks into a square a competent opponent can
- * punish — which both of the other bots, assuming a scripted reply, sometimes do.
+ * Architecture (unchanged from T1):
+ *   Phase 1 — whole-turn beam search ranked by a cheap static eval.
+ *   Phase 2 — each finalist judged against an **adversarial opponent model**: the enemy's allies
+ *   stay scripted, but the enemy hero is allowed to pick the worst-for-me of several plausible
+ *   smart turns (scripted, 1-ply best reply, all-in hunt my hero, all-in hunt my weakest ally).
+ *   We minimise over those replies, blend with the scripted line, and iterate-deepen replyLevel.
  *
- * On top of that: broad candidate generation (every attack aimed at every foe / the cluster / pair
- * midpoints / the enemy hero, plus a fan of move headings at full and half range, kite rings,
- * retreats, regroup and bodyblock spots — so knockback slams and step-then-swing combos surface),
- * and a king-safety + initiative + enemy-hero-suppression + enemy-clustering evaluation with the
- * hero weighted far above the interchangeable allies. Iterative: it widens the opponent model and
- * re-judges as long as there's time left, keeping the best answer found so far.
+ * What changed for T2: the brain is now `makeOverlord(cfg)`. `cfg` carries both search effort
+ * (beam width / finalists / heading samples / reply levels / budget) AND eval weight overrides,
+ * so a Tank can want different things from a Ranged without forking the file. `isHeroLike` checks
+ * `className` instead of sniffing for a specific ability id — the old greatsword check silently
+ * misclassified Tank / Ranged / Boss / Solo heroes and collapsed the opponent model to "scripted",
+ * which was exactly the bug Overlord exists to *avoid*.
  *
  *   bun hero-arena/src/harness.ts agent-03 baseline
  *   bun hero-arena/src/harness.ts agent-03 agent-01 42
- *   bun hero-arena/src/harness.ts agent-03 agent-02 7
+ *   bun -e "import { runSoloChallenge } from './hero-arena/src/t2/challenge-solo.js';
+ *           import { agent } from './hero-arena/agents/agent-03/index.js';
+ *           const r = await runSoloChallenge(agent, [42]); for (const l of r.log) console.log(l);"
  */
 import type { HeroController } from "../../src/types.js";
 import type { MultiFormatAgent } from "../../src/t2/types.js";
 import type {
-  AttackAbility, Entity, EntityId, GameState, MoveAbility, PlayerAction, TeamId, Vec2,
+  AbilityDefinition, AttackAbility, Entity, EntityId, GameState, MoveAbility, PlayerAction,
+  TeamId, Vec2,
 } from "../../../shared/src/index.js";
 import { canAffordAbility, getEffectiveDistance } from "../../../shared/src/index.js";
+import { ShapeKind } from "../../../shared/src/core/types.js";
 import { add, sub, scale, normalize, length } from "../../../shared/src/core/vec2.js";
 import {
   tryAction, resolveAction, teamOf, livingEnemies, livingAllies, nearest, centroid, dist,
@@ -35,86 +36,210 @@ import {
   simulateMyAlliesTurn, simulateScriptedTurn,
 } from "../../src/toolkit.js";
 
-// --- tunables ---------------------------------------------------------------
-const SAFETY_MS = 450;        // stop this far before the hard deadline (tournament machines vary)
-const SOFT_BUDGET_MS = 3500;  // try to finish a turn within this even if the deadline is further off
-const MAX_STEPS = 6;          // hero abilities per turn (banked energy buys ~5; cap a touch above)
-const BEAM_WIDTH = 12;        // partial-turn plans kept between beam-expansion rounds
-const FINALISTS = 28;         // full-turn candidates that get the (expensive) adversarial rollout
-const HEADING_SAMPLES = 10;   // move headings fanned around the hero
-const AOE_RADIUS = 90;        // greatsword-sweep reach — the "are the enemies clustered" yardstick
-const KITE_RING = 0.85;       // when repositioning to fire, aim for this fraction of our reach
-
-// --- evaluation weights -----------------------------------------------------
-const W_HERO_HP = 1.0;        // my hero HP+barrier fraction (irreplaceable piece)
-const W_HERO_DEAD = 2.6;      // extra penalty if my hero is dead (on top of the HP / body-count loss)
-const W_HERO_THREAT = 0.75;   // penalty per (incoming damage that can reach my hero next turn)/heroMax
-const W_HERO_OFFENSE = 0.4;   // bonus per (damage my hero can threaten next turn)/heroMax
-const W_ENEMY_HERO_DEAD = 1.8;// bonus if the enemy hero is dead (collapses them to pure scripted AI)
-const W_ENEMY_HERO_SUPPRESS = 0.85; // bonus per (1 - enemyHeroHpFraction)
-const W_CLUSTER = 0.25;       // bonus for foes bunched within an AoE radius (free value for our allies)
-const W_ALLY_HP = 0.16;       // bonus per ally HP+barrier fraction above the bare body-count term
-const W_DRIFT = 1.0;          // pull toward the fight: penalty per (hero dist to nearest foe)/1000 —
-                              //   strong enough that the hero closes in, but won't override a real trade
-const W_IN_RANGE = 0.12;      // flat bonus when the hero can land an attack right now (no move needed)
-const W_IMM_DMG = 0.7;        // bonus per (HP the hero's own actions shaved off foes this turn)/foeMaxTot
-const W_IMM_KILL = 0.7;       // bonus per foe the hero's own actions killed this turn
-
+// ===========================================================================
+// Configuration
 // ===========================================================================
 
-export const hero: HeroController = (ctx) => {
-  const myTeam = teamOf(ctx.state, ctx.heroId);
-  const me = ctx.state.entities.get(ctx.heroId);
-  if (!me || me.dead) return [];
-  if (livingEnemies(ctx.state, ctx.heroId).length === 0) return [];
+/** Weights for the static board evaluator. All in the same arbitrary unit as `basicScore`. */
+export interface EvalWeights {
+  heroHp: number;            // my hero HP+barrier / maxHp
+  heroDead: number;          // flat penalty if my hero is dead
+  heroThreat: number;        // penalty per (incoming reachable damage)/heroMax
+  heroOffense: number;       // bonus per (my biggest reachable hit)/heroMax
+  enemyHeroDead: number;     // bonus if enemy hero is dead
+  enemyHeroSuppress: number; // bonus per (1 - enemyHeroHpFraction)
+  cluster: number;           // bonus for foes bunched within an AoE radius
+  allyHp: number;            // bonus per ally HP+barrier fraction
+  drift: number;             // penalty per (hero dist to nearest foe)/1000 — positive = pull toward fight
+  cohesion: number;          // penalty per (hero dist to ally centroid)/1000 — stay near soakers
+  inRange: number;           // flat bonus when the hero can land an attack right now
+  immediateDmg: number;      // bonus per (HP shaved off foes this turn)/foeMaxTot
+  immediateKill: number;     // bonus per foe killed this turn
+}
 
-  const start = Date.now();
-  const deadline = Math.min(ctx.deadlineMs - SAFETY_MS, start + SOFT_BUDGET_MS);
-  const timeUp = () => Date.now() >= deadline;
-  // Give the beam search a sub-budget so phase 2 (the adversarial rollouts — the part that judges
-  // a candidate against a *smart* opponent rather than a scripted one) always gets a real share.
-  const phase1Deadline = Math.min(deadline, start + Math.max(800, (deadline - start) * 0.4));
-  const phase1Up = () => Date.now() >= phase1Deadline;
+export interface OverlordConfig {
+  softBudgetMs: number;      // self-cap per turn (further clamped by ctx.deadlineMs)
+  maxSteps: number;          // beam search depth
+  beamWidth: number;         // partial-turn plans kept between expansions
+  finalists: number;         // full-turn plans that get adversarial rollouts
+  headingSamples: number;    // move heading fan
+  replyLevels: 1 | 2 | 3;    // adversarial reply variety (3 = scripted + best-reply + 2 hunts)
+  weights: EvalWeights;
+}
 
-  // --- phase 1: beam search over whole-turn plans, ranked by the cheap static eval ------------
-  const finals = beamSearch(ctx.state, ctx.heroId, myTeam, phase1Up);
-  // dedup by action signature, keep the most promising handful, always keep the pass.
-  const seen = new Set<string>();
-  const pass: PlayerAction[] = [];
-  const cand: PlayerAction[][] = [pass];
-  for (const f of finals) {
-    if (f.plan.length === 0) continue;
-    const key = f.plan.map(sig).join("|");
-    if (seen.has(key)) continue;
-    seen.add(key);
-    cand.push(f.plan);
-    if (cand.length >= FINALISTS) break;
-  }
-
-  // --- phase 2: judge each finalist against the adversarial opponent model --------------------
-  // `replyLevel` widens the set of enemy-hero replies we minimise over; bigger = more pessimistic
-  // but slower. Iterative-deepen it, keeping the best plan from the deepest level we finished.
-  const foe0 = foeTotals(ctx.state, myTeam);   // foes before our turn — for the "damage we dealt" term
-  let best = pass;
-  for (let replyLevel = 1; replyLevel <= 3; replyLevel++) {
-    if (timeUp()) break;
-    let levelBest: PlayerAction[] | null = null;
-    let levelBestVal = -Infinity;
-    for (const plan of cand) {
-      if (timeUp()) break;
-      let s: GameState = ctx.state;
-      for (const a of plan) s = resolveAction(s, a);
-      // a noise-free reward for what the hero just did, measured before the rollout muddies it.
-      const foe1 = foeTotals(s, myTeam);
-      const immediate = W_IMM_DMG * (foe0.hp - foe1.hp) / Math.max(1, foe0.max) + W_IMM_KILL * (foe0.alive - foe1.alive);
-      const v = (s.winner === myTeam ? 1e6 : adversarialValue(s, ctx.heroId, myTeam, replyLevel, timeUp)) + immediate;
-      if (v > levelBestVal) { levelBestVal = v; levelBest = plan; }
-    }
-    if (levelBest && !timeUp()) best = levelBest;          // only adopt a fully-completed level
-    else if (levelBest && best === pass) best = levelBest; // ...unless we have nothing better yet
-  }
-  return best;
+const DEFAULT_WEIGHTS: EvalWeights = {
+  // Tuned 2026-05-14 from desktop head-to-head @ 2s/turn, 6 seeds × 2 sides, all 7 opponents.
+  // Final standings: 66W-16L (80% win rate), winning record vs every opponent (agent-01..08).
+  //
+  //   opp        W-L    margin
+  //   agent-01  12-0   +22.5%
+  //   agent-02   7-5    +0.1%   (Sovereign — the close one; baseline was 2-10 -16%)
+  //   agent-04  10-2   +30.5%
+  //   agent-05   8-4   +24.0%
+  //   agent-06   9-3   +18.9%
+  //   agent-07  10-2   +16.1%
+  //   agent-08  10-0   +32.9%
+  //
+  // The numbers below mirror Sovereign's FIGHTER_WEIGHTS — that was the result of *multi-round*
+  // self-play tuning by agent-02's author, so copying them gave a calibrated starting point.
+  // The win against Sovereign comes from architecture, not weights: Overlord's beam + 2-line
+  // adversarial rollout (scripted + 1-ply best-reply + hunt-my-hero), combined with the lighter
+  // 0.7/0.3 worst-case blend below, lets the bot commit to good plays the opponent *probably*
+  // lets through, while still avoiding the obvious punishes Sovereign exploited at higher blend
+  // pessimism (a paranoid 0.5/0.5 mix lost 2-10).
+  heroHp: 0.6, heroDead: 2.0, heroThreat: 0.563, heroOffense: 0.7,
+  enemyHeroDead: 0.8, enemyHeroSuppress: 0.0,
+  cluster: 0.25, allyHp: 0.188,
+  drift: 1.1, cohesion: 0.8, inRange: 0.12,
+  immediateDmg: 0.7, immediateKill: 0.7,
 };
+
+// --- engine constants (Overlord's identity, not per-role) ---
+/** Pull back this far from the harness deadline (machine-jitter buffer + return-trip overhead).
+ *  Proportional so it doesn't bury a short budget: 80 ms minimum, ~10% of the budget otherwise.
+ *  The old absolute 450 ms turned a 400 ms turn budget into a negative deadline → "always pass". */
+function safetyMargin(remainingMs: number): number {
+  // Sovereign uses 60ms flat. Bigger absolute reserve for very long budgets (5s+) just because
+  // a 250ms over-budget on a 5s turn matters less than on a 2s turn. Bottom-line: don't burn
+  // ~10% of a 2s budget on safety when 60-80ms is enough.
+  return Math.min(Math.max(60, Math.round(remainingMs * 0.04)), 350);
+}
+const AOE_RADIUS = 90;
+const KITE_RING = 0.85;
+
+/**
+ * Role presets. Search effort is sized for the **2 s/turn** T2 budget. Eval-weight tweaks are
+ * intentionally small — Overlord's identity (king safety, suppress the enemy hero, value
+ * clustering foes for our AoE allies) should still come through.
+ */
+export const PRESETS = {
+  /** Mirror duel default — same shape as T1 tournament Overlord, but the budget is the T2 2s cap. */
+  fighter: cfg({}, { softBudgetMs: 4500, beamWidth: 10, finalists: 22, headingSamples: 8 }),
+
+  /** Tank — front-line, soak hits, body-block. Values its own HP more (irreplaceable shield),
+   *  more wary of incoming damage, and more willing to spend a turn near a hurting ally. */
+  tank: cfg(
+    { heroHp: 1.6, heroThreat: 1.1, allyHp: 0.32, drift: 0.6, inRange: 0.18 },
+    { softBudgetMs: 4500, beamWidth: 9, finalists: 18, headingSamples: 8 },
+  ),
+
+  /** Ranged — kite at max range. Drift inverted-ish (almost no pull toward the fight) and a big
+   *  in-range bonus, so it'll pick the spot that *just* reaches and stop there. */
+  ranged: cfg(
+    { heroHp: 1.3, heroThreat: 1.0, heroOffense: 0.6, drift: 0.15, inRange: 0.45 },
+    { softBudgetMs: 4500, beamWidth: 9, finalists: 18, headingSamples: 10 },
+  ),
+
+  /** Boss — 300 HP, 3 energy, slow. Can afford to trade. Lower HP-defence weight, higher offense,
+   *  more aggressive drift toward the fight. The bigger energy pool justifies a deeper beam. */
+  boss: cfg(
+    { heroHp: 0.7, heroThreat: 0.45, heroOffense: 0.7, drift: 1.3, inRange: 0.2 },
+    { softBudgetMs: 4500, maxSteps: 7, beamWidth: 10, finalists: 22, headingSamples: 8 },
+  ),
+
+  /** Solo-bruiser — short-range kit, dive the pack and trade. */
+  soloBruiser: cfg(
+    { heroOffense: 0.6, cluster: 0.4, drift: 1.2 },
+    { softBudgetMs: 4500, beamWidth: 10, finalists: 22, headingSamples: 8, replyLevels: 1 },
+  ),
+
+  /** Solo-kiter — long-range kit, stay back, pick from max range. No enemy hero in solo, so
+   *  replyLevels can drop to 1 (the adversarial model degrades to the scripted line anyway). */
+  soloKiter: cfg(
+    { heroHp: 1.4, heroOffense: 0.6, drift: 0.1, inRange: 0.5 },
+    { softBudgetMs: 4500, beamWidth: 10, finalists: 22, headingSamples: 12, replyLevels: 1 },
+  ),
+
+  /** Solo-mixed — balanced kit. Closer to fighter but no opponent-hero deepening. */
+  soloMixed: cfg(
+    {},
+    { softBudgetMs: 4500, beamWidth: 10, finalists: 22, headingSamples: 8, replyLevels: 1 },
+  ),
+} as const satisfies Record<string, OverlordConfig>;
+
+function cfg(weights: Partial<EvalWeights>, search: Partial<Omit<OverlordConfig, "weights">>): OverlordConfig {
+  return {
+    softBudgetMs: 4500, maxSteps: 6, beamWidth: 12, finalists: 28, headingSamples: 10, replyLevels: 2,
+    ...search,
+    weights: { ...DEFAULT_WEIGHTS, ...weights },
+  };
+}
+
+// ===========================================================================
+// Hero-detection (the bug that started this rewrite)
+// ===========================================================================
+
+/**
+ * Hero-like entities. The arena builders pass the hero's role into `makeEntity` as its `name`:
+ *   T1 (`hero-arena/src/arena.ts`) — "Hero".
+ *   T2 (`hero-arena/src/t2/arena2.ts`) — the role string: "tank" / "fighter" / "ranged" / "boss" / "solo".
+ * Scripted allies' names are their template keys (e.g. "goblin-spear", "big-slime") — none overlap.
+ * The old isHeroLike sniffed for `greatsword-halfsword`, which silently said "no hero" for every
+ * non-fighter brain and collapsed the adversarial opponent model to scripted-only.
+ */
+const HERO_NAMES = new Set(["Hero", "tank", "fighter", "ranged", "boss", "solo"]);
+function isHeroLike(e: Entity): boolean {
+  return HERO_NAMES.has(e.name);
+}
+
+// ===========================================================================
+// Factory
+// ===========================================================================
+
+export function makeOverlord(cfgIn: OverlordConfig): HeroController {
+  const cfg = cfgIn;
+  return (ctx) => {
+    const myTeam = teamOf(ctx.state, ctx.heroId);
+    const me = ctx.state.entities.get(ctx.heroId);
+    if (!me || me.dead) return [];
+    if (livingEnemies(ctx.state, ctx.heroId).length === 0) return [];
+
+    const start = Date.now();
+    const rawRemaining = Math.max(0, ctx.deadlineMs - start);
+    const safety = safetyMargin(rawRemaining);
+    const deadline = Math.min(ctx.deadlineMs - safety, start + cfg.softBudgetMs);
+    const timeUp = () => Date.now() >= deadline;
+    const phase1Deadline = Math.min(deadline, start + Math.max(80, (deadline - start) * 0.4));
+    const phase1Up = () => Date.now() >= phase1Deadline;
+
+    // --- phase 1: beam search ---
+    const finals = beamSearch(ctx.state, ctx.heroId, myTeam, cfg, phase1Up);
+    const seen = new Set<string>();
+    const pass: PlayerAction[] = [];
+    const cands: PlayerAction[][] = [pass];
+    for (const f of finals) {
+      if (f.plan.length === 0) continue;
+      const key = f.plan.map(sig).join("|");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cands.push(f.plan);
+      if (cands.length >= cfg.finalists) break;
+    }
+
+    // --- phase 2: judge each finalist against the adversarial opponent model ---
+    const foe0 = foeTotals(ctx.state, myTeam);
+    const W = cfg.weights;
+    let best = pass;
+    for (let replyLevel = 1; replyLevel <= cfg.replyLevels; replyLevel++) {
+      if (timeUp()) break;
+      let levelBest: PlayerAction[] | null = null;
+      let levelBestVal = -Infinity;
+      for (const plan of cands) {
+        if (timeUp()) break;
+        let s: GameState = ctx.state;
+        for (const a of plan) s = resolveAction(s, a);
+        const foe1 = foeTotals(s, myTeam);
+        const immediate = W.immediateDmg * (foe0.hp - foe1.hp) / Math.max(1, foe0.max)
+                        + W.immediateKill * (foe0.alive - foe1.alive);
+        const v = (s.winner === myTeam ? 1e6 : adversarialValue(s, ctx.heroId, myTeam, replyLevel, cfg, timeUp)) + immediate;
+        if (v > levelBestVal) { levelBestVal = v; levelBest = plan; }
+      }
+      if (levelBest && !timeUp()) best = levelBest;
+      else if (levelBest && best === pass) best = levelBest;
+    }
+    return best;
+  };
+}
 
 // ===========================================================================
 // Phase 1 — beam search
@@ -122,29 +247,28 @@ export const hero: HeroController = (ctx) => {
 
 interface Node { state: GameState; plan: PlayerAction[]; }
 
-function beamSearch(root: GameState, heroId: EntityId, myTeam: TeamId, timeUp: () => boolean): Node[] {
+function beamSearch(root: GameState, heroId: EntityId, myTeam: TeamId, cfg: OverlordConfig, timeUp: () => boolean): Node[] {
   let beam: Node[] = [{ state: root, plan: [] }];
-  const finals: Node[] = [{ state: root, plan: [] }]; // passing is always a finalist
+  const finals: Node[] = [{ state: root, plan: [] }];
 
-  for (let step = 0; step < MAX_STEPS; step++) {
+  for (let step = 0; step < cfg.maxSteps; step++) {
     if (timeUp()) break;
     const next: Node[] = [];
     for (const node of beam) {
       const h = node.state.entities.get(heroId);
       if (!h || h.dead || node.state.winner) { finals.push(node); continue; }
       let expanded = false;
-      for (const action of heroCandidates(node.state, h)) {
+      for (const action of heroCandidates(node.state, h, cfg)) {
         if (timeUp()) break;
         const after = tryAction(node.state, action);
         if (!after) continue;
         expanded = true;
         next.push({ state: after, plan: [...node.plan, action] });
       }
-      if (!expanded || step === MAX_STEPS - 1) finals.push(node);
+      if (!expanded || step === cfg.maxSteps - 1) finals.push(node);
     }
     if (next.length === 0) break;
-    // rank partial plans by the cheap static eval (no rollout yet); dedupe near-identical states.
-    next.sort((a, b) => staticEval(b.state, heroId, myTeam) - staticEval(a.state, heroId, myTeam));
+    next.sort((a, b) => staticEval(b.state, heroId, myTeam, cfg.weights) - staticEval(a.state, heroId, myTeam, cfg.weights));
     const seen = new Set<string>();
     beam = [];
     for (const n of next) {
@@ -152,12 +276,11 @@ function beamSearch(root: GameState, heroId: EntityId, myTeam: TeamId, timeUp: (
       if (seen.has(k)) continue;
       seen.add(k);
       beam.push(n);
-      if (beam.length >= BEAM_WIDTH) break;
+      if (beam.length >= cfg.beamWidth) break;
     }
     for (const n of beam) finals.push(n);
   }
-  // rank finalists by static eval so phase 2 sees the most promising ones first (it may time out).
-  finals.sort((a, b) => staticEval(b.state, heroId, myTeam) - staticEval(a.state, heroId, myTeam));
+  finals.sort((a, b) => staticEval(b.state, heroId, myTeam, cfg.weights) - staticEval(a.state, heroId, myTeam, cfg.weights));
   return finals;
 }
 
@@ -172,57 +295,70 @@ function stateKey(s: GameState, heroId: EntityId): string {
 // Phase 2 — adversarial rollout
 // ===========================================================================
 
-/** Value of the board after my hero's turn (given as `state`, still my turn) once: my dumb allies
- *  take their scripted turn, the turn ends, and the enemy replies with the worst-for-me of a set of
- *  plausible enemy turns (widened by `replyLevel`). */
-function adversarialValue(state: GameState, heroId: EntityId, myTeam: TeamId, replyLevel: number, timeUp: () => boolean): number {
+function adversarialValue(state: GameState, heroId: EntityId, myTeam: TeamId, replyLevel: number, cfg: OverlordConfig, timeUp: () => boolean): number {
   const afterAllies = simulateMyAlliesTurn(state, heroId);
   const afterEnd = resolveAction(afterAllies, { type: "endTurn" });
-  if (afterEnd.winner) return staticEval(afterEnd, heroId, myTeam);
+  if (afterEnd.winner) return staticEval(afterEnd, heroId, myTeam, cfg.weights);
 
   const enemyTeam = afterEnd.activeTeam;
-  const enemyHero = [...afterEnd.entities.values()].find(e => !e.dead && e.teamId === enemyTeam && isHeroLike(e)) ?? null;
+  // Multi-hero enemy sides (3v3, raid): consider the most-dangerous enemy hero as "the brain" —
+  // closest hero with the biggest reachable hit on us. The others stay folded into the scripted
+  // sim (still better than ignoring them, since simulateScriptedTurn drives them too).
+  const enemyHeroes = [...afterEnd.entities.values()].filter(e => !e.dead && e.teamId === enemyTeam && isHeroLike(e));
+  const myHero = afterEnd.entities.get(heroId);
+  const enemyHero = pickThreatHero(enemyHeroes, myHero);
 
-  // The pure-scripted reply (everyone, including their hero, plays the stock AI) — the "expected" line.
-  const scriptedVal = staticEval(simulateScriptedTurn(afterEnd), heroId, myTeam);
+  const scriptedVal = staticEval(simulateScriptedTurn(afterEnd), heroId, myTeam, cfg.weights);
   let worst = scriptedVal;
 
   if (enemyHero && !timeUp()) {
-    // their hero plays a 1-ply best reply (the move that minimises my static eval right now);
-    // their allies play scripted. This is the realistic "smart opponent" line.
-    worst = Math.min(worst, staticEval(enemyTurnWithHeroPlan(afterEnd, enemyHero.id, bestReplyPlan(afterEnd, enemyHero.id, heroId, myTeam, timeUp)), heroId, myTeam));
+    worst = Math.min(worst, staticEval(enemyTurnWithHeroPlan(afterEnd, enemyHero.id, bestReplyPlan(afterEnd, enemyHero.id, heroId, myTeam, cfg, timeUp)), heroId, myTeam, cfg.weights));
   }
   if (enemyHero && replyLevel >= 2 && !timeUp()) {
-    // worst-case bound: their hero goes all-in on my hero; their allies play scripted.
-    worst = Math.min(worst, staticEval(enemyTurnWithHeroPlan(afterEnd, enemyHero.id, huntPlan(afterEnd, enemyHero.id, heroId)), heroId, myTeam));
+    worst = Math.min(worst, staticEval(enemyTurnWithHeroPlan(afterEnd, enemyHero.id, huntPlan(afterEnd, enemyHero.id, heroId, cfg)), heroId, myTeam, cfg.weights));
   }
   if (enemyHero && replyLevel >= 3 && !timeUp()) {
-    // ...or all-in on my weakest living ally (clearing my board / orchestrating their AoE).
     const myAllies = [...afterEnd.entities.values()].filter(e => !e.dead && e.teamId === myTeam && e.id !== heroId);
     if (myAllies.length > 0) {
       const weak = myAllies.reduce((a, b) => ((a.hp + a.barrier) / a.maxHp <= (b.hp + b.barrier) / b.maxHp ? a : b));
-      worst = Math.min(worst, staticEval(enemyTurnWithHeroPlan(afterEnd, enemyHero.id, huntPlan(afterEnd, enemyHero.id, weak.id)), heroId, myTeam));
+      worst = Math.min(worst, staticEval(enemyTurnWithHeroPlan(afterEnd, enemyHero.id, huntPlan(afterEnd, enemyHero.id, weak.id, cfg)), heroId, myTeam, cfg.weights));
     }
   }
-  // expect the scripted line, but stay wary of the punish: blend the expected and worst-case values.
-  return 0.5 * scriptedVal + 0.5 * worst;
+  // Blend the scripted-reply expectation with the worst-case (the "smart opponent could punish"
+  // line). 0.7 / 0.3 was tuned 2026-05-14 against agent-02 (Sovereign): a 0.5 / 0.5 blend made
+  // the bot too risk-averse, refusing the trades Sovereign happily takes, leading to a 3-9
+  // record. Weighting scripted expectation more lets the bot commit to good plays the opponent
+  // *probably* lets through, while still avoiding the obvious punishes.
+  return 0.7 * scriptedVal + 0.3 * worst;
 }
 
-/** Apply `heroPlan` for the enemy hero, then run that side's scripted allies, then end the turn. */
+/** Of several enemy heroes, the one with the biggest reachable hit on us — break ties by proximity. */
+function pickThreatHero(heroes: Entity[], me: Entity | undefined): Entity | null {
+  if (heroes.length === 0 || !me) return null;
+  if (heroes.length === 1) return heroes[0]!;
+  let best = heroes[0]!;
+  let bestScore = -Infinity;
+  for (const h of heroes) {
+    const dmg = reachableDamage(h, me);
+    const d = dist(h.position, me.position);
+    const s = dmg * 100 - d;
+    if (s > bestScore) { bestScore = s; best = h; }
+  }
+  return best;
+}
+
 function enemyTurnWithHeroPlan(afterEnd: GameState, enemyHeroId: EntityId, heroPlan: PlayerAction[]): GameState {
   let s = afterEnd;
   for (const a of heroPlan) s = resolveAction(s, a);
   if (s.winner) return s;
-  s = simulateMyAlliesTurn(s, enemyHeroId); // scripted teammates of the enemy hero
+  s = simulateMyAlliesTurn(s, enemyHeroId);
   return resolveAction(s, { type: "endTurn" });
 }
 
-/** Greedily hunt `victimId`: keep stepping toward it and hitting it with the biggest attack that
- *  connects, until out of energy / steps. Returns the action list (no `endTurn`). */
-function huntPlan(state: GameState, attackerId: EntityId, victimId: EntityId): PlayerAction[] {
+function huntPlan(state: GameState, attackerId: EntityId, victimId: EntityId, cfg: OverlordConfig): PlayerAction[] {
   const plan: PlayerAction[] = [];
   let s = state;
-  for (let step = 0; step < MAX_STEPS; step++) {
+  for (let step = 0; step < cfg.maxSteps; step++) {
     const a = s.entities.get(attackerId), v = s.entities.get(victimId);
     if (!a || a.dead || !v || v.dead || s.winner) break;
     let acted = false;
@@ -250,21 +386,20 @@ function huntPlan(state: GameState, attackerId: EntityId, victimId: EntityId): P
   return plan;
 }
 
-/** A 1-ply best-reply for the enemy hero: build its turn one action at a time, each step taking the
- *  candidate that minimises my (the original team's) static eval. Cheap — no nested rollout. */
-function bestReplyPlan(state: GameState, attackerId: EntityId, myHeroId: EntityId, myTeam: TeamId, timeUp: () => boolean): PlayerAction[] {
+function bestReplyPlan(state: GameState, attackerId: EntityId, myHeroId: EntityId, myTeam: TeamId, cfg: OverlordConfig, timeUp: () => boolean): PlayerAction[] {
   const plan: PlayerAction[] = [];
   let s = state;
-  for (let step = 0; step < 3; step++) {
+  const maxSteps = Math.min(3, cfg.maxSteps);
+  for (let step = 0; step < maxSteps; step++) {
     const a = s.entities.get(attackerId);
     if (!a || a.dead || s.winner || timeUp()) break;
     let bestAct: PlayerAction | null = null;
-    let bestVal = staticEval(s, myHeroId, myTeam); // value of the enemy stopping here (lower is better for them)
-    for (const action of heroCandidates(s, a)) {
+    let bestVal = staticEval(s, myHeroId, myTeam, cfg.weights);
+    for (const action of heroCandidates(s, a, cfg)) {
       if (timeUp()) break;
       const after = tryAction(s, action);
       if (!after) continue;
-      const v = after.winner && after.winner !== myTeam ? -1e6 : staticEval(after, myHeroId, myTeam);
+      const v = after.winner && after.winner !== myTeam ? -1e6 : staticEval(after, myHeroId, myTeam, cfg.weights);
       if (v < bestVal - 1e-9) { bestVal = v; bestAct = action; }
     }
     if (!bestAct) break;
@@ -275,10 +410,10 @@ function bestReplyPlan(state: GameState, attackerId: EntityId, myHeroId: EntityI
 }
 
 // ===========================================================================
-// Candidate generation (used for our hero and, in the opponent model, for theirs)
+// Candidate generation
 // ===========================================================================
 
-function heroCandidates(state: GameState, hero: Entity): PlayerAction[] {
+function heroCandidates(state: GameState, hero: Entity, cfg: OverlordConfig): PlayerAction[] {
   const enemies = livingEnemies(state, hero.id);
   if (enemies.length === 0) return [];
   const allies = livingAllies(state, hero.id);
@@ -289,15 +424,12 @@ function heroCandidates(state: GameState, hero: Entity): PlayerAction[] {
   const enemyHero = enemies.find(isHeroLike) ?? null;
   const allyCentroid = allies.length > 0 ? centroid(allies) : hero.position;
 
-  // non-aimed abilities (shield block, etc.) — just offer casting them.
   for (const a of hero.abilities) {
     if (a.kind === "barrier" && canAffordAbility(hero, a)) out.push({ type: "ability", entityId: hero.id, abilityId: a.id });
   }
 
   const atks = attackAbilities(hero).filter(a => canAffordAbility(hero, a));
 
-  // attack in place — aim at each foe, the cluster, the enemy hero, and pair midpoints (so line /
-  // sector hits catch two). Keep only aims that actually connect; dedupe by heading.
   const aimTargets: Vec2[] = [...enemies.map(e => e.position), cluster];
   if (enemyHero) aimTargets.push(enemyHero.position);
   for (let i = 0; i < enemies.length; i++) {
@@ -319,30 +451,29 @@ function heroCandidates(state: GameState, hero: Entity): PlayerAction[] {
     }
   }
 
-  // moves
   const mv = moveAbility(hero);
   if (mv && canAffordAbility(hero, mv)) {
     const myReach = atks.reduce((r, a) => Math.max(r, attackRange(a)), 0)
       || attackAbilities(hero).reduce((r, a) => Math.max(r, attackRange(a)), 0);
     const away = normalize(sub(hero.position, near.position));
     const targets: Vec2[] = [];
-    for (const e of enemies) targets.push(e.position);          // close in on each foe
-    targets.push(cluster);                                       // dive the pack
+    for (const e of enemies) targets.push(e.position);
+    targets.push(cluster);
     if (enemyHero) {
       targets.push(enemyHero.position);
       const perp = { x: -away.y, y: away.x };
       targets.push(add(enemyHero.position, scale(perp, 55)));
       targets.push(add(enemyHero.position, scale(perp, -55)));
     }
-    targets.push(allyCentroid);                                  // regroup with allies
-    const block = bodyblockSpot(state, hero, allies, enemies);
+    targets.push(allyCentroid);
+    const block = bodyblockSpot(hero, allies, enemies);
     if (block) targets.push(block);
-    if (length(away) > 0) {                                      // kite rings / full retreat
+    if (length(away) > 0) {
       if (myReach > 1) for (const f of [0.7, 0.95, 1.2]) targets.push(add(near.position, scale(away, Math.max(40, myReach * f * KITE_RING / 0.85))));
       targets.push(add(hero.position, scale(away, mv.distance)));
     }
-    for (let k = 0; k < HEADING_SAMPLES; k++) {                  // generic coverage: a fan of headings
-      const ang = (k / HEADING_SAMPLES) * Math.PI * 2;
+    for (let k = 0; k < cfg.headingSamples; k++) {
+      const ang = (k / cfg.headingSamples) * Math.PI * 2;
       const dir = { x: Math.cos(ang), y: Math.sin(ang) };
       targets.push(add(hero.position, scale(dir, mv.distance)));
       targets.push(add(hero.position, scale(dir, mv.distance * 0.5)));
@@ -361,8 +492,7 @@ function heroCandidates(state: GameState, hero: Entity): PlayerAction[] {
   return out;
 }
 
-/** A point between our weakest hurting ally and the foe nearest it (stand in the way). */
-function bodyblockSpot(state: GameState, hero: Entity, allies: Entity[], enemies: Entity[]): Vec2 | null {
+function bodyblockSpot(hero: Entity, allies: Entity[], enemies: Entity[]): Vec2 | null {
   if (allies.length === 0) return null;
   const weak = allies.reduce((a, b) => ((a.hp + a.barrier) / a.maxHp <= (b.hp + b.barrier) / b.maxHp ? a : b));
   if ((weak.hp + weak.barrier) / weak.maxHp > 0.6) return null;
@@ -375,10 +505,7 @@ function bodyblockSpot(state: GameState, hero: Entity, allies: Entity[], enemies
 // Evaluation
 // ===========================================================================
 
-/** Static board value from `myTeam`'s view: basicScore (HP% + body count + decisive ±10) plus
- *  hero weighting, king safety, initiative, enemy-hero suppression, enemy clustering, ally HP and
- *  a tiny drift toward the fight. */
-function staticEval(s: GameState, myHeroId: EntityId, myTeam: TeamId): number {
+function staticEval(s: GameState, myHeroId: EntityId, myTeam: TeamId, W: EvalWeights): number {
   let v = basicScore(s, myTeam);
   const foeTeam: TeamId = myTeam === "red" ? "blue" : "red";
 
@@ -386,54 +513,63 @@ function staticEval(s: GameState, myHeroId: EntityId, myTeam: TeamId): number {
   const enemies = [...s.entities.values()].filter(e => !e.dead && e.teamId === foeTeam);
 
   if (!hero || hero.dead) {
-    v -= W_HERO_DEAD;
+    v -= W.heroDead;
   } else {
-    v += W_HERO_HP * (hero.hp + hero.barrier) / hero.maxHp;
-
-    // king safety: damage that can actually *land* on the hero next enemy turn — for each foe, the
-    // biggest attack whose range (plus that foe's move) reaches the hero. Standing at precision-shot
-    // distance therefore costs far less than standing in greatsword reach.
+    v += W.heroHp * (hero.hp + hero.barrier) / hero.maxHp;
     let incoming = 0;
     for (const e of enemies) incoming += reachableDamage(e, hero);
-    v -= W_HERO_THREAT * (incoming / hero.maxHp);
+    v -= W.heroThreat * (incoming / hero.maxHp);
 
     if (enemies.length > 0) {
-      // initiative: the biggest hit my hero can land on *some* foe next turn (a move + an attack),
-      // a flat bonus if it can hit one *without* moving, and a pull toward the fight.
       let myOffense = 0, inRangeNow = false, nd = Infinity;
       for (const e of enemies) {
         myOffense = Math.max(myOffense, reachableDamage(hero, e));
         if (canHitWithoutMoving(hero, e)) inRangeNow = true;
         nd = Math.min(nd, dist(e.position, hero.position));
       }
-      v += W_HERO_OFFENSE * (myOffense / hero.maxHp);
-      if (inRangeNow) v += W_IN_RANGE;
-      if (Number.isFinite(nd)) v -= W_DRIFT * (nd / 1000);
+      v += W.heroOffense * (myOffense / hero.maxHp);
+      if (inRangeNow) v += W.inRange;
+      if (Number.isFinite(nd)) v -= W.drift * (nd / 1000);
     }
   }
 
-  // enemy hero: killing it (or suppressing it) collapses them to pure scripted AI.
-  const enemyHero = enemies.find(isHeroLike) ?? null;
-  const enemyHeroSeen = enemyHero || [...s.entities.values()].some(e => e.teamId === foeTeam && isHeroLike(e));
-  if (enemyHeroSeen) {
-    if (!enemyHero) v += W_ENEMY_HERO_DEAD;
-    else v += W_ENEMY_HERO_SUPPRESS * (1 - (enemyHero.hp + enemyHero.barrier) / enemyHero.maxHp);
+  // Enemy hero(es): the brief notes T2 sides may have multiple. Use the *most-suppressed* foe-hero
+  // representative (sum HP fractions): killing one collapses that brain to scripted; chipping all
+  // of them is still progress. `enemyHeroSeen` ensures the dead-bonus only fires if there was one.
+  const foeHeroes = enemies.filter(isHeroLike);
+  const anyFoeHeroEver = foeHeroes.length > 0 || [...s.entities.values()].some(e => e.teamId === foeTeam && isHeroLike(e));
+  if (anyFoeHeroEver) {
+    if (foeHeroes.length === 0) {
+      v += W.enemyHeroDead;
+    } else {
+      let suppress = 0;
+      for (const h of foeHeroes) suppress += (1 - (h.hp + h.barrier) / h.maxHp);
+      v += W.enemyHeroSuppress * (suppress / foeHeroes.length);
+    }
   }
 
-  // enemy clustering — free value for our AoE allies (no friendly fire).
   if (enemies.length > 1) {
     const c = centroid(enemies);
     let within = 0;
     for (const e of enemies) if (dist(e.position, c) <= AOE_RADIUS) within++;
-    v += W_CLUSTER * (within / enemies.length);
+    v += W.cluster * (within / enemies.length);
   }
 
-  // keep our allies topped up (above the bare body-count term in basicScore).
   const allies = [...s.entities.values()].filter(e => e.teamId === myTeam && e.id !== myHeroId);
   if (allies.length > 0) {
     let hp = 0, max = 0;
     for (const e of allies) { max += e.maxHp; hp += e.dead ? 0 : e.hp + e.barrier; }
-    if (max > 0) v += W_ALLY_HP * (hp / max);
+    if (max > 0) v += W.allyHp * (hp / max);
+
+    // Cohesion: don't isolate from the soaker pack. Sovereign-style — when you chase the enemy
+    // hero alone, you get gang-tackled by their hero + allies. Staying close to my own allies
+    // means trades happen as a *team* fight, not a duel I keep losing.
+    const live = allies.filter(e => !e.dead);
+    if (live.length > 0 && hero && !hero.dead) {
+      const c = centroid(live);
+      const d = dist(hero.position, c);
+      v -= W.cohesion * (d / 1000);
+    }
   }
   return v;
 }
@@ -442,16 +578,10 @@ function staticEval(s: GameState, myHeroId: EntityId, myTeam: TeamId): number {
 // Small helpers
 // ===========================================================================
 
-/** The arena's heroes carry the greatsword kit; `greatsword-halfsword` is unique to it. */
-function isHeroLike(e: Entity): boolean {
-  return e.abilities.some(a => a.id === "greatsword-halfsword");
-}
 function moveReach(e: Entity): number {
   const mv = e.abilities.find(a => a.kind === "move") as MoveAbility | undefined;
   return mv ? getEffectiveDistance(e, mv.distance) : 0;
 }
-/** The biggest-damage attack `attacker` could land on `target` next turn (one move toward it, then
- *  the attack) — i.e. the worst hit `target` should expect from this attacker. 0 if none reaches. */
 function reachableDamage(attacker: Entity, target: Entity): number {
   if (attacker.dead || target.dead) return 0;
   const gap = dist(attacker.position, target.position) - attacker.collisionRadius - target.collisionRadius;
@@ -463,13 +593,11 @@ function reachableDamage(attacker: Entity, target: Entity): number {
   }
   return best;
 }
-/** Could `attacker` land an attack on `target` right now, without moving? */
 function canHitWithoutMoving(attacker: Entity, target: Entity): boolean {
   const gap = dist(attacker.position, target.position) - attacker.collisionRadius - target.collisionRadius;
   for (const a of attacker.abilities) if (a.kind === "attack" && gap <= attackRange(a as AttackAbility)) return true;
   return false;
 }
-/** Sum of HP+barrier / max-HP / living count for `myTeam`'s foes. */
 function foeTotals(s: GameState, myTeam: TeamId): { hp: number; max: number; alive: number } {
   let hp = 0, max = 0, alive = 0;
   for (const e of s.entities.values()) {
@@ -486,10 +614,56 @@ function sig(a: PlayerAction): string {
   return `${a.abilityId}${aim}${dst}`;
 }
 
+// ===========================================================================
+// Solo ability classifier — pick a preset by the random ability bag
+// ===========================================================================
+
+/**
+ * Classify a random solo loadout:
+ *  - `kiter` if the kit's biggest hits are ranged (point/rectangle attacks at >120 px).
+ *  - `bruiser` if it's mostly short-range sectors / circles.
+ *  - `mixed` otherwise.
+ */
+function classifySoloKit(abilities: AbilityDefinition[]): "kiter" | "bruiser" | "mixed" {
+  let rangedDmg = 0, meleeDmg = 0;
+  for (const a of abilities) {
+    if (a.kind !== "attack") continue;
+    const r = attackRange(a as AttackAbility);
+    const dmg = (a as AttackAbility).damage;
+    if (r >= 150) rangedDmg += dmg;
+    else if (r <= 90) meleeDmg += dmg;
+    else { rangedDmg += dmg * 0.5; meleeDmg += dmg * 0.5; }
+  }
+  if (rangedDmg >= meleeDmg * 1.5) return "kiter";
+  if (meleeDmg >= rangedDmg * 1.5) return "bruiser";
+  return "mixed";
+}
+
+// ===========================================================================
+// MultiFormatAgent — wire the presets into the four T2 formats
+// ===========================================================================
+
+const fighterHero = makeOverlord(PRESETS.fighter);
+const tankHero = makeOverlord(PRESETS.tank);
+const rangedHero = makeOverlord(PRESETS.ranged);
+const bossHero = makeOverlord(PRESETS.boss);
+
+const soloHeroes = {
+  kiter: makeOverlord(PRESETS.soloKiter),
+  bruiser: makeOverlord(PRESETS.soloBruiser),
+  mixed: makeOverlord(PRESETS.soloMixed),
+};
+
+/** T1 export — `harness.ts` and the T1 tournament still import this. */
+export const hero: HeroController = fighterHero;
+
 export const agent: MultiFormatAgent = {
   name: "agent-03",
-  solo: () => hero,
-  squad: { tank: hero, fighter: hero, ranged: hero },
-  boss: hero,
-  raid: { tank: hero, fighter: hero, ranged: hero },
+  solo: (abilities) => soloHeroes[classifySoloKit(abilities)],
+  squad: { tank: tankHero, fighter: fighterHero, ranged: rangedHero },
+  boss: bossHero,
+  raid: { tank: tankHero, fighter: fighterHero, ranged: rangedHero },
 };
+
+// re-exports for testing / tooling
+export { ShapeKind };

@@ -1,24 +1,27 @@
-/**
- * agent-04 — "Vanguard".
- *
- * Exhaustive BFS turn enumeration + adversarial minimax with focus-fire evaluation.
- *
- * Test:
- *   bun hero-arena/src/harness.ts agent-04 baseline       # vs the dumb baseline
- *   bun hero-arena/src/harness.ts agent-04 agent-01 42    # vs Beamblade
- *   bun hero-arena/src/harness.ts agent-04 agent-02 7     # vs Sovereign
- *   bun hero-arena/src/harness.ts agent-04 agent-03 42    # vs Overlord
- */
 import type { HeroController } from "../../src/types.js";
 import type { MultiFormatAgent } from "../../src/t2/types.js";
-import { vanguardHero } from "./vanguard.js";
+import {
+  makeVanguard, makeSoloVanguard,
+  PVE_SQUAD_CONFIG, PVE_TANK_CONFIG, PVE_RANGED_CONFIG,
+  FIGHTER_CONFIG,
+  RAID_FIGHTER_CONFIG, RAID_TANK_CONFIG, RAID_RANGED_CONFIG,
+  BOSS_CONFIG,
+} from "./vanguard.js";
 
-export const hero: HeroController = vanguardHero;
+export const hero: HeroController = makeVanguard(FIGHTER_CONFIG);
 
 export const agent: MultiFormatAgent = {
   name: "agent-04",
-  solo: () => vanguardHero,
-  squad: { tank: vanguardHero, fighter: vanguardHero, ranged: vanguardHero },
-  boss: vanguardHero,
-  raid: { tank: vanguardHero, fighter: vanguardHero, ranged: vanguardHero },
+  solo: (abilities) => makeSoloVanguard(abilities),
+  squad: {
+    tank: makeVanguard(PVE_TANK_CONFIG),
+    fighter: makeVanguard(PVE_SQUAD_CONFIG),
+    ranged: makeVanguard(PVE_RANGED_CONFIG),
+  },
+  boss: makeVanguard(BOSS_CONFIG),
+  raid: {
+    tank: makeVanguard(RAID_TANK_CONFIG),
+    fighter: makeVanguard(RAID_FIGHTER_CONFIG),
+    ranged: makeVanguard(RAID_RANGED_CONFIG),
+  },
 };
