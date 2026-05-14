@@ -23,6 +23,7 @@
  *   bun hero-arena/src/harness.ts agent-03 agent-02 7
  */
 import type { HeroController } from "../../src/types.js";
+import type { MultiFormatAgent } from "../../src/t2/types.js";
 import type {
   AttackAbility, Entity, EntityId, GameState, MoveAbility, PlayerAction, TeamId, Vec2,
 } from "../../../shared/src/index.js";
@@ -484,3 +485,11 @@ function sig(a: PlayerAction): string {
   const dst = a.destination ? `>${Math.round(a.destination.x / 7)},${Math.round(a.destination.y / 7)}` : "";
   return `${a.abilityId}${aim}${dst}`;
 }
+
+export const agent: MultiFormatAgent = {
+  name: "agent-03",
+  solo: () => hero,
+  squad: { tank: hero, fighter: hero, ranged: hero },
+  boss: hero,
+  raid: { tank: hero, fighter: hero, ranged: hero },
+};

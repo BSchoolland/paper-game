@@ -11,5 +11,14 @@
  */
 import { referenceHero } from "../../src/reference-bot.js";
 import type { HeroController } from "../../src/types.js";
+import type { MultiFormatAgent } from "../../src/t2/types.js";
 
 export const hero: HeroController = referenceHero;
+
+export const agent: MultiFormatAgent = {
+  name: "agent-01",
+  solo: () => referenceHero,
+  squad: { tank: referenceHero, fighter: referenceHero, ranged: referenceHero },
+  boss: referenceHero,
+  raid: { tank: referenceHero, fighter: referenceHero, ranged: referenceHero },
+};

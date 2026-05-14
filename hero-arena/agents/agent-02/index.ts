@@ -8,6 +8,15 @@
  *   bun hero-arena/agents/agent-02/tune.ts                # self-play weight tuning
  */
 import type { HeroController } from "../../src/types.js";
+import type { MultiFormatAgent } from "../../src/t2/types.js";
 import { sovereignHero } from "./sovereign.js";
 
 export const hero: HeroController = sovereignHero;
+
+export const agent: MultiFormatAgent = {
+  name: "agent-02",
+  solo: () => sovereignHero,
+  squad: { tank: sovereignHero, fighter: sovereignHero, ranged: sovereignHero },
+  boss: sovereignHero,
+  raid: { tank: sovereignHero, fighter: sovereignHero, ranged: sovereignHero },
+};

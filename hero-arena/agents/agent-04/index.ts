@@ -10,6 +10,15 @@
  *   bun hero-arena/src/harness.ts agent-04 agent-03 42    # vs Overlord
  */
 import type { HeroController } from "../../src/types.js";
+import type { MultiFormatAgent } from "../../src/t2/types.js";
 import { vanguardHero } from "./vanguard.js";
 
 export const hero: HeroController = vanguardHero;
+
+export const agent: MultiFormatAgent = {
+  name: "agent-04",
+  solo: () => vanguardHero,
+  squad: { tank: vanguardHero, fighter: vanguardHero, ranged: vanguardHero },
+  boss: vanguardHero,
+  raid: { tank: vanguardHero, fighter: vanguardHero, ranged: vanguardHero },
+};
