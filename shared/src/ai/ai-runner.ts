@@ -3,6 +3,7 @@ import { distance } from "../core/vec2.js";
 import { resolveAction } from "../combat/turn-resolver.js";
 import type { AiStrategy } from "./strategy.js";
 import { strategyForEntity } from "./strategy.js";
+import { isSovereignStrategy, makeSovereignAiStrategy } from "./sovereign-strategy.js";
 
 function closestEnemyDist(entity: Entity, state: GameState): number {
   let best = Infinity;
@@ -49,7 +50,9 @@ export class AiController {
   private getStrategy(entity: Entity): AiStrategy {
     let strategy = this.strategies.get(entity.id);
     if (!strategy) {
-      strategy = strategyForEntity(entity);
+      strategy = isSovereignStrategy(entity.strategy)
+        ? makeSovereignAiStrategy(entity.strategy, entity)
+        : strategyForEntity(entity);
       this.strategies.set(entity.id, strategy);
     }
     return strategy;

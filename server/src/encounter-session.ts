@@ -19,8 +19,8 @@ import {
   buildEncounterMap,
   placeEncounterEntities,
 } from "./encounter-builder.js";
-import { TANK_TEMPLATE, RANGED_TEMPLATE } from "../../hero-arena/src/t2/loadouts.js";
-import { makeSovereign, FIGHTER_WEIGHTS, PRESETS } from "../../hero-arena/agents/agent-02/sovereign.js";
+import { FIGHTER_TEMPLATE } from "../../hero-arena/src/t2/loadouts.js";
+import { makeSovereign, FIGHTER_WEIGHTS, TANK_WEIGHTS, RANGED_WEIGHTS, PRESETS } from "../../hero-arena/agents/agent-02/sovereign.js";
 import type { HeroController } from "../../hero-arena/src/types.js";
 import { strategyForEntity } from "../../shared/src/ai/strategy.js";
 
@@ -68,28 +68,33 @@ export class EncounterSession {
     if (mode === "duel") {
       const entities = new Map<string, ReturnType<typeof makeEntity>>();
       const enemyTemplates = loadEnemyTemplateRegistry(dimensionId);
-      const redPos = findWalkablePosition(map.grid, { x: 120, y: 300 }, RANGED_TEMPLATE.collisionRadius);
-      const bluePos = findWalkablePosition(map.grid, { x: 680, y: 300 }, TANK_TEMPLATE.collisionRadius);
-      entities.set("red1", makeEntity("red1", "ranged", redPos.x, redPos.y, "red", RANGED_TEMPLATE));
-      entities.set("blue1", makeEntity("blue1", "tank", bluePos.x, bluePos.y, "blue", TANK_TEMPLATE));
 
-      // Minions on the AI (blue) side: a spearman to soak hits and an archer for cover-fire.
-      const spear = enemyTemplates["goblin-spear"];
-      const archer = enemyTemplates["goblin-archer"];
-      if (spear) {
-        const p = findWalkablePosition(map.grid, { x: 600, y: 240 }, spear.collisionRadius);
-        entities.set("blue-minion1", makeEntity("blue-minion1", "Goblin Spearman", p.x, p.y, "blue", spear));
-      }
-      if (archer) {
-        const p = findWalkablePosition(map.grid, { x: 600, y: 360 }, archer.collisionRadius);
-        entities.set("blue-minion2", makeEntity("blue-minion2", "Goblin Archer", p.x, p.y, "blue", archer));
+      // Red: a single well-rounded hero (FIGHTER kit — greatsword melee + shield + precision-shot ranged).
+      const redPos = findWalkablePosition(map.grid, { x: 120, y: 300 }, FIGHTER_TEMPLATE.collisionRadius);
+      entities.set("red1", makeEntity("red1", "fighter", redPos.x, redPos.y, "red", FIGHTER_TEMPLATE));
+
+      // Blue: army of genius-tier goblins. Each runs a Sovereign brain matched to its role.
+      const army: Array<{ id: string; name: string; key: string; pos: { x: number; y: number }; weights: typeof FIGHTER_WEIGHTS }> = [
+        { id: "b-spear-a",  name: "Goblin Spearman", key: "goblin-spear",  pos: { x: 600, y: 200 }, weights: FIGHTER_WEIGHTS },
+        { id: "b-spear-b",  name: "Goblin Spearman", key: "goblin-spear",  pos: { x: 720, y: 240 }, weights: FIGHTER_WEIGHTS },
+        { id: "b-archer-a", name: "Goblin Archer",   key: "goblin-archer", pos: { x: 680, y: 380 }, weights: RANGED_WEIGHTS },
+        { id: "b-archer-b", name: "Goblin Archer",   key: "goblin-archer", pos: { x: 760, y: 420 }, weights: RANGED_WEIGHTS },
+        { id: "b-shield",   name: "Goblin Shield",   key: "goblin-shield", pos: { x: 580, y: 320 }, weights: TANK_WEIGHTS    },
+        { id: "b-bigslime", name: "Big Slime",       key: "big-slime",     pos: { x: 640, y: 460 }, weights: FIGHTER_WEIGHTS },
+      ];
+      for (const u of army) {
+        const tpl = enemyTemplates[u.key];
+        if (!tpl) continue;
+        const p = findWalkablePosition(map.grid, u.pos, tpl.collisionRadius);
+        entities.set(u.id, makeEntity(u.id, u.name, p.x, p.y, "blue", tpl));
       }
 
       const session = new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
-      session.heroBrains.set(
-        "blue1" as EntityId,
-        makeSovereign(FIGHTER_WEIGHTS, PRESETS.genius),
-      );
+      for (const u of army) {
+        if (entities.has(u.id)) {
+          session.heroBrains.set(u.id as EntityId, makeSovereign(u.weights, PRESETS.genius));
+        }
+      }
       return session;
     }
 

@@ -782,6 +782,10 @@ export function seedDimension0(): void {
   // Static content is derived from source — re-upsert it on every boot (like seedDimension1/2/3),
   // so changes to enemy templates / items / structures take effect without wiping the database.
   saveDimension(0, "Greenlands", DIMENSION_0_STRUCTURES, "sprites/map-objects/backgrounds/background-grass.png", "sprites/map-decorations");
-  saveEnemyTemplates(0, ENEMY_TEMPLATES);
+  // World-0 enemies use use-it-or-lose-it energy (bank factor 1) — they can't stockpile across turns.
+  const templates = Object.fromEntries(
+    Object.entries(ENEMY_TEMPLATES).map(([k, t]) => [k, { ...t, energyBankFactor: 1 }]),
+  );
+  saveEnemyTemplates(0, templates);
   saveItems(0, DIMENSION_0_ITEMS);
 }

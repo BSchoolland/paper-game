@@ -283,7 +283,7 @@ export const ENEMY_TAGS = [
 
 export type EnemyTag = (typeof ENEMY_TAGS)[number];
 
-export type AiStrategyType = "rush" | "kite" | "threat" | "smart";
+export type AiStrategyType = "rush" | "kite" | "threat" | "smart" | "crazy" | "crafty" | "genius";
 
 export interface UnitTemplate {
   readonly abilities: readonly AbilityDefinition[];
@@ -298,4 +298,7 @@ export interface UnitTemplate {
   readonly effects?: readonly EntityEffect[];
   readonly cost?: number;
   readonly tags?: readonly EnemyTag[];
+  /** Multiplier on per-turn regen to compute the bank cap. Default 2 (= bank 2 turns' worth).
+   *  Set to 1 for "use-it-or-lose-it" energy — entities can't stockpile across turns. */
+  readonly energyBankFactor?: number;
 }

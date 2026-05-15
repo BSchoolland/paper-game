@@ -22,14 +22,15 @@ export function makeEntity(
     barrier: 0,
     teamId,
     energy: {
-      // Template values are the per-turn income; the bank caps at two turns' worth.
+      // Template values are the per-turn income; the bank caps at `energyBankFactor` turns' worth
+      // (default 2). Setting `energyBankFactor: 1` makes energy use-it-or-lose-it.
       // Entities start empty — they receive their first income at their first turn-start.
       red: 0,
       blue: 0,
       regenRed: template.energy.red,
       regenBlue: template.energy.blue,
-      maxRed: template.energy.red * 2,
-      maxBlue: template.energy.blue * 2,
+      maxRed: template.energy.red * (template.energyBankFactor ?? 2),
+      maxBlue: template.energy.blue * (template.energyBankFactor ?? 2),
     },
     abilities: template.abilities,
     sprites: template.sprites,
