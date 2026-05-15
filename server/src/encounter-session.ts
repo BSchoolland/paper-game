@@ -88,7 +88,7 @@ export class EncounterSession {
       const session = new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
       session.heroBrains.set(
         "blue1" as EntityId,
-        makeSovereign(FIGHTER_WEIGHTS, PRESETS.crafty),
+        makeSovereign(FIGHTER_WEIGHTS, PRESETS.genius),
       );
       return session;
     }

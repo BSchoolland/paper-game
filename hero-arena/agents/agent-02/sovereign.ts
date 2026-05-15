@@ -27,7 +27,7 @@ import { strategyForEntity } from "../../../shared/src/ai/strategy.js";
 import { add, normalize, scale, sub } from "../../../shared/src/core/vec2.js";
 import {
   tryAction, resolveAction, teamOf, livingEnemies, livingAllies, nearest, centroid, dist,
-  attackAbilities, attackRange, moveAbility, attackHits, pathToward, basicScore,
+  attackAbilities, attackRange, moveAbility, attackHits, pathToward, pathFloodFor, basicScore,
   simulateMyAlliesTurn, simulateScriptedTurn,
 } from "../../src/toolkit.js";
 
@@ -74,58 +74,38 @@ export interface SearchParams {
   safetyMs: number;
   /** When repositioning to fire, aim for this fraction of our attack range. */
   kiteRing: number;
-  /** If > 0, randomly choose from the top-N fraction of scored plans (e.g. 0.20 = top 20%)
-   *  instead of always picking the best. Pool size is `max(1, ceil(scored.length * topFraction))`.
-   *  Use to inject controlled variance / "personality." Default 0 → deterministic (top-1). */
-  topFraction?: number;
-  /** Self-imposed wall-clock cap per turn (ms). Sovereign uses min(ctx.deadlineMs, start+softBudgetMs)
-   *  as its deadline. Lets a preset declare "engine = up to 10s of think time" while still
-   *  respecting any tighter caller deadline. Default: caller's deadline only. */
-  softBudgetMs?: number;
-  /** If true, discard plans that neither attack nor move toward an enemy. Forces the AI to
-   *  press the fight rather than waiting for the opponent to commit. Falls back to all plans
-   *  if filtering removes everything. */
-  requireAggression?: boolean;
-  /** If true, require aggression only on the turn AFTER a non-aggressive turn. Lets the AI
-   *  stall once, then pressures it to commit — alternates instead of always-cautious. */
-  halfAggressive?: boolean;
+  /** Randomly choose from the top-N fraction of scored plans (e.g. 0.20 = top 20%) instead of
+   *  always picking the best. Pool size is `max(1, ceil(scored.length * topFraction))`. */
+  topFraction: number;
+  /** Self-imposed wall-clock cap per turn (ms). */
+  softBudgetMs: number;
 }
 
 export const DEFAULT_PARAMS: SearchParams = {
   maxSteps: 6, beamWidth: 12, finalists: 28, safetyMs: 60, kiteRing: 0.85,
+  topFraction: 0.20, softBudgetMs: 2000,
 };
-// Multi-hero formats give 2s/hero. Three heroes act per turn, so trim search.
-export const FAST_PARAMS: SearchParams = {
-  maxSteps: 5, beamWidth: 8, finalists: 16, safetyMs: 80, kiteRing: 0.85,
-};
+// Backwards-compat alias for older multi-hero contexts.
+export const FAST_PARAMS: SearchParams = DEFAULT_PARAMS;
 
 // ---------------------------------------------------------------------------
-// Intelligence presets — same brain, dialled difficulty / personality.
+// Intelligence presets — same brain, dialled randomness band.
 // ---------------------------------------------------------------------------
 //
-// `crafty` / `crazy` use a shallow beam (cheap, ~150–400ms) and inject variance via top-fraction
-// random pick: crafty plays "good enough", crazy occasionally picks plans it scored noticeably
-// worse (chaotic but coherent — same brain, less filtering).
-//
-// `smart` / `genius` use the full Sovereign beam (~1–2s) and pick from a tight top fraction:
-// smart picks from the top 20% (subtle personality), genius from the top 10% (sharp but not
-// always identical). Both are tournament-tier in strength.
-//
-// `engine` is the strongest setting: wide beam, deep search, deterministic top-pick. Intended
-// for long-budget contexts (5–10s/turn). Make sure the caller's `deadlineMs` allows it; the
-// `softBudgetMs` here is a cap, not an extension — the caller's deadline is still the ceiling.
+// All three share identical search settings; they differ only in how strict the picker is
+// about choosing from the top-scored plans. Tighter band = stronger, more predictable.
+// Wider band = more variance, occasional visible "mistakes" (plans the brain itself rated
+// lower). Same compute cost, distinct playstyles.
 
 export const PRESETS = {
-  /** Shallow beam, top-20% random pick. Cheap. "Tactically aware but not deep." */
-  crafty:  { maxSteps: 4, beamWidth: 5,  finalists: 10, safetyMs: 60,  kiteRing: 0.85, topFraction: 0.20, softBudgetMs: 600 },
-  /** Shallow beam, top-40% random pick. Cheap. Coherent but unpredictable. */
-  crazy:   { maxSteps: 4, beamWidth: 5,  finalists: 10, safetyMs: 60,  kiteRing: 0.85, topFraction: 0.40, softBudgetMs: 600 },
-  /** Full beam, top-20%. Tournament-strong with mild personality. */
-  smart:   { maxSteps: 6, beamWidth: 12, finalists: 28, safetyMs: 60,  kiteRing: 0.85, topFraction: 0.20, softBudgetMs: 2000 },
-  /** Full beam, top-10%. Tournament-strong, sharp picks, low variance. */
-  genius:  { maxSteps: 6, beamWidth: 12, finalists: 28, safetyMs: 60,  kiteRing: 0.85, topFraction: 0.10, softBudgetMs: 2000 },
-  /** Engine mode — wide beam, deep search, deterministic top pick. Needs a long caller deadline. */
-  engine:  { maxSteps: 8, beamWidth: 20, finalists: 50, safetyMs: 100, kiteRing: 0.85, topFraction: 0,    softBudgetMs: 8000 },
+  /** Wide pick (top 40%). Coherent but unpredictable — picks plans the brain rates well but not
+   *  always the best. Use for low-tier mooks where "makes mistakes" is a feature. */
+  crazy:   { ...DEFAULT_PARAMS, topFraction: 0.40 },
+  /** Standard (top 20%). The default — strong, with subtle variance so the AI doesn't feel
+   *  perfectly mechanical. Use for hirelings, generic competent NPCs, most enemies. */
+  crafty:  { ...DEFAULT_PARAMS, topFraction: 0.20 },
+  /** Tight (top 10%). Sharp picks, low variance. Use for bosses, named rivals, prestige fights. */
+  genius:  { ...DEFAULT_PARAMS, topFraction: 0.10 },
 } as const satisfies Record<string, SearchParams>;
 
 export type IntelligencePreset = keyof typeof PRESETS;
@@ -228,7 +208,6 @@ interface PartialPlan {
 }
 
 export function makeSovereign(w: Weights, params: SearchParams = DEFAULT_PARAMS): HeroController {
-  let lastWasAggressive = true; // first turn has no "previous"; treat as aggressive to skip the filter
   return (ctx) => {
     const myTeam = teamOf(ctx.state, ctx.heroId);
     const heroStart = ctx.state.entities.get(ctx.heroId);
@@ -291,47 +270,14 @@ export function makeSovereign(w: Weights, params: SearchParams = DEFAULT_PARAMS)
       scored.push({ plan: c, value: v });
       if (timeUp()) break;
     }
-    if (scored.length === 0) { lastWasAggressive = false; return passNode.plan; }
-    const enforceAggression = params.requireAggression || (params.halfAggressive && !lastWasAggressive);
-    if (enforceAggression) {
-      const aggressive = scored.filter(s => isAggressivePlan(ctx.state, heroStart, s.plan.plan, myTeam));
-      if (aggressive.length > 0) scored = aggressive;
-    }
+    if (scored.length === 0) return passNode.plan;
+
     scored.sort((a, b) => b.value - a.value);
-    const frac = params.topFraction ?? 0;
-    const topN = frac > 0 ? Math.max(1, Math.ceil(scored.length * frac)) : 1;
+    const topN = Math.max(1, Math.ceil(scored.length * params.topFraction));
     const pool = scored.slice(0, Math.min(topN, scored.length));
     const pick = pool[Math.floor(Math.random() * pool.length)]!;
-    lastWasAggressive = isAggressivePlan(ctx.state, heroStart, pick.plan.plan, myTeam);
     return pick.plan.plan;
   };
-}
-
-/** True if the plan contains any attack action or any move that brings the hero closer
- *  to the nearest enemy (vs. the hero's position at the start of the turn). */
-function isAggressivePlan(initState: GameState, hero: Entity, actions: PlayerAction[], myTeam: TeamId): boolean {
-  if (actions.length === 0) return false;
-  const enemies = [...initState.entities.values()].filter(e => e.teamId !== myTeam && !e.dead);
-  if (enemies.length === 0) return true;
-  const distToNearestFrom = (pos: Vec2): number => {
-    let best = Infinity;
-    for (const e of enemies) {
-      const d = dist(pos, e.position);
-      if (d < best) best = d;
-    }
-    return best;
-  };
-  const startDist = distToNearestFrom(hero.position);
-  for (const action of actions) {
-    if (action.type !== "ability") continue;
-    const ability = hero.abilities.find(a => a.id === action.abilityId);
-    if (!ability) continue;
-    if (ability.kind === "attack") return true;
-    if (ability.kind === "move" && action.destination) {
-      if (distToNearestFrom(action.destination) < startDist - 1) return true;
-    }
-  }
-  return false;
 }
 
 /** Default export wrapper used by `index.ts` and `tune.ts`. */
@@ -475,14 +421,18 @@ function heroCandidates(state: GameState, hero: Entity, kiteRing: number): Playe
     }
     const block = bodyblockSpot(state, hero);
     if (block) targets.push(block);
-    const seen = new Set<string>();
-    for (const target of targets) {
-      const dest = pathToward(state, hero.id, target);
-      if (!dest) continue;
-      const k = `${Math.round(dest.x / 8)},${Math.round(dest.y / 8)}`;
-      if (seen.has(k)) continue;
-      seen.add(k);
-      out.push({ type: "ability", entityId: hero.id, abilityId: mv.id, destination: dest });
+    // One Dijkstra flood from the hero answers every target lookup below.
+    const fc = pathFloodFor(state, hero.id);
+    if (fc) {
+      const seen = new Set<string>();
+      for (const target of targets) {
+        const dest = fc.flood.pathTo(target, fc.cap);
+        if (!dest) continue;
+        const k = `${Math.round(dest.x / 8)},${Math.round(dest.y / 8)}`;
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push({ type: "ability", entityId: hero.id, abilityId: mv.id, destination: dest });
+      }
     }
   }
   return out;

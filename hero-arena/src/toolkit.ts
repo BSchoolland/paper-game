@@ -7,9 +7,11 @@
 import {
   resolveAction as engineResolve,
   pathfindMove,
+  pathfindFlood,
   getEffectiveDistance,
   getTemplateRegistry,
 } from "../../shared/src/index.js";
+import type { FloodResult } from "../../shared/src/index.js";
 import type {
   AttackAbility, Entity, EntityId, GameState, MoveAbility, PlayerAction, TeamId, Vec2,
 } from "../../shared/src/index.js";
@@ -94,6 +96,19 @@ export function pathToward(s: GameState, entityId: EntityId, target: Vec2, maxDi
   const cap = maxDistance ?? (mv ? getEffectiveDistance(e, mv.distance) : 0);
   if (cap < 1) return null;
   return pathfindMove(e, target, s.grid, s.entities, cap);
+}
+
+/** One Dijkstra flood from `entityId`'s position, sized to its (status-adjusted) move budget,
+ *  reusable across many target queries from the same state. Pair with {@link FloodResult.pathTo}
+ *  to answer many `pathToward`-equivalent queries at the cost of one A*. */
+export function pathFloodFor(s: GameState, entityId: EntityId): { flood: FloodResult; cap: number } | null {
+  const e = s.entities.get(entityId);
+  if (!e) return null;
+  const mv = moveAbility(e);
+  const cap = mv ? getEffectiveDistance(e, mv.distance) : 0;
+  if (cap < 1) return null;
+  const flood = pathfindFlood(e.position, s.grid, e.collisionRadius, s.entities, e.id, cap);
+  return { flood, cap };
 }
 
 // --- simulating the scripted units -----------------------------------------
