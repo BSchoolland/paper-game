@@ -19,15 +19,15 @@ const TANK_ABILITIES: AbilityDefinition[] = [
   { id: "mace-lunge", name: "Lunge", kind: "attack", cost: { red: 1 },
     shape: { kind: ShapeKind.Rectangle, length: 85, width: 20 },
     damage: 15, knockback: 35, lungeThrough: 95 },
-  { id: "kite-shield-block", name: "Block", kind: "barrier", cost: { blue: 1 }, barrierHp: 15 },
+  { id: "kite-shield-block", name: "Block", kind: "barrier", cost: { blue: 1 }, barrierHp: 25 },
   { id: "kite-shield-bash", name: "Shield Bash", kind: "attack", cost: { red: 1 },
     shape: { kind: ShapeKind.Sector, radius: 65, halfAngle: Math.PI / 4 },
     damage: 15, knockback: 50 },
-  { id: "kite-shield-wall", name: "Shield Wall", kind: "barrier", cost: { blue: 2 }, barrierHp: 30 },
+  { id: "kite-shield-wall", name: "Shield Wall", kind: "barrier", cost: { blue: 2 }, barrierHp: 45 },
 ];
 
 export const TANK_TEMPLATE: UnitTemplate = {
-  abilities: TANK_ABILITIES, hp: 120, energy: { red: 2, blue: 2 }, collisionRadius: 16, className: "Tank",
+  abilities: TANK_ABILITIES, hp: 160, energy: { red: 2, blue: 2 }, collisionRadius: 16, className: "Tank",
   strategy: "smart",
 };
 
