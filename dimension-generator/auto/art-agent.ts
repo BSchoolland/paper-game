@@ -188,14 +188,19 @@ function extractSprites(dimId: number, result: BundleResult, spec: any) {
   console.log(`    Skipping unknown bundle: ${name}`);
 }
 
-export async function generateArt(dimId: number, spec: any, bundlesRoot: string): Promise<void> {
+export async function generateArt(dimId: number, spec: any, bundlesRoot: string, onlyFilter?: string): Promise<void> {
   console.log(`\n--- Art Agent: ${spec.name} (dim ${dimId}) ---\n`);
 
   const entries = await readdir(bundlesRoot, { withFileTypes: true });
-  const bundleDirs = entries
+  let bundleDirs = entries
     .filter(e => e.isDirectory())
     .map(e => e.name)
     .sort();
+
+  if (onlyFilter) {
+    bundleDirs = bundleDirs.filter(d => d.includes(onlyFilter));
+    console.log(`  Filtered to bundles matching "${onlyFilter}": ${bundleDirs.join(", ")}`);
+  }
 
   console.log(`  ${bundleDirs.length} bundles: ${bundleDirs.join(", ")}\n`);
 
@@ -220,9 +225,12 @@ export async function generateArt(dimId: number, spec: any, bundlesRoot: string)
 
 // --- CLI entry point ---
 if (import.meta.main) {
-  const dimSlug = process.argv[2];
+  const args = process.argv.slice(2);
+  const dimSlug = args.find(a => !a.startsWith("--"));
+  const onlyArg = args.find(a => a.startsWith("--only="))?.slice("--only=".length);
+
   if (!dimSlug) {
-    console.error("Usage: bun dimension-generator/auto/art-agent.ts <dimension-slug>");
+    console.error("Usage: bun dimension-generator/auto/art-agent.ts <dimension-slug> [--only=<filter>]");
     process.exit(1);
   }
 
@@ -240,5 +248,5 @@ if (import.meta.main) {
     if (slugify(s.name ?? "") === dimSlug) { spec = s; break; }
   }
 
-  await generateArt(spec.id ?? 0, spec, bundlesRoot);
+  await generateArt(spec.id ?? 0, spec, bundlesRoot, onlyArg);
 }
