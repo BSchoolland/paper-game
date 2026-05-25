@@ -1,0 +1,273 @@
+#!/usr/bin/env bun
+/**
+ * Item balance test: give each item (weapon/shield) to a baseline hero (sword + shield + innate
+ * punch + move) and run them through a fixed set of dim-0 encounters. Both solo and "party with
+ * item on the fighter" scenarios. Outputs a JSON report + per-game event logs.
+ *
+ *   bun hero-arena/src/t2/item-test.ts <dimId> [--seeds N]
+ */
+import { mkdirSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
+import { join } from "node:path";
+import { resolveAction } from "../../../shared/src/index.js";
+import type { AbilityDefinition, EntityId, GameEvent, ItemDefinition, PlayerAction, TeamId, UnitTemplate } from "../../../shared/src/index.js";
+import { PLAYER_INNATE_ABILITIES } from "../../../shared/src/core/items.js";
+import { rushStrategy, strategyForEntity } from "../../../shared/src/ai/strategy.js";
+import { buildArena2 } from "./arena2.js";
+import { TANK_TEMPLATE, RANGED_TEMPLATE } from "./loadouts.js";
+import { makeSovereign, FIGHTER_WEIGHTS, PRESETS } from "../../agents/agent-02/sovereign.js";
+import type { ArenaConfig } from "./types.js";
+import type { HeroController } from "../types.js";
+
+// --- CLI ---
+const dimId = Number(process.argv[2]);
+if (isNaN(dimId)) { console.error("usage: bun item-test.ts <dimId> [--seeds N]"); process.exit(2); }
+const seedCount = (() => { const i = process.argv.indexOf("--seeds"); return i >= 0 ? Number(process.argv[i + 1]) : 3; })();
+const SEEDS = Array.from({ length: seedCount }, (_, i) => i + 1);
+
+// --- Load dimension data ---
+process.chdir(join(import.meta.dir, "..", "..", "..", "server"));
+const { loadItems } = await import("../../../server/src/db.js");
+await import("../../../server/src/index.js").catch(() => {});
+
+const items = loadItems(dimId);
+const dim0Items = loadItems(0);
+const baseSword = dim0Items["short-sword"]!;
+const baseShield = dim0Items["round-shield"]!;
+if (!baseSword || !baseShield) { console.error("Need short-sword and round-shield in dim 0"); process.exit(1); }
+
+const testableItems = Object.entries(items).filter(([, it]) => it.type === "weapon" || it.type === "shield");
+console.log(`Dim ${dimId}: testing ${testableItems.length} items`);
+
+// --- Hero loadout assembly ---
+
+function isOneHanded(item: ItemDefinition): boolean {
+  return (item.slotCost.hand ?? 0) <= 1;
+}
+
+function isTwoHanded(item: ItemDefinition): boolean {
+  return (item.slotCost.hand ?? 0) >= 2;
+}
+
+/** Build a hero template equipping the given item, with sword + shield as defaults. */
+function makeHeroTemplate(item: ItemDefinition | null): UnitTemplate {
+  const abilities: AbilityDefinition[] = [...PLAYER_INNATE_ABILITIES];
+
+  let weaponItem = baseSword;
+  let shieldItem: ItemDefinition | null = baseShield;
+
+  if (item) {
+    if (isTwoHanded(item)) {
+      // Two-handed: replaces both weapon and shield
+      weaponItem = item;
+      shieldItem = null;
+    } else if (item.type === "weapon") {
+      weaponItem = item;
+    } else if (item.type === "shield") {
+      shieldItem = item;
+    }
+  }
+
+  if (weaponItem.abilities) abilities.push(...weaponItem.abilities);
+  if (shieldItem && shieldItem.abilities) abilities.push(...shieldItem.abilities);
+
+  return {
+    abilities,
+    hp: 120,
+    energy: { red: 2, blue: 2 },
+    collisionRadius: 16,
+    className: "Hero",
+  };
+}
+
+// --- Game runner (same as balance-test) ---
+const MAX_ACTIONS = 16;
+const MAX_TURNS = 80;
+
+interface GameResult { winner: string | null; turns: number; redHpPct: number; blueHpPct: number; }
+
+async function runGame(config: ArenaConfig, controllers: Map<EntityId, HeroController>): Promise<{ result: GameResult; events: GameEvent[] }> {
+  const arena = await buildArena2(config);
+  let state = arena.state;
+  const events: GameEvent[] = [];
+
+  const step = (a: PlayerAction): boolean => {
+    const r = resolveAction(state, a);
+    if (r.state === state) return false;
+    state = r.state;
+    events.push(...r.events);
+    return true;
+  };
+
+  for (let t = 0; t < MAX_TURNS && !state.winner; t++) {
+    const team = state.activeTeam;
+    for (const heroId of arena.heroIds[team]) {
+      const hero = state.entities.get(heroId);
+      if (!hero || hero.dead) continue;
+      const ctl = controllers.get(heroId);
+      if (!ctl) continue;
+      let actions: PlayerAction[] = [];
+      try { actions = ctl({ state, heroId, deadlineMs: Date.now() + 2000, turnIndex: t }) ?? []; } catch {}
+      let applied = 0;
+      for (const a of actions) {
+        if (applied >= MAX_ACTIONS) break;
+        if (a.type !== "ability" || a.entityId !== heroId) continue;
+        if (step(a)) applied++;
+        if (state.winner) break;
+      }
+      if (state.winner) break;
+    }
+    if (!state.winner) {
+      const scripted = [...state.entities.values()]
+        .filter(e => e.teamId === team && !e.dead && !arena.heroIds[team].includes(e.id));
+      for (const u of scripted) {
+        if (state.entities.get(u.id)?.dead) continue;
+        for (const action of strategyForEntity(u).planActions(u, state)) {
+          step(action);
+          if (state.winner) break;
+        }
+        if (state.winner) break;
+      }
+    }
+    if (!state.winner) step({ type: "endTurn" });
+  }
+
+  const hpFrac = (team: TeamId) => {
+    let hp = 0, max = 0;
+    for (const e of state.entities.values()) if (e.teamId === team) { max += e.maxHp; hp += e.dead ? 0 : e.hp; }
+    return max > 0 ? hp / max : 0;
+  };
+
+  return {
+    result: {
+      winner: state.winner ?? null,
+      turns: state.turnNumber,
+      redHpPct: Math.round(hpFrac("red") * 100),
+      blueHpPct: Math.round(hpFrac("blue") * 100),
+    },
+    events,
+  };
+}
+
+// --- Test scenarios ---
+// Each scenario probes a specific weapon trait. Names describe what they test.
+const SOLO_ENEMIES: { label: string; comp: Array<{ key: string; count: number; dim: number }> }[] = [
+  // Swarm — tests AoE / cleave value
+  { label: "swarm",        comp: [{ key: "slime", count: 12, dim: 0 }] },
+  // Tank group — slow high-HP melee, tests sustained DPS
+  { label: "tanks",        comp: [{ key: "goblin-shield", count: 5, dim: 0 }] },
+  // Ranged harass — kiters that shoot from afar, tests mobility/closing
+  { label: "ranged-harass", comp: [{ key: "goblin-archer", count: 4, dim: 0 }, { key: "slime", count: 3, dim: 0 }] },
+  // Single fat target — tests single-target burst
+  { label: "fat-single",   comp: [{ key: "big-slime", count: 2, dim: 0 }] },
+  // Realistic mixed — baseline encounter
+  { label: "mixed",        comp: [{ key: "goblin-spear", count: 3, dim: 0 }, { key: "goblin-archer", count: 2, dim: 0 }, { key: "goblin-shield", count: 2, dim: 0 }] },
+];
+const PARTY_ENEMIES: { label: string; comp: Array<{ key: string; count: number; dim: number }> }[] = [
+  // Huge swarm — really tests AoE at scale
+  { label: "huge-swarm",    comp: [{ key: "slime", count: 30, dim: 0 }] },
+  // Single boss — pure single-target damage race
+  { label: "single-boss",   comp: [{ key: "stone-golem", count: 1, dim: 0 }] },
+  // Spawner boss — tests AoE + sustain (massive-slime spawns adds on death)
+  { label: "spawner-boss",  comp: [{ key: "massive-slime", count: 1, dim: 0 }] },
+  // Elite mixed — realistic hard encounter
+  { label: "elite-mixed",   comp: [{ key: "goblin-brute", count: 2, dim: 0 }, { key: "stone-golem", count: 1, dim: 0 }, { key: "big-slime", count: 1, dim: 0 }] },
+];
+
+// --- Output setup ---
+const logDir = join(import.meta.dir, "..", "..", "..", `item-logs-dim-${dimId}`);
+mkdirSync(logDir, { recursive: true });
+// Clear stale logs
+for (const f of readdirSync(logDir)) unlinkSync(join(logDir, f));
+
+interface ItemResult {
+  itemId: string;
+  scenario: string;
+  enemyLabel: string;
+  seed: number;
+  result: GameResult;
+}
+
+const allResults: ItemResult[] = [];
+let gameIndex = 0;
+
+async function runOne(scenarioName: string, itemId: string, enemyLabel: string, seed: number, config: ArenaConfig, controllers: Map<EntityId, HeroController>): Promise<void> {
+  const { result, events } = await runGame(config, controllers);
+  allResults.push({ itemId, scenario: scenarioName, enemyLabel, seed, result });
+  writeFileSync(join(logDir, `${String(gameIndex).padStart(4, "0")}-${scenarioName}-${itemId}-${enemyLabel}-s${seed}.json`), JSON.stringify(events));
+  gameIndex++;
+}
+
+// --- Run tests ---
+const sovController = () => makeSovereign(FIGHTER_WEIGHTS, PRESETS.crafty);
+
+// Include "baseline" (no item swap) so we can compare
+const itemsToTest: Array<{ id: string; item: ItemDefinition | null }> = [
+  { id: "baseline", item: null },
+  ...testableItems.map(([id, item]) => ({ id, item })),
+];
+
+console.log(`\nRunning solo tests...`);
+for (const { id, item } of itemsToTest) {
+  process.stderr.write(`  ${id}...`);
+  const template = makeHeroTemplate(item);
+  for (const enemy of SOLO_ENEMIES) {
+    for (const seed of SEEDS) {
+      const config: ArenaConfig = {
+        seed,
+        red: { heroes: [{ id: "R-hero" as any, role: "hero", template }], scriptedAllies: [] },
+        blue: { heroes: [], scriptedAllies: enemy.comp },
+      };
+      const controllers = new Map<EntityId, HeroController>([["R-hero" as EntityId, sovController()]]);
+      await runOne("solo", id, enemy.label, seed, config, controllers);
+    }
+  }
+  process.stderr.write(` done\n`);
+}
+
+console.log(`\nRunning party tests (item on fighter)...`);
+for (const { id, item } of itemsToTest) {
+  process.stderr.write(`  ${id}...`);
+  const fighterTemplate = makeHeroTemplate(item);
+  for (const enemy of PARTY_ENEMIES) {
+    for (const seed of SEEDS) {
+      const config: ArenaConfig = {
+        seed,
+        red: {
+          heroes: [
+            { id: "R-tank" as any, role: "tank", template: TANK_TEMPLATE },
+            { id: "R-fighter" as any, role: "fighter", template: fighterTemplate },
+            { id: "R-ranged" as any, role: "ranged", template: RANGED_TEMPLATE },
+          ],
+          scriptedAllies: [],
+        },
+        blue: { heroes: [], scriptedAllies: enemy.comp },
+      };
+      const controllers = new Map<EntityId, HeroController>([
+        ["R-tank" as EntityId, sovController()],
+        ["R-fighter" as EntityId, sovController()],
+        ["R-ranged" as EntityId, sovController()],
+      ]);
+      await runOne("party", id, enemy.label, seed, config, controllers);
+    }
+  }
+  process.stderr.write(` done\n`);
+}
+
+// --- Write report ---
+const reportPath = join(import.meta.dir, "..", "..", "..", `item-report-dim-${dimId}.json`);
+const itemMeta: Record<string, { type: string; rarity: string; slotCost: Record<string, number> }> = {};
+for (const [id, item] of testableItems) itemMeta[id] = { type: item.type, rarity: item.rarity, slotCost: item.slotCost as Record<string, number> };
+
+writeFileSync(reportPath, JSON.stringify({
+  dimensionId: dimId,
+  timestamp: new Date().toISOString(),
+  seeds: SEEDS,
+  baselineSword: "short-sword",
+  baselineShield: "round-shield",
+  items: itemMeta,
+  results: allResults,
+}, null, 2));
+
+console.log(`\nDone! ${allResults.length} games.`);
+console.log(`Report: ${reportPath}`);
+console.log(`Logs:   ${logDir}/`);

@@ -5,7 +5,7 @@
  *
  *   bun hero-arena/src/t2/balance-test.ts <dimId> [--items] [--seeds N]
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { resolveAction } from "../../../shared/src/index.js";
 import type { GameEvent } from "../../../shared/src/index.js";
@@ -24,7 +24,7 @@ import type { HeroController } from "../types.js";
 const dimId = Number(process.argv[2]);
 if (isNaN(dimId)) { console.error("usage: bun balance-test.ts <dimId> [--items] [--seeds N]"); process.exit(2); }
 const doItems = process.argv.includes("--items");
-const seedCount = (() => { const i = process.argv.indexOf("--seeds"); return i >= 0 ? Number(process.argv[i + 1]) : 5; })();
+const seedCount = (() => { const i = process.argv.indexOf("--seeds"); return i >= 0 ? Number(process.argv[i + 1]) : 3; })();
 const SEEDS = Array.from({ length: seedCount }, (_, i) => i + 1);
 
 // --- Load dimension data ---
@@ -64,7 +64,7 @@ interface GameResult {
   blueHpPct: number;
 }
 
-async function runGame(config: ArenaConfig, controllers: Map<EntityId, HeroController>): Promise<{ result: GameResult; log: string[] }> {
+async function runGame(config: ArenaConfig, controllers: Map<EntityId, HeroController>): Promise<{ result: GameResult; events: GameEvent[] }> {
   const arena = await buildArena2(config);
   let state = arena.state;
   const events: GameEvent[] = [];
@@ -147,6 +147,7 @@ interface ScenarioResult {
 const allResults: ScenarioResult[] = [];
 const logDir = join(import.meta.dir, "..", "..", "..", `balance-logs-dim-${dimId}`);
 mkdirSync(logDir, { recursive: true });
+for (const f of readdirSync(logDir)) unlinkSync(join(logDir, f));
 let gameIndex = 0;
 
 async function runScenario(
