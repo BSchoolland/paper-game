@@ -12,7 +12,7 @@ if (!reportPath) { console.error("usage: bun item-rank.ts <item-report.json>"); 
 
 const report = JSON.parse(await Bun.file(reportPath).text());
 const items = report.items as Record<string, { type: string; rarity: string; slotCost: Record<string, number> }>;
-const results = report.results as Array<{ itemId: string; scenario: string; enemyLabel: string; seed: number; result: { winner: string | null; turns: number; redHpPct: number } }>;
+const results = report.results as Array<{ itemId: string; scenario: string; enemyLabel: string; seed: number; result: { winner: string | null; turns: number; heroHpPct: number } }>;
 const logDir = join(dirname(reportPath), `item-logs-dim-${report.dimensionId}`);
 
 const RARITY_ORDER: Record<string, number> = { common: 1, uncommon: 2, rare: 3, epic: 4, legendary: 5 };
@@ -43,15 +43,15 @@ async function buildAgg(): Promise<ItemAgg[]> {
     }
     const a = byItem[itemId]!;
     a.totalGames++;
-    if (r.result.winner === "red") a.winRate++;
-    a.avgHp += r.result.redHpPct;
+    if (r.result.winner === "heroes") a.winRate++;
+    a.avgHp += r.result.heroHpPct;
 
     const sk = `${r.scenario}/${r.enemyLabel}`;
     if (!a.scenarios[sk]) a.scenarios[sk] = { wins: 0, n: 0, avgHp: 0 };
     const s = a.scenarios[sk]!;
     s.n++;
-    if (r.result.winner === "red") s.wins++;
-    s.avgHp += r.result.redHpPct;
+    if (r.result.winner === "heroes") s.wins++;
+    s.avgHp += r.result.heroHpPct;
   }
 
   for (const a of Object.values(byItem)) {

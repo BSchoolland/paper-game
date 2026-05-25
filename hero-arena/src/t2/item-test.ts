@@ -11,18 +11,30 @@ import { join } from "node:path";
 import { resolveAction } from "../../../shared/src/index.js";
 import type { AbilityDefinition, EntityId, GameEvent, ItemDefinition, PlayerAction, TeamId, UnitTemplate } from "../../../shared/src/index.js";
 import { PLAYER_INNATE_ABILITIES } from "../../../shared/src/core/items.js";
-import { rushStrategy, strategyForEntity } from "../../../shared/src/ai/strategy.js";
+import { rushStrategy, kiteStrategy, strategyForEntity } from "../../../shared/src/ai/strategy.js";
 import { buildArena2 } from "./arena2.js";
 import { TANK_TEMPLATE, RANGED_TEMPLATE } from "./loadouts.js";
 import { makeSovereign, FIGHTER_WEIGHTS, PRESETS } from "../../agents/agent-02/sovereign.js";
 import type { ArenaConfig } from "./types.js";
 import type { HeroController } from "../types.js";
+import { runJobsParallel, type GameJob, type ControllerType } from "./parallel-dispatch.js";
 
 // --- CLI ---
 const dimId = Number(process.argv[2]);
-if (isNaN(dimId)) { console.error("usage: bun item-test.ts <dimId> [--seeds N]"); process.exit(2); }
+if (isNaN(dimId)) { console.error("usage: bun item-test.ts <dimId> [--seeds N] [--workers N]"); process.exit(2); }
 const seedCount = (() => { const i = process.argv.indexOf("--seeds"); return i >= 0 ? Number(process.argv[i + 1]) : 3; })();
 const SEEDS = Array.from({ length: seedCount }, (_, i) => i + 1);
+const workers = (() => { const i = process.argv.indexOf("--workers"); return i >= 0 ? Number(process.argv[i + 1]) : 0; })();
+
+function makeController(type: ControllerType): HeroController {
+  if (type === "sovereign") return makeSovereign(FIGHTER_WEIGHTS, PRESETS.crafty);
+  return (ctx) => {
+    const entity = ctx.state.entities.get(ctx.heroId);
+    if (!entity || entity.dead) return [];
+    const strat = type === "kite" ? kiteStrategy : rushStrategy;
+    return strat.planActions(entity, ctx.state);
+  };
+}
 
 // --- Load dimension data ---
 process.chdir(join(import.meta.dir, "..", "..", "..", "server"));
@@ -187,18 +199,19 @@ interface ItemResult {
   result: GameResult;
 }
 
-const allResults: ItemResult[] = [];
-let gameIndex = 0;
-
-async function runOne(scenarioName: string, itemId: string, enemyLabel: string, seed: number, config: ArenaConfig, controllers: Map<EntityId, HeroController>): Promise<void> {
-  const { result, events } = await runGame(config, controllers);
-  allResults.push({ itemId, scenario: scenarioName, enemyLabel, seed, result });
-  writeFileSync(join(logDir, `${String(gameIndex).padStart(4, "0")}-${scenarioName}-${itemId}-${enemyLabel}-s${seed}.json`), JSON.stringify(events));
-  gameIndex++;
+interface PendingJob {
+  scenarioName: string;
+  itemId: string;
+  enemyLabel: string;
+  seed: number;
+  config: ArenaConfig;
+  controllers: { entityId: string; type: ControllerType }[];
 }
+const pendingJobs: PendingJob[] = [];
 
-// --- Run tests ---
-const sovController = () => makeSovereign(FIGHTER_WEIGHTS, PRESETS.crafty);
+function enqueue(scenarioName: string, itemId: string, enemyLabel: string, seed: number, config: ArenaConfig, controllers: { entityId: string; type: ControllerType }[]): void {
+  pendingJobs.push({ scenarioName, itemId, enemyLabel, seed, config, controllers });
+}
 
 // Include "baseline" (no item swap) so we can compare
 const itemsToTest: Array<{ id: string; item: ItemDefinition | null }> = [
@@ -206,9 +219,8 @@ const itemsToTest: Array<{ id: string; item: ItemDefinition | null }> = [
   ...testableItems.map(([id, item]) => ({ id, item })),
 ];
 
-console.log(`\nRunning solo tests...`);
+console.log(`\nEnqueuing solo tests...`);
 for (const { id, item } of itemsToTest) {
-  process.stderr.write(`  ${id}...`);
   const template = makeHeroTemplate(item);
   for (const enemy of SOLO_ENEMIES) {
     for (const seed of SEEDS) {
@@ -217,16 +229,13 @@ for (const { id, item } of itemsToTest) {
         red: { heroes: [{ id: "R-hero" as any, role: "hero", template }], scriptedAllies: [] },
         blue: { heroes: [], scriptedAllies: enemy.comp },
       };
-      const controllers = new Map<EntityId, HeroController>([["R-hero" as EntityId, sovController()]]);
-      await runOne("solo", id, enemy.label, seed, config, controllers);
+      enqueue("solo", id, enemy.label, seed, config, [{ entityId: "R-hero", type: "sovereign" }]);
     }
   }
-  process.stderr.write(` done\n`);
 }
 
-console.log(`\nRunning party tests (item on fighter)...`);
+console.log(`Enqueuing party tests (item on fighter)...`);
 for (const { id, item } of itemsToTest) {
-  process.stderr.write(`  ${id}...`);
   const fighterTemplate = makeHeroTemplate(item);
   for (const enemy of PARTY_ENEMIES) {
     for (const seed of SEEDS) {
@@ -242,21 +251,65 @@ for (const { id, item } of itemsToTest) {
         },
         blue: { heroes: [], scriptedAllies: enemy.comp },
       };
-      const controllers = new Map<EntityId, HeroController>([
-        ["R-tank" as EntityId, sovController()],
-        ["R-fighter" as EntityId, sovController()],
-        ["R-ranged" as EntityId, sovController()],
+      enqueue("party", id, enemy.label, seed, config, [
+        { entityId: "R-tank", type: "sovereign" },
+        { entityId: "R-fighter", type: "sovereign" },
+        { entityId: "R-ranged", type: "sovereign" },
       ]);
-      await runOne("party", id, enemy.label, seed, config, controllers);
     }
   }
-  process.stderr.write(` done\n`);
 }
+
+// --- Execute jobs (sequentially or in parallel) ---
+console.log(`\nExecuting ${pendingJobs.length} games${workers > 0 ? ` across ${workers} workers` : " sequentially"}...`);
+
+const allResults: ItemResult[] = [];
+const jobMetaByIndex = new Map<number, { itemId: string; scenario: string; enemyLabel: string; seed: number }>();
+const gameJobs: GameJob[] = pendingJobs.map((pj, i) => {
+  jobMetaByIndex.set(i, { itemId: pj.itemId, scenario: pj.scenarioName, enemyLabel: pj.enemyLabel, seed: pj.seed });
+  return {
+    gameIndex: i,
+    config: pj.config,
+    controllers: pj.controllers,
+    logFile: join(logDir, `${String(i).padStart(4, "0")}-${pj.scenarioName}-${pj.itemId}-${pj.enemyLabel}-s${pj.seed}.json`),
+  };
+});
+
+const t0 = Date.now();
+if (workers > 0) {
+  let done = 0;
+  const total = gameJobs.length;
+  const resultMap = await runJobsParallel(gameJobs, workers, () => {
+    done++;
+    if (done % 50 === 0 || done === total) process.stderr.write(`  ${done}/${total}\n`);
+  });
+  for (let i = 0; i < gameJobs.length; i++) {
+    const m = jobMetaByIndex.get(i)!;
+    allResults.push({ ...m, result: resultMap.get(i)! });
+  }
+} else {
+  for (const job of gameJobs) {
+    const controllers = new Map<EntityId, HeroController>(
+      job.controllers.map(c => [c.entityId as EntityId, makeController(c.type)])
+    );
+    const { result, events } = await runGame(job.config, controllers);
+    writeFileSync(job.logFile, JSON.stringify(events));
+    const m = jobMetaByIndex.get(job.gameIndex)!;
+    allResults.push({ ...m, result });
+  }
+}
+const elapsedMs = Date.now() - t0;
 
 // --- Write report ---
 const reportPath = join(import.meta.dir, "..", "..", "..", `item-report-dim-${dimId}.json`);
 const itemMeta: Record<string, { type: string; rarity: string; slotCost: Record<string, number> }> = {};
 for (const [id, item] of testableItems) itemMeta[id] = { type: item.type, rarity: item.rarity, slotCost: item.slotCost as Record<string, number> };
+
+function translateWinner(w: string | null): string | null {
+  if (w === "red") return "heroes";
+  if (w === "blue") return "enemies";
+  return w;
+}
 
 writeFileSync(reportPath, JSON.stringify({
   dimensionId: dimId,
@@ -265,9 +318,18 @@ writeFileSync(reportPath, JSON.stringify({
   baselineSword: "short-sword",
   baselineShield: "round-shield",
   items: itemMeta,
-  results: allResults,
+  results: allResults.map(r => ({
+    ...r,
+    result: {
+      winner: translateWinner(r.result.winner),
+      turns: r.result.turns,
+      heroHpPct: r.result.redHpPct,
+      enemyHpPct: r.result.blueHpPct,
+    },
+  })),
 }, null, 2));
 
-console.log(`\nDone! ${allResults.length} games.`);
+console.log(`\nDone! ${allResults.length} games in ${(elapsedMs / 1000).toFixed(1)}s.`);
 console.log(`Report: ${reportPath}`);
 console.log(`Logs:   ${logDir}/`);
+process.exit(0);

@@ -19,6 +19,7 @@ import { TANK_TEMPLATE, FIGHTER_TEMPLATE, RANGED_TEMPLATE } from "./loadouts.js"
 import { makeSovereign, FIGHTER_WEIGHTS, PRESETS } from "../../agents/agent-02/sovereign.js";
 import type { ArenaConfig } from "./types.js";
 import type { HeroController } from "../types.js";
+import { runJobsParallel, type GameJob, type ControllerType } from "./parallel-dispatch.js";
 
 // --- CLI args ---
 const dimId = Number(process.argv[2]);
@@ -26,6 +27,7 @@ if (isNaN(dimId)) { console.error("usage: bun balance-test.ts <dimId> [--items] 
 const doItems = process.argv.includes("--items");
 const seedCount = (() => { const i = process.argv.indexOf("--seeds"); return i >= 0 ? Number(process.argv[i + 1]) : 3; })();
 const SEEDS = Array.from({ length: seedCount }, (_, i) => i + 1);
+const workers = (() => { const i = process.argv.indexOf("--workers"); return i >= 0 ? Number(process.argv[i + 1]) : 0; })();
 
 // --- Load dimension data ---
 process.chdir(join(import.meta.dir, "..", "..", "..", "server"));
@@ -44,7 +46,7 @@ console.log(`Dimension ${dimId}: ${dimension.name} — ${enemyKeys.length} enemi
 const MAX_ACTIONS = 16;
 const MAX_TURNS = 80;
 
-type PlayerType = "sovereign" | "rush" | "kite";
+type PlayerType = ControllerType;
 
 function makeController(type: PlayerType): HeroController {
   if (type === "sovereign") return makeSovereign(FIGHTER_WEIGHTS, PRESETS.crafty);
@@ -138,28 +140,33 @@ interface ScenarioResult {
   scenario: string;
   enemyKey?: string;
   encounterType?: string;
+  enemyComp?: Array<{ key: string; count: number }>;
   budget: number;
   playerConfig: string;
   seed: number;
   result: GameResult;
 }
 
-const allResults: ScenarioResult[] = [];
 const logDir = join(import.meta.dir, "..", "..", "..", `balance-logs-dim-${dimId}`);
 mkdirSync(logDir, { recursive: true });
 for (const f of readdirSync(logDir)) unlinkSync(join(logDir, f));
-let gameIndex = 0;
 
-async function runScenario(
-  scenario: string,
+// Enqueued work — populated by the scenario loops, then executed at the end.
+interface PendingJob {
+  scenarioName: string;
+  config: ArenaConfig;
+  controllers: { entityId: string; type: PlayerType }[];
+  meta: Omit<ScenarioResult, "result">;
+}
+const pendingJobs: PendingJob[] = [];
+
+function enqueue(
+  scenarioName: string,
   config: ArenaConfig,
-  controllers: Map<EntityId, HeroController>,
+  controllers: { entityId: string; type: PlayerType }[],
   meta: Omit<ScenarioResult, "result">,
-): Promise<void> {
-  const { result, events } = await runGame(config, controllers);
-  allResults.push({ ...meta, result });
-  writeFileSync(join(logDir, `${String(gameIndex).padStart(4, "0")}-${scenario}.json`), JSON.stringify(events));
-  gameIndex++;
+): void {
+  pendingJobs.push({ scenarioName, config, controllers, meta });
 }
 
 // Helper: fill a budget with copies of one enemy
@@ -185,8 +192,8 @@ function soloConfig(seed: number, role: SoloRole, template: UnitTemplate, enemie
   };
 }
 
-function soloControllers(type: PlayerType): Map<EntityId, HeroController> {
-  return new Map([["R-hero" as EntityId, makeController(type)]]);
+function soloControllers(type: PlayerType): { entityId: string; type: PlayerType }[] {
+  return [{ entityId: "R-hero", type }];
 }
 
 // Party configs
@@ -205,20 +212,20 @@ function partyConfig(seed: number, enemies: Array<{ key: string; count: number; 
   };
 }
 
-function partyControllers(type: "sovereign" | "bad"): Map<EntityId, HeroController> {
+function partyControllers(type: "sovereign" | "bad"): { entityId: string; type: PlayerType }[] {
   if (type === "sovereign") {
-    return new Map([
-      ["R-tank" as EntityId, makeController("sovereign")],
-      ["R-fighter" as EntityId, makeController("sovereign")],
-      ["R-ranged" as EntityId, makeController("sovereign")],
-    ]);
+    return [
+      { entityId: "R-tank", type: "sovereign" },
+      { entityId: "R-fighter", type: "sovereign" },
+      { entityId: "R-ranged", type: "sovereign" },
+    ];
   }
   // Bad: tank rushes, fighter rushes, ranged kites
-  return new Map([
-    ["R-tank" as EntityId, makeController("rush")],
-    ["R-fighter" as EntityId, makeController("rush")],
-    ["R-ranged" as EntityId, makeController("kite")],
-  ]);
+  return [
+    { entityId: "R-tank", type: "rush" },
+    { entityId: "R-fighter", type: "rush" },
+    { entityId: "R-ranged", type: "kite" },
+  ];
 }
 
 // --- Run per-enemy pure tests ---
@@ -235,13 +242,13 @@ for (const key of enemyKeys) {
       const enemies = fillBudget(key, budget);
       for (const seed of SEEDS) {
         const cfg = soloConfig(seed, role, template, enemies);
-        await runScenario(`solo-sov-${role}-${key}-b${budget}-s${seed}`, cfg, soloControllers("sovereign"),
-          { scenario: `solo-sovereign-${role}`, enemyKey: key, budget, playerConfig: `solo-sovereign-${role}`, seed });
+        enqueue(`solo-exp-${role}-${key}-b${budget}-s${seed}`, cfg, soloControllers("sovereign"),
+          { scenario: `solo-expert-${role}`, enemyKey: key, budget, playerConfig: `solo-expert-${role}`, seed });
       }
       for (const seed of SEEDS) {
         const cfg = soloConfig(seed, role, template, enemies);
-        await runScenario(`solo-bad-${role}-${key}-b${budget}-s${seed}`, cfg, soloControllers(badType),
-          { scenario: `solo-bad-${role}`, enemyKey: key, budget, playerConfig: `solo-${badType}-${role}`, seed });
+        enqueue(`solo-nov-${role}-${key}-b${budget}-s${seed}`, cfg, soloControllers(badType),
+          { scenario: `solo-dumb-${role}`, enemyKey: key, budget, playerConfig: `solo-dumb-${role}`, seed });
       }
     }
   }
@@ -250,17 +257,17 @@ for (const key of enemyKeys) {
     const enemies = fillBudget(key, budget);
     for (const seed of SEEDS) {
       const cfg = partyConfig(seed, enemies);
-      await runScenario(`party-sov-${key}-b${budget}-s${seed}`, cfg, partyControllers("sovereign"),
-        { scenario: "party-sovereign", enemyKey: key, budget, playerConfig: "party-sovereign", seed });
+      enqueue(`party-exp-${key}-b${budget}-s${seed}`, cfg, partyControllers("sovereign"),
+        { scenario: "party-expert", enemyKey: key, budget, playerConfig: "party-expert", seed });
     }
     for (const seed of SEEDS) {
       const cfg = partyConfig(seed, enemies);
-      await runScenario(`party-bad-${key}-b${budget}-s${seed}`, cfg, partyControllers("bad"),
-        { scenario: "party-bad", enemyKey: key, budget, playerConfig: "party-bad", seed });
+      enqueue(`party-nov-${key}-b${budget}-s${seed}`, cfg, partyControllers("bad"),
+        { scenario: "party-dumb", enemyKey: key, budget, playerConfig: "party-dumb", seed });
     }
   }
 
-  process.stderr.write(` done (${allResults.length} games)\n`);
+  process.stderr.write(` done (${pendingJobs.length} jobs)\n`);
 }
 
 // --- Run realistic encounter tests ---
@@ -287,19 +294,18 @@ for (const profile of ENCOUNTER_PROFILES) {
     for (const [key, count] of counts) enemies.push({ key, count, dim: dimId });
 
     const budget = encounter.enemies.reduce((s, e) => s + (e.cost ?? 1), 0);
+    const enemyComp = enemies.map(e => ({ key: e.key, count: e.count }));
 
     for (const { role, template, badType } of SOLO_ROLES) {
-      await runScenario(`enc-solo-sov-${role}-${profile}-s${seed}`, soloConfig(seed, role, template, enemies), soloControllers("sovereign"),
-        { scenario: `encounter-solo-sovereign-${role}`, encounterType: profile, budget, playerConfig: `solo-sovereign-${role}`, seed });
-      await runScenario(`enc-solo-bad-${role}-${profile}-s${seed}`, soloConfig(seed, role, template, enemies), soloControllers(badType),
-        { scenario: `encounter-solo-bad-${role}`, encounterType: profile, budget, playerConfig: `solo-${badType}-${role}`, seed });
+      enqueue(`enc-solo-exp-${role}-${profile}-s${seed}`, soloConfig(seed, role, template, enemies), soloControllers("sovereign"),
+        { scenario: `encounter-solo-expert-${role}`, encounterType: profile, enemyComp, budget, playerConfig: `solo-expert-${role}`, seed });
+      enqueue(`enc-solo-nov-${role}-${profile}-s${seed}`, soloConfig(seed, role, template, enemies), soloControllers(badType),
+        { scenario: `encounter-solo-dumb-${role}`, encounterType: profile, enemyComp, budget, playerConfig: `solo-dumb-${role}`, seed });
     }
-    // Party sovereign
-    await runScenario(`enc-party-sov-${profile}-s${seed}`, partyConfig(seed, enemies), partyControllers("sovereign"),
-      { scenario: "encounter-party-sovereign", encounterType: profile, budget, playerConfig: "party-sovereign", seed });
-    // Party bad
-    await runScenario(`enc-party-bad-${profile}-s${seed}`, partyConfig(seed, enemies), partyControllers("bad"),
-      { scenario: "encounter-party-bad", encounterType: profile, budget, playerConfig: "party-bad", seed });
+    enqueue(`enc-party-exp-${profile}-s${seed}`, partyConfig(seed, enemies), partyControllers("sovereign"),
+      { scenario: "encounter-party-expert", encounterType: profile, enemyComp, budget, playerConfig: "party-expert", seed });
+    enqueue(`enc-party-nov-${profile}-s${seed}`, partyConfig(seed, enemies), partyControllers("bad"),
+      { scenario: "encounter-party-dumb", encounterType: profile, enemyComp, budget, playerConfig: "party-dumb", seed });
   }
   process.stderr.write(`  ${profile} done\n`);
 }
@@ -330,9 +336,9 @@ if (doItems) {
           red: { heroes: [{ id: "R-hero" as any, role: "fighter", template }], scriptedAllies: [] },
           blue: { heroes: [], scriptedAllies: enemies },
         };
-        await runScenario(`item-sov-${key}-${diff}-s${seed}`, cfg, soloControllers("sovereign"),
+        enqueue(`item-sov-${key}-${diff}-s${seed}`, cfg, soloControllers("sovereign"),
           { scenario: "item-sovereign", enemyKey: key, budget: 0, playerConfig: `item-sovereign-${diff}`, seed });
-        await runScenario(`item-bad-${key}-${diff}-s${seed}`, cfg, soloControllers("rush"),
+        enqueue(`item-bad-${key}-${diff}-s${seed}`, cfg, soloControllers("rush"),
           { scenario: "item-bad", enemyKey: key, budget: 0, playerConfig: `item-rush-${diff}`, seed });
       }
     }
@@ -340,7 +346,120 @@ if (doItems) {
   }
 }
 
+// --- Execute jobs (sequentially or in parallel) ---
+console.log(`\nExecuting ${pendingJobs.length} games${workers > 0 ? ` across ${workers} workers` : " sequentially"}...`);
+
+const allResults: ScenarioResult[] = [];
+const jobMetaByIndex = new Map<number, Omit<ScenarioResult, "result">>();
+const gameJobs: GameJob[] = pendingJobs.map((pj, i) => {
+  jobMetaByIndex.set(i, pj.meta);
+  return {
+    gameIndex: i,
+    config: pj.config,
+    controllers: pj.controllers,
+    logFile: join(logDir, `${String(i).padStart(4, "0")}-${pj.scenarioName}.json`),
+  };
+});
+
+const t0 = Date.now();
+if (workers > 0) {
+  let done = 0;
+  const total = gameJobs.length;
+  const resultMap = await runJobsParallel(gameJobs, workers, () => {
+    done++;
+    if (done % 50 === 0 || done === total) process.stderr.write(`  ${done}/${total}\n`);
+  });
+  for (let i = 0; i < gameJobs.length; i++) {
+    allResults.push({ ...jobMetaByIndex.get(i)!, result: resultMap.get(i)! });
+  }
+} else {
+  for (const job of gameJobs) {
+    const controllers = new Map<EntityId, HeroController>(
+      job.controllers.map(c => [c.entityId as EntityId, makeController(c.type)])
+    );
+    const { result, events } = await runGame(job.config, controllers);
+    writeFileSync(job.logFile, JSON.stringify(events));
+    allResults.push({ ...jobMetaByIndex.get(job.gameIndex)!, result });
+  }
+}
+const elapsedMs = Date.now() - t0;
+
 // --- Write report ---
+function translateWinner(w: string | null): string | null {
+  if (w === "red") return "heroes";
+  if (w === "blue") return "enemies";
+  return w;
+}
+
+function translateResult(r: ScenarioResult) {
+  return {
+    scenario: r.scenario,
+    ...(r.enemyKey ? { enemyKey: r.enemyKey } : {}),
+    ...(r.encounterType ? { encounterType: r.encounterType } : {}),
+    ...(r.enemyComp ? { enemyComp: r.enemyComp } : {}),
+    budget: r.budget,
+    playerConfig: r.playerConfig,
+    seed: r.seed,
+    result: {
+      winner: translateWinner(r.result.winner),
+      turns: r.result.turns,
+      heroHpPct: r.result.redHpPct,
+      enemyHpPct: r.result.blueHpPct,
+    },
+  };
+}
+
+function buildSummary(results: ScenarioResult[]) {
+  const perEnemy = new Map<string, { expert: { w: number; t: number }; dumb: { w: number; t: number }; partyExpert: { w: number; t: number }; partyDumb: { w: number; t: number } }>();
+
+  for (const r of results) {
+    if (!r.enemyKey || r.scenario.startsWith("encounter-")) continue;
+    if (!perEnemy.has(r.enemyKey)) perEnemy.set(r.enemyKey, { expert: { w: 0, t: 0 }, dumb: { w: 0, t: 0 }, partyExpert: { w: 0, t: 0 }, partyDumb: { w: 0, t: 0 } });
+    const e = perEnemy.get(r.enemyKey)!;
+    const heroWon = r.result.winner === "red";
+    if (r.scenario.startsWith("solo-expert")) { e.expert.t++; if (heroWon) e.expert.w++; }
+    else if (r.scenario.startsWith("solo-dumb")) { e.dumb.t++; if (heroWon) e.dumb.w++; }
+    else if (r.scenario === "party-expert") { e.partyExpert.t++; if (heroWon) e.partyExpert.w++; }
+    else if (r.scenario === "party-dumb") { e.partyDumb.t++; if (heroWon) e.partyDumb.w++; }
+  }
+
+  const pct = (b: { w: number; t: number }) => b.t > 0 ? Math.round(b.w / b.t * 1000) / 10 : null;
+
+  const enemySummary = enemyKeys.map(k => {
+    const cost = registry[k]!.cost ?? 1;
+    const e = perEnemy.get(k);
+    if (!e) return { name: k, cost, expertSoloWin: null, dumbSoloWin: null, skillGap: null, expertPartyWin: null, dumbPartyWin: null };
+    const expSolo = pct(e.expert);
+    const novSolo = pct(e.dumb);
+    return {
+      name: k,
+      cost,
+      expertSoloWin: expSolo,
+      dumbSoloWin: novSolo,
+      skillGap: expSolo != null && novSolo != null ? Math.round((expSolo - novSolo) * 10) / 10 : null,
+      expertPartyWin: pct(e.partyExpert),
+      dumbPartyWin: pct(e.partyDumb),
+    };
+  });
+
+  const totals = { expert: { w: 0, t: 0 }, dumb: { w: 0, t: 0 } };
+  for (const e of perEnemy.values()) {
+    totals.expert.w += e.expert.w; totals.expert.t += e.expert.t;
+    totals.dumb.w += e.dumb.w; totals.dumb.t += e.dumb.t;
+  }
+  const overallExpert = pct(totals.expert);
+  const overallDumb = pct(totals.dumb);
+
+  return {
+    perEnemy: enemySummary,
+    overall: {
+      expertSoloWin: overallExpert,
+      dumbSoloWin: overallDumb,
+      skillGap: overallExpert != null && overallDumb != null ? Math.round((overallExpert - overallDumb) * 10) / 10 : null,
+    },
+  };
+}
+
 const reportPath = join(import.meta.dir, "..", "..", "..", `balance-report-dim-${dimId}.json`);
 const report = {
   dimensionId: dimId,
@@ -350,9 +469,11 @@ const report = {
   enemyCount: enemyKeys.length,
   totalGames: allResults.length,
   enemies: Object.fromEntries(enemyKeys.map(k => [k, { cost: registry[k]!.cost ?? 1, hp: registry[k]!.hp, strategy: registry[k]!.strategy, tags: registry[k]!.tags ?? [] }])),
-  results: allResults,
+  summary: buildSummary(allResults),
+  results: allResults.map(translateResult),
 };
 writeFileSync(reportPath, JSON.stringify(report, null, 2));
-console.log(`\nDone! ${allResults.length} games played.`);
+console.log(`\nDone! ${allResults.length} games in ${(elapsedMs / 1000).toFixed(1)}s.`);
 console.log(`Report: ${reportPath}`);
 console.log(`Logs:   ${logDir}/`);
+process.exit(0);

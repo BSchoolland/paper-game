@@ -12,7 +12,7 @@ if (!reportPath) { console.error("usage: bun item-summary.ts <item-report.json>"
 
 const report = JSON.parse(await Bun.file(reportPath).text());
 const items = report.items as Record<string, { type: string; rarity: string; slotCost: Record<string, number> }>;
-const results = report.results as Array<{ itemId: string; scenario: string; enemyLabel: string; seed: number; result: { winner: string | null; turns: number; redHpPct: number } }>;
+const results = report.results as Array<{ itemId: string; scenario: string; enemyLabel: string; seed: number; result: { winner: string | null; turns: number; heroHpPct: number } }>;
 const logDir = join(dirname(reportPath), `item-logs-dim-${report.dimensionId}`);
 
 // Get fighter ability usage for the party scenarios from the event logs
@@ -60,8 +60,8 @@ for (const r of results) {
   if (!grid[itemId]) grid[itemId] = {};
   if (!grid[itemId][sk]) grid[itemId][sk] = { wins: 0, totalHp: 0, totalTurns: 0, n: 0 };
   const g = grid[itemId][sk]!;
-  if (r.result.winner === "red") g.wins++;
-  g.totalHp += r.result.redHpPct;
+  if (r.result.winner === "heroes") g.wins++;
+  g.totalHp += r.result.heroHpPct;
   g.totalTurns += r.result.turns;
   g.n++;
 }
