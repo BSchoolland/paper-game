@@ -237,7 +237,7 @@ export type GameEvent =
       ability: AttackAbility;
       hits: readonly AttackHit[];
     }
-  | { type: "barrier"; entityId: EntityId; barrierHp: number }
+  | { type: "barrier"; entityId: EntityId; barrierHp: number; ability: BarrierAbility }
   | { type: "endTurn"; nextTeam: TeamId }
   | { type: "turnStart"; team: TeamId }
   | { type: "spawn"; entityId: EntityId; position: Vec2; templateKey: string }

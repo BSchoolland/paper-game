@@ -148,7 +148,7 @@ function resolveBarrier(
 
   return {
     state: { ...state, entities },
-    events: [{ type: "barrier", entityId, barrierHp: ability.barrierHp }],
+    events: [{ type: "barrier", entityId, barrierHp: ability.barrierHp, ability }],
   };
 }
 
