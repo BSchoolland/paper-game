@@ -30,6 +30,7 @@ import { seedDimension0 } from "./seed.js";
 import { seedDimension1 } from "./seed-dimension-1.js";
 import { seedDimension2 } from "./seed-dimension-2.js";
 import { seedDimension3 } from "./seed-dimension-3.js";
+import { seedDimension501 } from "./seed-dimension-501.js";
 import { join } from "path";
 import { existsSync } from "fs";
 
@@ -38,6 +39,7 @@ seedDimension0();
 seedDimension1();
 seedDimension2();
 seedDimension3();
+seedDimension501();
 
 type GameMode = "pvp" | "pve" | "duel";
 type Phase = "map" | "combat";
