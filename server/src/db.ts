@@ -219,6 +219,19 @@ export function saveItems(
   dimensionId: number,
   items: Record<string, ItemDefinition>
 ): void {
+  const checkOwnerStmt = db.prepare(
+    "SELECT dimension_id FROM items WHERE id = ?"
+  );
+  for (const id of Object.keys(items)) {
+    const existing = checkOwnerStmt.get(id) as { dimension_id: number } | undefined;
+    if (existing && existing.dimension_id !== dimensionId) {
+      throw new Error(
+        `Item ID collision: "${id}" is already owned by dimension ${existing.dimension_id}, ` +
+        `but dimension ${dimensionId} is trying to claim it. ` +
+        `Prefix item IDs with a dimension-specific tag (e.g. "d${dimensionId}-${id}").`
+      );
+    }
+  }
   const tx = db.transaction(() => {
     for (const [id, item] of Object.entries(items)) {
       insertItemStmt.run(id, dimensionId, JSON.stringify(item));
