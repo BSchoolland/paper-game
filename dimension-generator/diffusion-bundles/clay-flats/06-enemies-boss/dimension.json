@@ -1,0 +1,217 @@
+{
+  "id": 501,
+  "name": "Clay Flats",
+  "description": "A broad, sun-hammered planet of cracked clay basins, shallow river gullies, and low scrubland stretching to every horizon. There are no tall trees — only thorny brush, creek-bed fruit groves, and mud-brick settlements clinging to the banks of slow brown rivers. Folk here are stubborn as pack animals and grow everything they need from the unforgiving dirt.",
+  "palette": {
+    "primary": "#C8955A",
+    "secondary": "#7A5C3A",
+    "accent": "#6DBF82"
+  },
+  "mood": "Hot, slow, and grudging — like a mule that'll get there eventually but won't make it easy. The land doesn't give anything for free.",
+  "biome": "Cracked clay flats cut by shallow river gullies and thorny scrub lowlands",
+  "mechanicalIdentity": "Grabs, roots, and attrition — the clay holds you down while threats pile up. Less flashy than other dimensions, more grinding positional punishment.",
+  "enemyBatches": [
+    {
+      "name": "fodder",
+      "description": "Small cheap swarmers, fragile individually but annoying in groups.",
+      "enemies": [
+        {
+          "name": "Dust Rat",
+          "role": "skittering melee, cheap and numerous",
+          "description": "A big mangy rodent the size of a cat with yellowed teeth."
+        },
+        {
+          "name": "River Snapper",
+          "role": "lurks at gully edges, bites and retreats",
+          "description": "A mud-colored turtle with a craning neck and hooked beak."
+        },
+        {
+          "name": "Clay Crawler",
+          "role": "slow but sticky, grapples and holds",
+          "description": "A fat six-legged grub coated in a crust of dried clay."
+        },
+        {
+          "name": "Scrub Hound",
+          "role": "fast flanker, howls to call others",
+          "description": "A lean, mangy dog with patchy brown fur and cracked paws."
+        }
+      ]
+    },
+    {
+      "name": "standard",
+      "description": "Core mid-tier threats with distinct roles.",
+      "enemies": [
+        {
+          "name": "Gully Raider",
+          "role": "sword-and-board melee fighter",
+          "description": "A sunburned human bandit in stitched leather, carrying a short blade and a cracked wooden shield."
+        },
+        {
+          "name": "Mud Slinger",
+          "role": "ranged harasser, flings hardened clay balls",
+          "description": "A wiry figure in a mud-daubed smock with a leather sling."
+        },
+        {
+          "name": "Pack Brute",
+          "role": "slow heavy hitter, carries a club",
+          "description": "A massive, overworked laborer-turned-fighter swinging a thick hardwood cudgel."
+        },
+        {
+          "name": "Snapper Rider",
+          "role": "mounted skirmisher on a giant river snapper",
+          "description": "A small bandit crouched atop a huge mud turtle, jabbing with a long pole."
+        }
+      ]
+    },
+    {
+      "name": "elite",
+      "description": "Dangerous specialists with distinct mechanics.",
+      "enemies": [
+        {
+          "name": "Clay Golem",
+          "role": "hulking construct, high armor, slow",
+          "description": "A man-shaped figure of compressed river clay, sun-baked into rough plates."
+        },
+        {
+          "name": "Gully Witch",
+          "role": "casts mud and rot curses from range",
+          "description": "A stooped woman wrapped in cattail reeds, fingers caked in dark silt."
+        },
+        {
+          "name": "Mule Kicker",
+          "role": "brawler with devastating counter-attacks",
+          "description": "A broad-shouldered drover with iron-shod boots and a bad temper."
+        },
+        {
+          "name": "Dust Husk",
+          "role": "fast glass-cannon melee, crumbles on death",
+          "description": "A desiccated human corpse animated by dry heat, paper-thin skin stretched over hollow bones."
+        }
+      ]
+    },
+    {
+      "name": "boss",
+      "description": "Encounter centerpieces with signature mechanics.",
+      "enemies": [
+        {
+          "name": "River Boss",
+          "role": "massive armored catfish, slow and nearly unstoppable",
+          "description": "A massive armored catfish grown to the size of a boat that surges forward and crushes anything underfoot."
+        },
+        {
+          "name": "Caravan Captain",
+          "role": "tactical commander who buffs nearby raiders",
+          "description": "A scarred trader-bandit in layered leather armor, barking orders from the back of a mule."
+        },
+        {
+          "name": "Big Clay Golem",
+          "role": "oversized golem, crushes the ground on landing",
+          "description": "A two-story mound of river clay molded roughly into arms and a wide flat head."
+        },
+        {
+          "name": "Bone Mule",
+          "role": "charges in a straight line, devastating knockback",
+          "description": "A huge mule skeleton with cracked hooves, dragging lengths of broken harness chain."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Short Sword",
+      "type": "weapon (sword)",
+      "rarity": "common",
+      "description": "A plain iron blade, short enough to draw fast in a gully."
+    },
+    {
+      "name": "Long Knife",
+      "type": "weapon (sword)",
+      "rarity": "common",
+      "description": "A heavy belt knife that doubles as a short slashing blade."
+    },
+    {
+      "name": "Spear",
+      "type": "weapon (spear)",
+      "rarity": "common",
+      "description": "A fire-hardened shaft tipped with a flat iron head."
+    },
+    {
+      "name": "Sling",
+      "type": "weapon (bow)",
+      "rarity": "common",
+      "description": "A braided leather strap; hurls clay shot at range."
+    },
+    {
+      "name": "Drover Staff",
+      "type": "weapon (staff)",
+      "rarity": "common",
+      "description": "A thick walking staff used to push pack animals and crack skulls."
+    },
+    {
+      "name": "Mattock",
+      "type": "weapon (two-handed)",
+      "rarity": "common",
+      "description": "A heavy pick-hoe that hits hard and breaks clay armor."
+    },
+    {
+      "name": "Broad Axe",
+      "type": "weapon (two-handed)",
+      "rarity": "uncommon",
+      "description": "A wide-bladed chopping axe balanced for big overhead swings."
+    },
+    {
+      "name": "Prod Lance",
+      "type": "weapon (spear)",
+      "rarity": "uncommon",
+      "description": "A long iron-tipped pole; extra reach, good against mounted enemies."
+    },
+    {
+      "name": "Plank Shield",
+      "type": "shield",
+      "rarity": "common",
+      "description": "A flat slab of hardwood planks banded with iron strips."
+    },
+    {
+      "name": "Clay Shield",
+      "type": "shield",
+      "rarity": "uncommon",
+      "description": "A fired clay disc, heavy but nearly impervious to slashing."
+    },
+    {
+      "name": "Tack Bracers",
+      "type": "accessory",
+      "rarity": "uncommon",
+      "description": "Studded leather arm wraps; reduce damage from grabs and bites."
+    },
+    {
+      "name": "Drover Belt",
+      "type": "accessory",
+      "rarity": "uncommon",
+      "description": "A wide belt with iron rings; buffs carry capacity and resists knockback."
+    },
+    {
+      "name": "Pawpaw Mash",
+      "type": "consumable (heal)",
+      "rarity": "common",
+      "description": "A thick sweet paste; restores a moderate amount of health."
+    },
+    {
+      "name": "River Mud Jar",
+      "type": "consumable (armor)",
+      "rarity": "common",
+      "description": "Slap on an ally to harden their skin; grants temporary armor."
+    },
+    {
+      "name": "Dust Bomb",
+      "type": "consumable (AoE blind)",
+      "rarity": "uncommon",
+      "description": "A clay pot of fine grit; blinds enemies in a small area."
+    },
+    {
+      "name": "Salted Jerky",
+      "type": "consumable (full heal)",
+      "rarity": "rare",
+      "description": "Dense dried meat; fully restores health and removes one debuff."
+    }
+  ]
+}

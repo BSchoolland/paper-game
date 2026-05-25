@@ -1,0 +1,26 @@
+Dimension: Clay Flats
+Biome: Cracked clay flats cut by shallow river gullies and thorny scrub lowlands
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Short Sword (weapon (sword), common) — A plain iron blade, short enough to draw fast in a gully.
+  Long Knife (weapon (sword), common) — A heavy belt knife that doubles as a short slashing blade.
+  Spear (weapon (spear), common) — A fire-hardened shaft tipped with a flat iron head.
+  Sling (weapon (bow), common) — A braided leather strap; hurls clay shot at range.
+  Drover Staff (weapon (staff), common) — A thick walking staff used to push pack animals and crack skulls.
+  Mattock (weapon (two-handed), common) — A heavy pick-hoe that hits hard and breaks clay armor.
+  Broad Axe (weapon (two-handed), uncommon) — A wide-bladed chopping axe balanced for big overhead swings.
+  Prod Lance (weapon (spear), uncommon) — A long iron-tipped pole; extra reach, good against mounted enemies.
+  Plank Shield (shield, common) — A flat slab of hardwood planks banded with iron strips.
+  Clay Shield (shield, uncommon) — A fired clay disc, heavy but nearly impervious to slashing.
+  Tack Bracers (accessory, uncommon) — Studded leather arm wraps; reduce damage from grabs and bites.
+  Drover Belt (accessory, uncommon) — A wide belt with iron rings; buffs carry capacity and resists knockback.
+  Pawpaw Mash (consumable (heal), common) — A thick sweet paste; restores a moderate amount of health.
+  River Mud Jar (consumable (armor), common) — Slap on an ally to harden their skin; grants temporary armor.
+  Dust Bomb (consumable (AoE blind), uncommon) — A clay pot of fine grit; blinds enemies in a small area.
+  Salted Jerky (consumable (full heal), rare) — Dense dried meat; fully restores health and removes one debuff.

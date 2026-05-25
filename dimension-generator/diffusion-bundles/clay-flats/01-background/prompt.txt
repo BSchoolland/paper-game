@@ -1,0 +1,12 @@
+Dimension: Clay Flats
+Biome: Cracked clay flats cut by shallow river gullies and thorny scrub lowlands
+Mood: Hot, slow, and grudging — like a mule that'll get there eventually but won't make it easy. The land doesn't give anything for free.
+Palette: primary #C8955A, secondary #7A5C3A, accent #6DBF82
+
+Description: A broad, sun-hammered planet of cracked clay basins, shallow river gullies, and low scrubland stretching to every horizon. There are no tall trees — only thorny brush, creek-bed fruit groves, and mud-brick settlements clinging to the banks of slow brown rivers. Folk here are stubborn as pack animals and grow everything they need from the unforgiving dirt.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

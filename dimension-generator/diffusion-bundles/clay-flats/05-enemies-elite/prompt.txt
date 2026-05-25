@@ -1,0 +1,24 @@
+Dimension: Clay Flats
+Biome: Cracked clay flats cut by shallow river gullies and thorny scrub lowlands
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "elite" tier: Dangerous specialists with distinct mechanics.
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Clay Golem — hulking construct, high armor, slow. A man-shaped figure of compressed river clay, sun-baked into rough plates.
+
+  Gully Witch — casts mud and rot curses from range. A stooped woman wrapped in cattail reeds, fingers caked in dark silt.
+
+  Mule Kicker — brawler with devastating counter-attacks. A broad-shouldered drover with iron-shod boots and a bad temper.
+
+  Dust Husk — fast glass-cannon melee, crumbles on death. A desiccated human corpse animated by dry heat, paper-thin skin stretched over hollow bones.

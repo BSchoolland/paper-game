@@ -49,9 +49,10 @@ interface DimensionSpec {
   palette: { primary: string; secondary: string; accent: string };
   mood: string;
   biome: string;
-  mechanicalIdentity: string;
-  enemyBatches: EnemyBatch[];
-  items: ItemSpec[];
+  mechanicalIdentity?: string;
+  enemyBatches?: EnemyBatch[];
+  items?: ItemSpec[] | string;
+  enemies?: string;
 }
 
 const SCRIPT_DIR = dirname(import.meta.path);
@@ -118,9 +119,7 @@ function lightContext(spec: DimensionSpec): string {
   ].join("\n");
 }
 
-async function build(specPath: string) {
-  const specRaw = await Bun.file(specPath).text();
-  const spec: DimensionSpec = JSON.parse(specRaw);
+async function buildFromSpec(spec: DimensionSpec): Promise<string> {
 
   const outDir = join(SCRIPT_DIR, "diffusion-bundles", slugify(spec.name));
   await rm(outDir, { recursive: true, force: true });
@@ -156,7 +155,7 @@ async function build(specPath: string) {
     prompt: [
       dimensionContext(spec),
       "",
-      "Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color saturation, same isometric three-quarter perspective, same drop shadows.",
+      "Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color saturation, isometric three-quarter perspective, and drop shadows. Ignore the reference's parchment background.",
       "",
       "Each decoration should be a single distinct object with clear space around it, suitable for cutting out individually. A mix of organic decorations (plants/natural objects) and structural decorations (walls/ruins/built objects) — choose what fits this dimension's biome and mood.",
       "",
@@ -165,36 +164,67 @@ async function build(specPath: string) {
   });
 
   // 3-6. Enemies (one zip per batch)
-  for (let i = 0; i < spec.enemyBatches.length; i++) {
-    const batch = spec.enemyBatches[i]!;
-    if (batch.enemies.length !== 4) {
-      console.warn(`WARN: enemy batch "${batch.name}" has ${batch.enemies.length} enemies (expected 4 for a 4×4 grid)`);
+  if (spec.enemyBatches) {
+    for (let i = 0; i < spec.enemyBatches.length; i++) {
+      const batch = spec.enemyBatches[i]!;
+      if (batch.enemies.length !== 4) {
+        console.warn(`WARN: enemy batch "${batch.name}" has ${batch.enemies.length} enemies (expected 4 for a 4×4 grid)`);
+      }
+      const enemyList = batch.enemies.map(formatEnemy).join("\n\n");
+      const idx = String(3 + i).padStart(2, "0");
+      await writeBundle({
+        outDir,
+        name: `${idx}-enemies-${slugify(batch.name)}`,
+        spec,
+        referenceImage: REFERENCES.enemies,
+        prompt: [
+          lightContext(spec),
+          "",
+          "Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.",
+          "",
+          "The image must be a 4×4 grid:",
+          "  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)",
+          "  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)",
+          "  - Each enemy is consistent across its column (same character drawn 4 different ways)",
+          "  - All characters must face to the RIGHT",
+          "",
+          `This batch is the "${batch.name}" tier: ${batch.description}`,
+          "",
+          "The 4 enemies in this batch (one per column, in this order):",
+          "",
+          enemyList,
+        ].join("\n"),
+      });
     }
-    const enemyList = batch.enemies.map(formatEnemy).join("\n\n");
-    const idx = String(3 + i).padStart(2, "0");
-    await writeBundle({
-      outDir,
-      name: `${idx}-enemies-${slugify(batch.name)}`,
-      spec,
-      referenceImage: REFERENCES.enemies,
-      prompt: [
-        lightContext(spec),
-        "",
-        "Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.",
-        "",
-        "The image must be a 4×4 grid:",
-        "  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)",
-        "  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)",
-        "  - Each enemy is consistent across its column (same character drawn 4 different ways)",
-        "  - All characters must face to the RIGHT",
-        "",
-        `This batch is the "${batch.name}" tier: ${batch.description}`,
-        "",
-        "The 4 enemies in this batch (one per column, in this order):",
-        "",
-        enemyList,
-      ].join("\n"),
-    });
+  } else if (spec.enemies && typeof spec.enemies === "string") {
+    // Freeform format: split into 4 tiers by header
+    const tierNames = ["fodder", "standard", "elite", "boss"];
+    const sections = spec.enemies.split(/(?=FODDER|STANDARD|ELITE|BOSS)/i).filter(s => s.trim());
+    for (let i = 0; i < Math.min(sections.length, 4); i++) {
+      const section = sections[i]!.trim();
+      const idx = String(3 + i).padStart(2, "0");
+      await writeBundle({
+        outDir,
+        name: `${idx}-enemies-${tierNames[i]}`,
+        spec,
+        referenceImage: REFERENCES.enemies,
+        prompt: [
+          lightContext(spec),
+          "",
+          "Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.",
+          "",
+          "The image must be a 4×4 grid:",
+          "  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)",
+          "  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)",
+          "  - Each enemy is consistent across its column (same character drawn 4 different ways)",
+          "  - All characters must face to the RIGHT",
+          "",
+          "The enemies in this batch:",
+          "",
+          section,
+        ].join("\n"),
+      });
+    }
   }
 
   // 7. Map decorations (world-map / hex-map terrain icons)
@@ -213,7 +243,9 @@ async function build(specPath: string) {
   });
 
   // 8. Items
-  const itemList = spec.items.map(formatItem).join("\n");
+  const itemListText = Array.isArray(spec.items)
+    ? spec.items.map(formatItem).join("\n")
+    : (spec.items ?? "16 fantasy items matching the dimension's theme");
   await writeBundle({
     outDir,
     name: "08-items",
@@ -227,7 +259,7 @@ async function build(specPath: string) {
       "The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.",
       "",
       "Items in reading order (left-to-right, top-to-bottom):",
-      itemList,
+      itemListText,
     ].join("\n"),
   });
 
@@ -238,11 +270,18 @@ async function build(specPath: string) {
   }
 
   console.log(`\n✓ Built bundles in ${outDir}`);
+  return outDir;
 }
 
-const specArg = process.argv[2];
-if (!specArg) {
-  console.error("Usage: bun run build-diffusion-bundles.ts <spec.json>");
-  process.exit(1);
+async function build(specPath: string): Promise<string> {
+  const specRaw = await Bun.file(specPath).text();
+  const spec: DimensionSpec = JSON.parse(specRaw);
+  return buildFromSpec(spec);
 }
-await build(resolve(specArg));
+
+export { build as buildDiffusionBundles, buildFromSpec };
+
+const specArg = process.argv[2];
+if (specArg) {
+  await build(resolve(specArg));
+}

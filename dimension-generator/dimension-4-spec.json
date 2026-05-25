@@ -1,0 +1,217 @@
+{
+  "id": 4,
+  "name": "The Scarlet Atelier",
+  "description": "A world of endless manicured estates and aristocratic hunting grounds, where biotechnology and selective breeding have produced a landscape of lethal beauty. Massive hedge-mazes bloom with cyclamen-colored flora, while genetically-cultivated beast-stock roam the pleasure-gardens of the noble houses. The soil runs deep crimson like beet juice, rich with nutrients that feed carnivorous topiaries and venomous flowerbeds. Floating barber-surgeons in cream-colored air-gondolas drift between estates, offering grooming services while harvesting valuable toxins from the gardens below.",
+  "palette": {
+    "primary": "#8B2346",
+    "secondary": "#E8A5C0",
+    "accent": "#F5E6C8"
+  },
+  "mood": "Aristocratic elegance masking lethal toxicity; cultivated beauty that devours the unwary.",
+  "biome": "manicured estate and venomous pleasure-garden",
+  "mechanicalIdentity": "Poisoned + Vulnerable. Enemies weaken defenses and stack venom that amplifies damage taken. Elegant hunters expose weaknesses before the kill.",
+  "enemyBatches": [
+    {
+      "name": "fodder",
+      "description": "Low-level estate pests and garden vermin - swarming nuisances bred from common stock.",
+      "enemies": [
+        {
+          "name": "Cyclamen Mite",
+          "role": "melee swarm, applies poisoned",
+          "description": "A fist-sized insectoid with translucent pink wing-cases, striped abdomen, and drooling mandibles that drip venom."
+        },
+        {
+          "name": "Custard Slug",
+          "role": "slow melee, leaves poison trail",
+          "description": "A pale yellow gastropod the size of a housecat, leaving glistening toxic slime wherever it crawls."
+        },
+        {
+          "name": "Hedge Snipper",
+          "role": "melee, low damage but inflicts vulnerable",
+          "description": "A bio-engineered scissor-beetle with chrome-plated mandibles, bred to trim topiary but aggressive to intruders."
+        },
+        {
+          "name": "Beetling",
+          "role": "melee swarm, burrows and ambushes",
+          "description": "A thumb-sized purple-black beetle that erupts from the crimson soil in swarms, their bites causing painful welts."
+        }
+      ]
+    },
+    {
+      "name": "standard",
+      "description": "Proper estate guardians and hunting beasts - the nobility's prized stock.",
+      "enemies": [
+        {
+          "name": "Topiary Stag",
+          "role": "melee charger, applies vulnerable on charge",
+          "description": "A majestic deer-shaped bush-creature with antlers of thorny branches, cyclamen blossoms blooming along its flanks."
+        },
+        {
+          "name": "Barber Surgeon",
+          "role": "ranged support, inflicts poisoned with thrown razors",
+          "description": "A tall figure in cream-colored coat and plague mask, wielding scalpels and throwing star-razors with surgical precision."
+        },
+        {
+          "name": "Taurus Hound",
+          "role": "heavy melee, gore attack causes bleeding",
+          "description": "A bull-headed mastiff the size of a pony, with striped brindle fur and custard-yellow eyes, bred for the hunt."
+        },
+        {
+          "name": "Venom Orchid",
+          "role": "ranged caster, applies poisoned and slowed",
+          "description": "A mobile flower-creature with cyclamen petals and a gaping maw, spitting acidic pollen clouds."
+        }
+      ]
+    },
+    {
+      "name": "elite",
+      "description": "Noble house champions and apex garden predators - trophies of the breeding houses.",
+      "enemies": [
+        {
+          "name": "Grand Horticulturist",
+          "role": "caster summoner, buffs allies with nutrients",
+          "description": "A robed figure wielding a staff of grafted branches, surrounded by swirling pollen that empowers nearby flora."
+        },
+        {
+          "name": "Crimson Mazer",
+          "role": "heavy melee with pull effect using thorn-chains",
+          "description": "A massive living topiary of beet-red leaves, humanoid-shaped, wielding extending vine-whips with hook-thorns."
+        },
+        {
+          "name": "Razorback Taurus",
+          "role": "bruiser, charges and inflicts vulnerable + poisoned",
+          "description": "A huge bull with chrome-plated horns striped in cream and crimson, foaming at the mouth with engineered toxins."
+        },
+        {
+          "name": "Cyclamen Matriarch",
+          "role": "elite caster, large poison AoE and healing aura",
+          "description": "A towering plant-creature with a skirt of blooming cyclamen flowers, constantly shedding toxic spores that heal allies."
+        }
+      ]
+    },
+    {
+      "name": "boss",
+      "description": "The legendary beasts of the breeding houses - living art pieces that have turned predator.",
+      "enemies": [
+        {
+          "name": "The Sanguine Groom",
+          "role": "boss, dual-wield razor-staff, heavy poison and vulnerable stacking",
+          "description": "A six-armed figure in immaculate cream barber's coat and crimson gloves, wielding three pairs of gleaming straight-razors with impossible grace."
+        },
+        {
+          "name": "Custard Duchess",
+          "role": "boss, massive slug-queen, summons mites and leaves poison pools",
+          "description": "A pale yellow gastropod the size of a mansion, crowned with cyclamen blossoms, her mucus trails becoming lakes of acid."
+        },
+        {
+          "name": "Beet Lord Tauron",
+          "role": "boss, minotaur-like brute, charges and gores, inflicts all debuffs",
+          "description": "A titanic bull-man with beet-purple hide striped in cream, wielding a pruning-hook the size of a tree, bellowing with earth-shaking force."
+        },
+        {
+          "name": "The Perfect Bloom",
+          "role": "boss, true form hidden in cyclamen petals, psychic poison attacks",
+          "description": "A massive floating flower-creature resembling an immense cyclamen, its center revealing rows of surgical teeth and a single vast eye."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Pruning Hook",
+      "type": "weapon (spear)",
+      "rarity": "common",
+      "description": "A curved gardener's blade with a striped cream-and-crimson handle, designed for cutting thick branches."
+    },
+    {
+      "name": "Straight Razor",
+      "type": "weapon (sword)",
+      "rarity": "common",
+      "description": "An elegant folding blade with a cyclamen-pink mother-of-pearl handle, wickedly sharp."
+    },
+    {
+      "name": "Gardener's Shears",
+      "type": "weapon (two-handed)",
+      "rarity": "common",
+      "description": "A large pair of crossed blades resembling scissors, used for trimming topiary beasts."
+    },
+    {
+      "name": "Pollen Duster",
+      "type": "weapon (bow)",
+      "rarity": "common",
+      "description": "A bellows-like device that launches clouds of toxic pollen at range."
+    },
+    {
+      "name": "Beetle Carapace Club",
+      "type": "weapon (two-handed)",
+      "rarity": "uncommon",
+      "description": "A mace fashioned from the purple shell of a giant beetle, surprisingly light and durable."
+    },
+    {
+      "name": "Barber's Strop",
+      "type": "weapon (sword)",
+      "rarity": "uncommon",
+      "description": "A leather strap weighted with razor-edged buckles, wielded like a whip-sword."
+    },
+    {
+      "name": "Grafting Rod",
+      "type": "weapon (staff)",
+      "rarity": "uncommon",
+      "description": "A staff of living wood with multiple branches, each tipped with a different venomous thorn."
+    },
+    {
+      "name": "Horn Caster",
+      "type": "weapon (bow)",
+      "rarity": "rare",
+      "description": "A bow carved from the striped horn of a Taurus beast, its arrows whistle like hunting calls."
+    },
+    {
+      "name": "Coiffure Shield",
+      "type": "shield",
+      "rarity": "uncommon",
+      "description": "A round shield painted with cream-and-crimson barber-pole stripes, light and well-balanced."
+    },
+    {
+      "name": "Topiary Guard",
+      "type": "shield",
+      "rarity": "rare",
+      "description": "A living shield of woven branches with blooming cyclamen, its thorns drip with mild venom."
+    },
+    {
+      "name": "Cyclamen Corsage",
+      "type": "accessory",
+      "rarity": "uncommon",
+      "description": "A wrist-mounted flower that pulses with protective spores, granting resistance to poison."
+    },
+    {
+      "name": "Barber's Charm",
+      "type": "accessory",
+      "rarity": "uncommon",
+      "description": "A small silver scissors pendant on a chain, said to cut through curses and toxins alike."
+    },
+    {
+      "name": "Custard Pearl",
+      "type": "accessory",
+      "rarity": "rare",
+      "description": "A creamy yellow gem that absorbs venom and converts it to healing energy."
+    },
+    {
+      "name": "Beetroot Extract",
+      "type": "consumable",
+      "rarity": "common",
+      "description": "A flask of thick crimson liquid that stains the teeth but grants temporary vitality."
+    },
+    {
+      "name": "Pomade of Clarity",
+      "type": "consumable",
+      "rarity": "uncommon",
+      "description": "A cream-colored ointment that clears the mind and grants immunity to confusion effects."
+    },
+    {
+      "name": "Venom Sample",
+      "type": "consumable",
+      "rarity": "rare",
+      "description": "A vial of concentrated estate toxin that can be applied to weapons for devastating effect."
+    }
+  ]
+}

@@ -34,7 +34,38 @@ def remove_background(img: Image.Image, threshold: int = 30) -> Image.Image:
     return Image.fromarray(rgba, "RGBA")
 
 
-def find_sprites(alpha: np.ndarray, min_size: int = 30, gap: int = 15) -> list[tuple[int, int, int, int]]:
+def fill_interior_holes(img: Image.Image, hole_ratio: float = 1/10) -> Image.Image:
+    """Fill transparent regions that are small relative to the sprite's opaque area.
+    Only considers interior holes — regions touching the edge are always removed."""
+    from scipy import ndimage
+    arr = np.array(img)
+    alpha = arr[:, :, 3].copy()
+    h, w = alpha.shape
+
+    transparent_mask = (alpha < 128).astype(np.uint8)
+    labeled, num = ndimage.label(transparent_mask)
+
+    # Count opaque pixels in this sprite
+    opaque_count = int(np.sum(alpha >= 128))
+    if opaque_count == 0:
+        return img
+
+    min_hole = int(opaque_count * hole_ratio)
+
+    for i in range(1, num + 1):
+        component = (labeled == i)
+        # Skip regions that touch any edge (those are background, not holes)
+        if (component[0, :].any() or component[-1, :].any() or
+                component[:, 0].any() or component[:, -1].any()):
+            continue
+        if np.sum(component) < min_hole:
+            alpha[component] = 255
+
+    arr[:, :, 3] = alpha
+    return Image.fromarray(arr, "RGBA")
+
+
+def find_sprites(alpha: np.ndarray, min_size: int = 30, gap: int = 3) -> list[tuple[int, int, int, int]]:
     """Find bounding boxes of individual sprites by connected component analysis."""
     mask = (alpha > 50).astype(np.uint8)
 
@@ -108,6 +139,7 @@ def main():
 
     for i, (x0, y0, x1, y1) in enumerate(boxes):
         sprite = rgba.crop((x0, y0, x1, y1))
+        sprite = fill_interior_holes(sprite)
         sprite = crop_to_content(sprite)
         out_path = os.path.join(output_dir, f"sprite-{i:02d}.webp")
         sprite.save(out_path, "WEBP", quality=90)
