@@ -69,32 +69,27 @@ export class EncounterSession {
       const entities = new Map<string, ReturnType<typeof makeEntity>>();
       const enemyTemplates = loadEnemyTemplateRegistry(dimensionId);
 
-      // Red: a single well-rounded hero (FIGHTER kit — greatsword melee + shield + precision-shot ranged).
+      // Red: a balanced hero (FIGHTER kit — greatsword melee + shield + precision-shot ranged).
       const redPos = findWalkablePosition(map.grid, { x: 120, y: 300 }, FIGHTER_TEMPLATE.collisionRadius);
       entities.set("red1", makeEntity("red1", "fighter", redPos.x, redPos.y, "red", FIGHTER_TEMPLATE));
 
-      // Blue: army of genius-tier goblins. Each runs a Sovereign brain matched to its role.
-      const army: Array<{ id: string; name: string; key: string; pos: { x: number; y: number }; weights: typeof FIGHTER_WEIGHTS }> = [
-        { id: "b-spear-a",  name: "Goblin Spearman", key: "goblin-spear",  pos: { x: 600, y: 200 }, weights: FIGHTER_WEIGHTS },
-        { id: "b-spear-b",  name: "Goblin Spearman", key: "goblin-spear",  pos: { x: 720, y: 240 }, weights: FIGHTER_WEIGHTS },
-        { id: "b-archer-a", name: "Goblin Archer",   key: "goblin-archer", pos: { x: 680, y: 380 }, weights: RANGED_WEIGHTS },
-        { id: "b-archer-b", name: "Goblin Archer",   key: "goblin-archer", pos: { x: 760, y: 420 }, weights: RANGED_WEIGHTS },
-        { id: "b-shield",   name: "Goblin Shield",   key: "goblin-shield", pos: { x: 580, y: 320 }, weights: TANK_WEIGHTS    },
-        { id: "b-bigslime", name: "Big Slime",       key: "big-slime",     pos: { x: 640, y: 460 }, weights: FIGHTER_WEIGHTS },
+      // Blue: 1 normal goblin (basic AI) + 1 smart fighter with Sovereign brain.
+      const goblins: Array<{ id: string; name: string; key: string; pos: { x: number; y: number } }> = [
+        { id: "b-spear-a",  name: "Goblin Spearman", key: "goblin-spear",  pos: { x: 600, y: 200 } },
       ];
-      for (const u of army) {
-        const tpl = enemyTemplates[u.key];
+      for (const g of goblins) {
+        const tpl = enemyTemplates[g.key];
         if (!tpl) continue;
-        const p = findWalkablePosition(map.grid, u.pos, tpl.collisionRadius);
-        entities.set(u.id, makeEntity(u.id, u.name, p.x, p.y, "blue", tpl));
+        const p = findWalkablePosition(map.grid, g.pos, tpl.collisionRadius);
+        entities.set(g.id, makeEntity(g.id, g.name, p.x, p.y, "blue", tpl));
       }
 
+      // Smart fighter — standard fighter abilities, Sovereign brain at crafty preset.
+      const smartPos = findWalkablePosition(map.grid, { x: 660, y: 320 }, FIGHTER_TEMPLATE.collisionRadius);
+      entities.set("b-smart", makeEntity("b-smart", "Fighter", smartPos.x, smartPos.y, "blue", FIGHTER_TEMPLATE));
+
       const session = new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
-      for (const u of army) {
-        if (entities.has(u.id)) {
-          session.heroBrains.set(u.id as EntityId, makeSovereign(u.weights, PRESETS.genius));
-        }
-      }
+      session.heroBrains.set("b-smart" as EntityId, makeSovereign(FIGHTER_WEIGHTS, PRESETS.crafty));
       return session;
     }
 
