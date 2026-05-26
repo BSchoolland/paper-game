@@ -1,0 +1,12 @@
+Dimension: Chalk Barrens
+Biome: Chalk flatlands and stone badlands scoured by perpetual hailstorms
+Mood: Relentless and exposed — the sky is always attacking, and the ground is always crumbling underfoot. There is nowhere to hide and nothing soft.
+Palette: primary #D6D0C4, secondary #7A6E60, accent #4A8FAB
+
+Description: A planet of vast white plains and crumbling badlands, coated in layers of pale chalk dust and broken stone. Hailstorms roll across the open flats constantly, stripping flesh from the unprepared. Settlements are squat, plastered-over rubble heaps — built low to survive the sky.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

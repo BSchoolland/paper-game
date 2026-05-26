@@ -1,0 +1,26 @@
+Dimension: Chalk Barrens
+Biome: Chalk flatlands and stone badlands scoured by perpetual hailstorms
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+- Short Sword (weapon (sword), common): A plain blade, reliable at close range.
+- Mace (weapon (mace), common): A heavy flanged head that cracks armour on hit.
+- Spear (weapon (spear), common): Long polearm; keeps enemies at arm's length.
+- Chalk Spear (weapon (spear), uncommon): Tip coated in blinding chalk dust; hits reduce enemy accuracy.
+- Hand Crossbow (weapon (bow), common): A compact crossbow, one hand free.
+- Stone Bow (weapon (bow), uncommon): Fires dense stone bolts; slower but hits harder.
+- Iron Staff (weapon (staff), common): A heavy iron rod good for bashing and blocking.
+- Hail Staff (weapon (staff), rare): Slams the ground and scatters a burst of ice shards across nearby tiles.
+- Maul (weapon (two-handed), common): A two-handed stone-headed hammer; slow, hits very hard.
+- Rubble Flail (weapon (two-handed), uncommon): A chain with a jagged rock head; ignores shields on hit.
+- Plaster Shield (shield, common): A round shield of hardened plaster; light but chips under heavy blows.
+- Stone Kite (shield, uncommon): A tall kite shield carved from flat rock; heavy, excellent coverage.
+- Chalk Wrap (accessory, common): Wound cloth coated in chalk; reduces bleeding effects.
+- Storm Cloak (accessory, uncommon): A thick waxed cloak; reduces hail and area damage each turn.
+- Dust Flask (consumable, common): Thrown at a tile; blinds targets in the area for one round.
+- Health Potion (consumable, common): A clay vial of red liquid; restores a chunk of health.

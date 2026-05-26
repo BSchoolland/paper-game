@@ -1,0 +1,12 @@
+Dimension: Chalk Barrens
+Biome: Chalk flatlands and stone badlands scoured by perpetual hailstorms
+Mood: Relentless and exposed — the sky is always attacking, and the ground is always crumbling underfoot. There is nowhere to hide and nothing soft.
+Palette: primary #D6D0C4, secondary #7A6E60, accent #4A8FAB
+
+Description: A planet of vast white plains and crumbling badlands, coated in layers of pale chalk dust and broken stone. Hailstorms roll across the open flats constantly, stripping flesh from the unprepared. Settlements are squat, plastered-over rubble heaps — built low to survive the sky.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color saturation, isometric three-quarter perspective, and drop shadows. Ignore the reference's parchment background.
+
+Important: Use a variety of colors across the decorations — not everything should be the same color as the dimension palette. Natural environments have diverse coloring, so include variety (e.g. different plant greens, browns, grays for rocks, varied flower colors).

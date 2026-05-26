@@ -1,0 +1,20 @@
+Dimension: Chalk Barrens
+Biome: Chalk flatlands and stone badlands scoured by perpetual hailstorms
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+The enemies in this batch:
+
+STANDARD (cost 3–4, core threats):
+- Rubble Brute — heavy melee, kicks chunks of stone at range. A thick-limbed humanoid wrapped in cracked plaster armour.
+- Chalk Knight — shielded melee fighter, advances in a straight line. A stocky warrior in white stone plate with a flanged mace.
+- Hail Lobber — lobs hailstone clusters at groups. A gaunt figure in layered wrappings, always looking at the sky.
+- Ram Toad — charges in a straight line, knocking targets back. A big grey toad with a boulder-dense forehead and stubby legs.

@@ -9,8 +9,8 @@ export const client = new OpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-export const FAST_MODEL = "anthropic/claude-sonnet-4.6";
-export const SMART_MODEL = "anthropic/claude-sonnet-4.6";
+export const FAST_MODEL = "xiaomi/mimo-v2.5-pro";
+export const SMART_MODEL = "xiaomi/mimo-v2.5-pro";
 
 const ROOT = join(import.meta.dir, "..", "..");
 
