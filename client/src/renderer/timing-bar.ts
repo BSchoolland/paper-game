@@ -1,23 +1,39 @@
+import { ShapeKind } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import type { GameRenderer } from "./game-renderer.js";
 
 const SWEEP_DURATION_MS = 1200;
+const ONESHOT_DURATION_MS = 800;
+const CHARGE_DURATION_MS = 900;
 const RESULT_HOLD_MS = 400;
 const BAR_WIDTH = 80;
 const BAR_HEIGHT = 8;
 const OFFSET_Y = -90;
 
+const GRADIENT_SYMMETRIC = `linear-gradient(to right,
+  #7a3a2a 0%, #9a7a40 20%, #6a8a45 40%, #5a9a3a 50%,
+  #6a8a45 60%, #9a7a40 80%, #7a3a2a 100%)`;
+
+const GRADIENT_ONESHOT = `linear-gradient(to right,
+  #7a3a2a 0%, #9a7a40 30%, #6a8a45 60%, #5a9a3a 85%,
+  #5a9a3a 95%, #7a3a2a 100%)`;
+
+type TimingMode = "symmetric" | "oneshot" | "charge";
+
 export class TimingBar {
   private animFrame = 0;
   private startTime = 0;
   private resolve: ((power: number) => void) | null = null;
-  private onClickBound: (e: MouseEvent) => void;
-  private onKeyBound: (e: KeyboardEvent) => void;
   private renderer: GameRenderer | null = null;
+  private mode: TimingMode = "symmetric";
+  private stopped = false;
+  private charging = false;
+  private chargeStart = 0;
+  private chargePower = 0;
 
   private container: HTMLDivElement;
+  private track: HTMLDivElement;
   private marker: HTMLDivElement;
-  private label: HTMLDivElement;
 
   constructor(private clientState: ClientState) {
     this.container = document.createElement("div");
@@ -29,23 +45,14 @@ export class TimingBar {
       transform: translateX(-50%);
     `;
 
-    const track = document.createElement("div");
-    track.style.cssText = `
+    this.track = document.createElement("div");
+    this.track.style.cssText = `
       position: relative;
       width: ${BAR_WIDTH}px;
       height: ${BAR_HEIGHT}px;
       border: 2px solid #5a4a38;
       border-radius: 3px;
       overflow: hidden;
-      background: linear-gradient(to right,
-        #7a3a2a 0%,
-        #9a7a40 20%,
-        #6a8a45 40%,
-        #5a9a3a 50%,
-        #6a8a45 60%,
-        #9a7a40 80%,
-        #7a3a2a 100%
-      );
       box-shadow: 0 1px 4px rgba(20, 15, 8, 0.5);
     `;
 
@@ -60,56 +67,157 @@ export class TimingBar {
       box-shadow: 0 0 2px rgba(30, 20, 10, 0.5);
       pointer-events: none;
     `;
-    track.appendChild(this.marker);
-    this.container.appendChild(track);
-
-    this.label = document.createElement("div");
-    this.container.appendChild(this.label);
+    this.track.appendChild(this.marker);
+    this.container.appendChild(this.track);
 
     document.body.appendChild(this.container);
-
-    this.onClickBound = (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.stop();
-    };
-    this.onKeyBound = (e) => {
-      if (e.key === " " || e.key === "Enter") {
-        e.preventDefault();
-        this.stop();
-      }
-    };
   }
 
   setRenderer(renderer: GameRenderer) {
     this.renderer = renderer;
   }
 
-  run(): Promise<number> {
+  run(shapeKind: ShapeKind): Promise<number> {
+    if (shapeKind === ShapeKind.Sector) this.mode = "oneshot";
+    else if (shapeKind === ShapeKind.Rectangle || shapeKind === ShapeKind.Circle) this.mode = "charge";
+    else this.mode = "symmetric";
+
+    this.track.style.background = this.mode === "symmetric" ? GRADIENT_SYMMETRIC : GRADIENT_ONESHOT;
+    this.stopped = false;
+    this.charging = false;
+    this.chargePower = 0;
+
     return new Promise((resolve) => {
       this.resolve = resolve;
-      this.startTime = performance.now();
       this.clientState.timingPower = 0;
-      this.label.textContent = "";
+      this.marker.style.left = "0px";
       this.container.style.display = "block";
 
-      window.addEventListener("click", this.onClickBound, true);
-      document.addEventListener("keydown", this.onKeyBound);
-
-      const tick = () => {
-        const elapsed = performance.now() - this.startTime;
-        const t = (elapsed % SWEEP_DURATION_MS) / SWEEP_DURATION_MS;
-        const pos = Math.abs(2 * t - 1);
-        const power = 1 - Math.abs(2 * pos - 1);
-        this.clientState.timingPower = power;
-        this.marker.style.left = `${pos * (BAR_WIDTH - 3)}px`;
-        this.updatePosition();
-        this.clientState.notify();
-        this.animFrame = requestAnimationFrame(tick);
-      };
-      this.animFrame = requestAnimationFrame(tick);
+      if (this.mode === "charge") {
+        this.startCharge();
+      } else {
+        this.startTime = performance.now();
+        this.bindStopListeners();
+        this.tickAuto();
+      }
     });
   }
+
+  // --- Symmetric / Oneshot modes: marker moves automatically, click to stop ---
+
+  private bindStopListeners() {
+    const onClick = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      cleanup();
+      this.stop();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        cleanup();
+        this.stop();
+      }
+    };
+    const cleanup = () => {
+      window.removeEventListener("click", onClick, true);
+      document.removeEventListener("keydown", onKey);
+    };
+    window.addEventListener("click", onClick, true);
+    document.addEventListener("keydown", onKey);
+  }
+
+  private tickAuto() {
+    if (this.stopped) return;
+    const elapsed = performance.now() - this.startTime;
+
+    let pos: number;
+    let power: number;
+
+    if (this.mode === "oneshot") {
+      const t = (elapsed % ONESHOT_DURATION_MS) / ONESHOT_DURATION_MS;
+      pos = t;
+      power = t <= 0.95 ? t / 0.95 : 1 - (t - 0.95) / 0.05;
+    } else {
+      const t = (elapsed % SWEEP_DURATION_MS) / SWEEP_DURATION_MS;
+      pos = Math.abs(2 * t - 1);
+      power = 1 - Math.abs(2 * pos - 1);
+    }
+
+    this.clientState.timingPower = power;
+    this.marker.style.left = `${pos * (BAR_WIDTH - 3)}px`;
+    this.updatePosition();
+    this.clientState.notify();
+    this.animFrame = requestAnimationFrame(() => this.tickAuto());
+  }
+
+  // --- Charge mode: hold to fill, release to lock in ---
+
+  private startCharge() {
+    const onMouseDown = (e: MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      beginHold();
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.key === " " || e.key === "Enter") {
+        e.preventDefault();
+        beginHold();
+      }
+    };
+    const onMouseUp = () => {
+      if (this.charging) { cleanup(); this.stop(); }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if ((e.key === " " || e.key === "Enter") && this.charging) {
+        cleanup();
+        this.stop();
+      }
+    };
+
+    const beginHold = () => {
+      if (this.charging || this.stopped) return;
+      this.charging = true;
+      this.chargeStart = performance.now();
+      window.addEventListener("mouseup", onMouseUp);
+      document.addEventListener("keyup", onKeyUp);
+      this.tickCharge();
+    };
+
+    const cleanup = () => {
+      window.removeEventListener("mousedown", onMouseDown, true);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener("keyup", onKeyUp);
+    };
+
+    window.addEventListener("mousedown", onMouseDown, true);
+    document.addEventListener("keydown", onKeyDown);
+    this.updatePosition();
+    this.clientState.notify();
+  }
+
+  private tickCharge() {
+    if (this.stopped) return;
+    const elapsed = performance.now() - this.chargeStart;
+    const t = Math.min(elapsed / CHARGE_DURATION_MS, 1);
+    const power = t <= 0.95 ? t / 0.95 : 1 - (t - 0.95) / 0.05;
+
+    this.chargePower = power;
+    this.clientState.timingPower = power;
+    this.marker.style.left = `${t * (BAR_WIDTH - 3)}px`;
+    this.updatePosition();
+    this.clientState.notify();
+
+    if (t >= 1) {
+      this.stop();
+      return;
+    }
+    this.animFrame = requestAnimationFrame(() => this.tickCharge());
+  }
+
+  // --- Shared ---
 
   private updatePosition() {
     if (!this.renderer) return;
@@ -126,9 +234,9 @@ export class TimingBar {
   }
 
   private stop() {
+    if (this.stopped) return;
+    this.stopped = true;
     cancelAnimationFrame(this.animFrame);
-    window.removeEventListener("click", this.onClickBound, true);
-    document.removeEventListener("keydown", this.onKeyBound);
 
     const power = this.clientState.timingPower ?? 0;
 

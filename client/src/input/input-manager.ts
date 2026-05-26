@@ -1,4 +1,4 @@
-import type { Vec2 } from "shared";
+import type { AttackAbility, Vec2 } from "shared";
 import { distance, sub, clampToMovementRange } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import type { GameRenderer } from "../renderer/game-renderer.js";
@@ -151,7 +151,7 @@ export class InputManager {
     if (ability?.kind === "attack") {
       this.enabled = false;
       this.clientState.timingAim = aimDirection;
-      this.timingBar.run().then((power) => {
+      this.timingBar.run((ability as AttackAbility).shape.kind).then((power) => {
         this.clientState.dispatch({
           type: "ability",
           entityId,
