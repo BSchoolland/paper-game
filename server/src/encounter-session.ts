@@ -4,7 +4,6 @@ import {
   isActionLegal,
   createGameState,
   serializeGameState,
-  AiController,
   generateEncounter,
   setTemplateRegistry,
   buildScenarioMap,
@@ -22,7 +21,9 @@ import {
 import { FIGHTER_TEMPLATE } from "../../hero-arena/src/t2/loadouts.js";
 import { makeSovereign, FIGHTER_WEIGHTS, TANK_WEIGHTS, RANGED_WEIGHTS, PRESETS } from "../../hero-arena/agents/agent-02/sovereign.js";
 import type { HeroController } from "../../hero-arena/src/types.js";
-import { strategyForEntity } from "../../shared/src/ai/strategy.js";
+import { AiTurnRunner, type AiStepResult } from "./ai-turn-runner.js";
+
+export type { AiStepResult } from "./ai-turn-runner.js";
 
 // Generous cap so even the `engine` preset (8s softBudget) can run. Faster presets self-limit
 // via their own softBudgetMs, so this only matters for the heaviest brain.
@@ -32,12 +33,18 @@ export type SessionMode = "pvp" | "pve" | "duel";
 
 export class EncounterSession {
   state: GameState;
-  readonly ai = new AiController();
   readonly heroBrains = new Map<EntityId, HeroController>();
   private turnCounts: Record<TeamId, number> = { red: 0, blue: 0 };
+  private aiRunner: AiTurnRunner;
 
   private constructor(state: GameState) {
     this.state = state;
+    this.aiRunner = new AiTurnRunner({
+      getState: () => this.state,
+      setState: (s) => { this.state = s; },
+      heroBrains: this.heroBrains,
+      heroBudgetMs: HERO_TURN_BUDGET_MS,
+    });
   }
 
   static async create(
@@ -111,85 +118,21 @@ export class EncounterSession {
     return { changed: false, events: [] };
   }
 
-  runAi(aiTeam: TeamId): { serializedState: object; events: readonly GameEvent[]; won: boolean }[] {
-    if (this.state.activeTeam !== aiTeam || this.state.winner) return [];
 
-    const actions = this.ai.computeActions(this.state, aiTeam);
-    const results: { serializedState: object; events: readonly GameEvent[]; won: boolean }[] = [];
-
-    for (const action of actions) {
-      const result = resolveAction(this.state, action);
-      if (result.state !== this.state) {
-        this.state = result.state;
-        results.push({
-          serializedState: serializeGameState(this.state),
-          events: result.events,
-          won: !!this.state.winner,
-        });
-        if (this.state.winner) break;
-      }
-    }
-
-    return results;
+  startAiTurn(aiTeam: TeamId): void {
+    this.turnCounts[aiTeam]++;
+    this.aiRunner.start(aiTeam, this.turnCounts[aiTeam]);
   }
 
-  /**
-   * Run any registered HeroController brains for the AI team, then endTurn.
-   * Falls back to the scripted AiController for entities without a registered brain.
-   */
-  runHeroAi(aiTeam: TeamId): { serializedState: object; events: readonly GameEvent[]; won: boolean }[] {
-    if (this.state.activeTeam !== aiTeam || this.state.winner) return [];
+  stepAi(): AiStepResult {
+    return this.aiRunner.step();
+  }
 
-    this.turnCounts[aiTeam]++;
-    const results: { serializedState: object; events: readonly GameEvent[]; won: boolean }[] = [];
+  resolveDefend(defenseResults: Record<string, number>): AiStepResult {
+    return this.aiRunner.resolveDefend(defenseResults);
+  }
 
-    const apply = (action: PlayerAction) => {
-      const result = resolveAction(this.state, action);
-      if (result.state !== this.state) {
-        this.state = result.state;
-        results.push({
-          serializedState: serializeGameState(this.state),
-          events: result.events,
-          won: !!this.state.winner,
-        });
-        return true;
-      }
-      return false;
-    };
-
-    const aiEntities = [...this.state.entities.values()]
-      .filter(e => e.teamId === aiTeam && !e.dead);
-
-    for (const entity of aiEntities) {
-      if (this.state.winner) break;
-      const brain = this.heroBrains.get(entity.id);
-      if (brain) {
-        const ctx = {
-          state: this.state,
-          heroId: entity.id,
-          deadlineMs: Date.now() + HERO_TURN_BUDGET_MS,
-          turnIndex: this.turnCounts[aiTeam],
-        };
-        let actions: PlayerAction[] = [];
-        try { actions = brain(ctx) ?? []; }
-        catch (e) { console.error(`Hero brain threw for ${entity.id}: ${(e as Error).message}`); }
-        for (const action of actions) {
-          if (action.type !== "ability" || action.entityId !== entity.id) continue;
-          apply(action);
-          if (this.state.winner) break;
-        }
-      } else {
-        // Scripted minion — re-read its live entity each iteration since prior actions may have moved/killed it.
-        const live = this.state.entities.get(entity.id);
-        if (!live || live.dead) continue;
-        for (const action of strategyForEntity(live).planActions(live, this.state)) {
-          apply(action);
-          if (this.state.winner) break;
-        }
-      }
-    }
-
-    if (!this.state.winner) apply({ type: "endTurn" });
-    return results;
+  get pendingDefend(): boolean {
+    return this.aiRunner.hasPendingDefend();
   }
 }

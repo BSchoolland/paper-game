@@ -28,18 +28,21 @@ export function resolveWeaponAttack(
 export function applyDamage(
   state: GameState,
   targets: Entity[],
-  damage: number
+  damage: number,
+  defenseMap?: ReadonlyMap<string, number>
 ): DamageResult {
   const entities = new Map(state.entities);
 
   const hits: AttackHit[] = [];
   for (const target of targets) {
-    const barrierAbsorbed = Math.min(target.barrier, damage);
-    const remainingDamage = damage - barrierAbsorbed;
+    const defenseMult = defenseMap?.get(target.id) ?? 1;
+    const effectiveDamage = Math.round(damage * defenseMult);
+    const barrierAbsorbed = Math.min(target.barrier, effectiveDamage);
+    const remainingDamage = effectiveDamage - barrierAbsorbed;
     const newBarrier = target.barrier - barrierAbsorbed;
     const newHp = target.hp - remainingDamage;
     const killed = newHp <= 0;
-    hits.push({ targetId: target.id, damage, killed });
+    hits.push({ targetId: target.id, damage: effectiveDamage, killed });
     if (killed) {
       entities.set(target.id, { ...target, hp: 0, barrier: 0, dead: true });
     } else {

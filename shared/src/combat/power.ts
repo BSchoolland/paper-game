@@ -20,6 +20,11 @@ function scaleShape(shape: CombatShapeDefinition, mult: number): CombatShapeDefi
   }
 }
 
+export function defenseToMultiplier(power: number): number {
+  const clamped = Math.max(0, Math.min(1, power));
+  return 1 - clamped * 0.5;
+}
+
 export function scaleAttack(ability: AttackAbility, mult: number): AttackAbility {
   if (mult === 1) return ability;
   return {

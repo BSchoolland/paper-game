@@ -26,3 +26,4 @@ export * from "./encounter/entity-factory.js";
 export * from "./encounter/effects.js";
 export * from "./maps/scenarios.js";
 export * from "./ai/ai-runner.js";
+export * from "./ai/strategy.js";

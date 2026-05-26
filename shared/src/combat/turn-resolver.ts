@@ -89,7 +89,8 @@ function resolveAttack(
   entity: Entity,
   ability: AttackAbility,
   aimDirection: AimDirection,
-  power: number | undefined
+  power: number | undefined,
+  defenseMap?: ReadonlyMap<string, number>
 ): ActionResult {
   const entityId = entity.id;
   const scaled = scaleAttack(ability, powerToMultiplier(power));
@@ -111,7 +112,7 @@ function resolveAttack(
 
   let hits: readonly AttackHit[] = [];
   if (targets.length > 0) {
-    const result = applyDamage(newState, targets, scaled.damage);
+    const result = applyDamage(newState, targets, scaled.damage, defenseMap);
     newState = result.state;
     hits = result.hits;
   }
@@ -182,7 +183,8 @@ function resolveAbility(
   abilityId: string,
   aimDirection?: AimDirection,
   destination?: { x: number; y: number },
-  power?: number
+  power?: number,
+  defenseMap?: ReadonlyMap<string, number>
 ): ActionResult {
   const entity = state.entities.get(entityId);
   if (!entity || entity.dead) return NO_CHANGE(state);
@@ -202,7 +204,7 @@ function resolveAbility(
     }
     case "attack": {
       if (!aimDirection) return NO_CHANGE(state);
-      result = resolveAttack(state, entity, ability, aimDirection, power);
+      result = resolveAttack(state, entity, ability, aimDirection, power, defenseMap);
       break;
     }
     case "barrier":
@@ -339,15 +341,24 @@ export function isActionLegal(state: GameState, action: PlayerAction): boolean {
   return !!entity && !entity.dead && entity.teamId === state.activeTeam;
 }
 
+export interface ResolveOptions {
+  /** Per-target damage multipliers from defensive timing (1.0 = full damage, 0.5 = best block). */
+  readonly defenseMap?: ReadonlyMap<string, number>;
+  /** Skip the active-team / dead-entity check. For preview dry-runs only. */
+  readonly allowOutOfTurn?: boolean;
+}
+
 export function resolveAction(
   state: GameState,
-  action: PlayerAction
+  action: PlayerAction,
+  options?: ResolveOptions
 ): ActionResult {
   if (state.winner) return NO_CHANGE(state);
+  if (!options?.allowOutOfTurn && !isActionLegal(state, action)) return NO_CHANGE(state);
 
   switch (action.type) {
     case "ability":
-      return resolveAbility(state, action.entityId, action.abilityId, action.aimDirection, action.destination, action.power);
+      return resolveAbility(state, action.entityId, action.abilityId, action.aimDirection, action.destination, action.power, options?.defenseMap);
     case "endTurn":
       return resolveEndTurn(state);
   }

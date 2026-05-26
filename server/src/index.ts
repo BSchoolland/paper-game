@@ -172,13 +172,37 @@ function checkCombatEnd(ws: ServerWebSocket<SocketData>) {
 
 function runAiTurn(ws: ServerWebSocket<SocketData>) {
   if (gameMode !== "pve" && gameMode !== "duel") return;
+  if (session.state.activeTeam !== aiTeam || session.state.winner) {
+    console.log(`[AI] skip runAiTurn — activeTeam=${session.state.activeTeam} aiTeam=${aiTeam} winner=${session.state.winner}`);
+    return;
+  }
+  console.log(`[AI] startAiTurn team=${aiTeam} turn=${session.state.turnNumber}`);
+  session.startAiTurn(aiTeam);
+  driveAiSteps(ws);
+}
 
-  const results = gameMode === "duel" ? session.runHeroAi(aiTeam) : session.runAi(aiTeam);
-  for (const { serializedState, events, won } of results) {
-    broadcast({ type: "state", state: serializedState, events });
-    if (won) {
+function driveAiSteps(ws: ServerWebSocket<SocketData>) {
+  let safety = 0;
+  while (true) {
+    if (++safety > 200) {
+      console.error("[AI] driveAiSteps safety break — too many iterations");
+      return;
+    }
+    const step = session.stepAi();
+    if (step.type === "done") {
+      console.log(`[AI] step done — activeTeam=${session.state.activeTeam}`);
+      return;
+    }
+    if (step.type === "defendPrompt") {
+      console.log(`[AI] step defendPrompt — attacker=${step.attackerId} targets=${step.targetIds.join(",")}`);
+      sendTo(ws, step);
+      return;
+    }
+    console.log(`[AI] step events=${step.events.map(e => e.type).join(",")} won=${step.won}`);
+    broadcast({ type: "state", state: step.serializedState, events: step.events });
+    if (step.won) {
       checkCombatEnd(ws);
-      break;
+      return;
     }
   }
 }
@@ -379,7 +403,9 @@ Bun.serve({
       }
 
       if (msg.type === "action") {
+        console.log(`[ACTION] ${msg.action.type} activeTeam=${session.state.activeTeam}`);
         const { changed, events } = session.applyAction(msg.action);
+        console.log(`[ACTION] result changed=${changed} events=${events.map(e => e.type).join(",")}`);
         if (changed) {
           let allEvents = events;
           if (msg.action.type !== "endTurn" && !session.state.winner && shouldAutoEndTurn(session.state)) {
@@ -394,6 +420,23 @@ Bun.serve({
           } else {
             runAiTurn(ws);
           }
+        }
+      }
+
+      if (msg.type === "defendResult" && session.pendingDefend) {
+        console.log(`[DEFEND] result received: ${JSON.stringify(msg.results)}`);
+        const step = session.resolveDefend(msg.results ?? {});
+        if (step.type === "events") {
+          broadcast({ type: "state", state: step.serializedState, events: step.events });
+          if (step.won) {
+            checkCombatEnd(ws);
+          } else {
+            driveAiSteps(ws);
+          }
+        } else if (step.type === "defendPrompt") {
+          sendTo(ws, step);
+        } else {
+          driveAiSteps(ws);
         }
       }
 

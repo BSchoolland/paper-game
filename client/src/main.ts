@@ -3,6 +3,7 @@ import { Connection } from "./net/connection.js";
 import { CombatStore } from "./state/combat-store.js";
 import { ClientState } from "./state/client-state.js";
 import { GameRenderer } from "./renderer/game-renderer.js";
+import { DefendPrompt } from "./renderer/defend-prompt.js";
 import { HexMapRenderer, loadMapIconAssets } from "./renderer/hex-map-renderer.js";
 import { FramePacer } from "./renderer/frame-pacer.js";
 import { InputManager } from "./input/input-manager.js";
@@ -16,6 +17,16 @@ import { ReplayScreen } from "./screens/replay-screen.js";
 import { ReplayStore } from "./state/replay-store.js";
 import type { HexCoord, HexMapState } from "shared";
 import { hexKey, isAdjacent, getAnimSet } from "shared";
+
+function waitForQueue(store: CombatStore, renderer: GameRenderer): Promise<void> {
+  return new Promise((resolve) => {
+    const check = () => {
+      if (!renderer.isAnimating()) resolve();
+      else requestAnimationFrame(check);
+    };
+    requestAnimationFrame(check);
+  });
+}
 
 async function init() {
   const app = new Application();
@@ -57,6 +68,22 @@ async function init() {
   });
   combatStore.setAnimatingCheck(() => combatRenderer.isAnimating());
   combatStore.subscribeEvents((events) => combatRenderer.pushEvents(events));
+
+  const defendPrompt = new DefendPrompt(clientState);
+  defendPrompt.setRenderer(combatRenderer);
+  conn.on("defendPrompt", async (msg) => {
+    console.log("[DEFEND] prompt received", msg);
+    await waitForQueue(combatStore, combatRenderer);
+    console.log("[DEFEND] queue drained, running prompt");
+    const results: Record<string, number> = {};
+    for (const targetId of msg.targetIds as string[]) {
+      const power = await defendPrompt.run(targetId);
+      console.log(`[DEFEND] target=${targetId} power=${power.toFixed(2)}`);
+      results[targetId] = power;
+    }
+    console.log("[DEFEND] sending result", results);
+    conn.send({ type: "defendResult", results });
+  });
   clientState.subscribe(() => {
     if (!combatStore.hasState()) return;
     combatRenderer.render();
