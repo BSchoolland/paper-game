@@ -2,12 +2,14 @@ import type { Vec2 } from "shared";
 import { distance, sub, clampToMovementRange } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import type { GameRenderer } from "../renderer/game-renderer.js";
+import { TimingBar } from "../renderer/timing-bar.js";
 
 export class InputManager {
   mouseWorld: Vec2 = { x: 0, y: 0 };
   private onMouseMove: () => void;
   private enabled = false;
   private mouseMoveListeners: ((mouseWorld: Vec2) => void)[] = [];
+  private timingBar: TimingBar;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -16,6 +18,8 @@ export class InputManager {
     onMouseMove: () => void
   ) {
     this.onMouseMove = onMouseMove;
+    this.timingBar = new TimingBar(clientState);
+    this.timingBar.setRenderer(renderer);
     this.bind();
   }
 
@@ -141,11 +145,29 @@ export class InputManager {
     if (!entity) return;
 
     const aimDirection = sub(mousePos, entity.position);
+    const abilityId = this.clientState.selectedAbilityId ?? entity.abilities.find(a => a.kind === "attack")?.id ?? "punch";
+    const ability = entity.abilities.find(a => a.id === abilityId);
+
+    if (ability?.kind === "attack") {
+      this.enabled = false;
+      this.clientState.timingAim = aimDirection;
+      this.timingBar.run().then((power) => {
+        this.clientState.dispatch({
+          type: "ability",
+          entityId,
+          abilityId,
+          aimDirection,
+          power,
+        });
+        this.enabled = true;
+      });
+      return;
+    }
 
     this.clientState.dispatch({
       type: "ability",
       entityId,
-      abilityId: this.clientState.selectedAbilityId ?? entity.abilities.find(a => a.kind === "attack")?.id ?? "punch",
+      abilityId,
       aimDirection,
     });
   }

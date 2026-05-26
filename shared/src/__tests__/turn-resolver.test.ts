@@ -122,8 +122,8 @@ describe("turn-resolver", () => {
     const { state: moved } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "move", destination: { x: 150, y: 100 } });
     const { state: next } = resolveAction(moved, { type: "endTurn" });
     expect(next.activeTeam).toBe("blue");
-    expect(next.entities.get("b1")!.energy.red).toBe(4);
-    expect(next.entities.get("b1")!.energy.blue).toBe(4);
+    expect(next.entities.get("b1")!.energy.red).toBe(2);
+    expect(next.entities.get("b1")!.energy.blue).toBe(2);
     expect(next.turnNumber).toBe(2);
   });
 
@@ -137,7 +137,7 @@ describe("turn-resolver", () => {
     expect(after1.entities.get("r1")!.energy.red).toBe(3); // 1 + 2 regen
     expect(after1.entities.get("r1")!.energy.blue).toBe(3);
     const after2 = resolveAction(resolveAction(after1, { type: "endTurn" }).state, { type: "endTurn" }).state;
-    expect(after2.entities.get("r1")!.energy.red).toBe(4); // 3 + 2 regen, clamped to 4
+    expect(after2.entities.get("r1")!.energy.red).toBe(4); // 3 + 2 regen, clamped to max 4
     expect(after2.entities.get("r1")!.energy.blue).toBe(4);
   });
 
@@ -162,7 +162,7 @@ describe("turn-resolver", () => {
 
   it("rejects action when out of energy", () => {
     const state = makeState([
-      makeEntity("r1", 100, 100, "red", { energy: { red: 0, blue: 0, regenRed: 2, regenBlue: 2, maxRed: 4, maxBlue: 4 } }),
+      makeEntity("r1", 100, 100, "red", { energy: { red: 0, blue: 0, regenRed: 2, regenBlue: 2, maxRed: 2, maxBlue: 2 } }),
       makeEntity("b1", 500, 100, "blue"),
     ]);
     const { state: next } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "move", destination: { x: 120, y: 100 } });
@@ -258,25 +258,31 @@ describe("turn-resolver", () => {
     const suppressed: StatusEffect = { type: "suppressed", duration: 2, value: 1 };
     const state = makeState([
       makeEntity("r1", 100, 100, "red"),
-      makeEntity("b1", 500, 100, "blue", { statusEffects: [suppressed] }),
+      makeEntity("b1", 500, 100, "blue", {
+        energy: { red: 0, blue: 0, regenRed: 2, regenBlue: 2, maxRed: 4, maxBlue: 4 },
+        statusEffects: [suppressed],
+      }),
     ]);
     const { state: next } = resolveAction(state, { type: "endTurn" });
     const b1 = next.entities.get("b1")!;
-    // base regenRed is 2; suppressed value 1 → +1 instead of +2 (from 2 → 3)
-    expect(b1.energy.red).toBe(3);
-    expect(b1.energy.blue).toBe(4);
+    // base regenRed is 2; suppressed value 1 → +1 instead of +2
+    expect(b1.energy.red).toBe(1);
+    expect(b1.energy.blue).toBe(2);
   });
 
   it("winded reduces movement-energy (blue) regen on turn start", () => {
     const winded: StatusEffect = { type: "winded", duration: 2, value: 1 };
     const state = makeState([
       makeEntity("r1", 100, 100, "red"),
-      makeEntity("b1", 500, 100, "blue", { statusEffects: [winded] }),
+      makeEntity("b1", 500, 100, "blue", {
+        energy: { red: 0, blue: 0, regenRed: 2, regenBlue: 2, maxRed: 4, maxBlue: 4 },
+        statusEffects: [winded],
+      }),
     ]);
     const { state: next } = resolveAction(state, { type: "endTurn" });
     const b1 = next.entities.get("b1")!;
-    expect(b1.energy.blue).toBe(3);
-    expect(b1.energy.red).toBe(4);
+    expect(b1.energy.blue).toBe(1);
+    expect(b1.energy.red).toBe(2);
   });
 
   it("regen penalty never drops regen below zero", () => {

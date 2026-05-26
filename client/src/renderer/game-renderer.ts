@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Sprite, Text } from "pixi.js";
 import type { AttackAbility, BarrierAbility, GameEvent, GridState, Vec2, ZoneAbility } from "shared";
-import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, getAbilityCost, resolveAction, sub, length as vecLength } from "shared";
+import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, getAbilityCost, resolveAction, sub, length as vecLength, scaleAttack, powerToMultiplier } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
   createBackground,
@@ -173,6 +173,13 @@ export class GameRenderer {
     };
   }
 
+  worldToScreen(worldPos: Vec2): Vec2 {
+    return {
+      x: worldPos.x * this.scale + this.offsetX,
+      y: worldPos.y * this.scale + this.offsetY,
+    };
+  }
+
   pushEvents(events: readonly GameEvent[]) {
     if (this.entities) this.entities.pushEvents(events);
   }
@@ -222,13 +229,16 @@ export class GameRenderer {
     const selectedAbility = this.clientState.getSelectedAbility();
     if (selectedAbility?.kind === "attack" && entity.energy.red > 0) {
       const atk = selectedAbility as AttackAbility;
-      drawTargetingPreview(this.targetingGfx, entity, mouseWorld, state, atk);
+      const timingActive = this.clientState.timingPower !== null;
+      const mult = timingActive ? powerToMultiplier(this.clientState.timingPower!) : 1;
+      const scaledAtk = scaleAttack(atk, mult);
+      const aimWorld = timingActive && this.clientState.timingAim
+        ? { x: entity.position.x + this.clientState.timingAim.x, y: entity.position.y + this.clientState.timingAim.y }
+        : mouseWorld;
+      drawTargetingPreview(this.targetingGfx, entity, aimWorld, state, scaledAtk);
 
-      const dir = sub(mouseWorld, entity.position);
-      if (vecLength(dir) >= 1) {
-        // Dry-run the real resolver: preview = "what events would this action produce".
-        // Damage numbers, knockback, pull, status — all derived from the same code path
-        // the server runs, so new mechanics are previewed the moment they emit events.
+      const dir = timingActive && this.clientState.timingAim ? this.clientState.timingAim : sub(mouseWorld, entity.position);
+      if (!timingActive && vecLength(dir) >= 1) {
         const preview = resolveAction(state, { type: "ability", entityId: selectedId, abilityId: atk.id, aimDirection: dir });
         const attackEvt = preview.events.find(e => e.type === "attack");
         const hits = attackEvt && attackEvt.type === "attack" ? attackEvt.hits : [];

@@ -3,7 +3,7 @@ import type { AbilityDefinition, UnitTemplate } from "../../shared/src/index.js"
 
 /**
  * The fixed hero kit every entry fights with — a *normal* World-0 (Greenlands) adventurer: 120 HP,
- * 2 red + 2 blue energy/turn (each banks to 4), collision radius 16. Loadout: a two-handed
+ * 2 red + 2 blue energy/turn (each banks to 2), collision radius 16. Loadout: a two-handed
  * greatsword (the broadsword's three moves), a round shield (block + bash), and a long-range
  * precision bow shot. Move costs blue, attacks cost red — so most turns you can reposition *and*
  * swing. Both sides field this same hero; it's a brains contest, not a gear contest.
@@ -41,6 +41,7 @@ export const HERO_TEMPLATE: UnitTemplate = {
   abilities: HERO_ABILITIES,
   hp: 120,
   energy: { red: 2, blue: 2 },
+  energyBankFactor: 1,
   collisionRadius: 16,
   className: "Hero",
   // Flagged for HeroController-driven AI. The scripted runner falls back to "rush" if invoked,

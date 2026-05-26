@@ -461,6 +461,14 @@ export class EntityManager {
         gfx.lineTo(endX + Math.cos(angle) * sparkLen, endY + Math.sin(angle) * sparkLen);
       }
       gfx.stroke({ color, alpha: 0.8, width: 1.5 });
+    } else if (result.wallDistance !== null) {
+      for (let i = 0; i < 5; i++) {
+        const angle = Math.atan2(-norm.y, -norm.x) + (i - 2) * 0.4;
+        const sparkLen = 4 + Math.random() * 4;
+        gfx.moveTo(endX, endY);
+        gfx.lineTo(endX + Math.cos(angle) * sparkLen, endY + Math.sin(angle) * sparkLen);
+      }
+      gfx.stroke({ color, alpha: 0.6, width: 1.5 });
     }
   }
 

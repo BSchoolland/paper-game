@@ -65,17 +65,29 @@ function aimAt(attacker: Entity, ability: AttackAbility, target: Entity): Player
   };
 }
 
-/** Would `attacker` firing `ability` straight at `target` (in `state`) actually connect with it? */
-function attackConnects(state: GameState, attacker: Entity, ability: AttackAbility, target: Entity): boolean {
-  const aim = sub(target.position, attacker.position);
-  if (aim.x === 0 && aim.y === 0) return false;
-  return resolveWeaponAttack(attacker, aim, state.entities, ability, state.grid).some(e => e.id === target.id);
+interface AttackProbe {
+  readonly inRange: boolean;
+  readonly blocked: boolean;
+  readonly hits: Entity[];
 }
 
-/** Attack `target` now if a shot connects; otherwise close the distance and attack from where we land. */
+function probeAttack(state: GameState, attacker: Entity, ability: AttackAbility, target: Entity): AttackProbe {
+  const d = distance(attacker.position, target.position);
+  if (d > getAttackRange(ability) + target.collisionRadius) {
+    return { inRange: false, blocked: false, hits: [] };
+  }
+  const aim = sub(target.position, attacker.position);
+  if (aim.x === 0 && aim.y === 0) return { inRange: true, blocked: false, hits: [] };
+  const hits = resolveWeaponAttack(attacker, aim, state.entities, ability, state.grid);
+  const connects = hits.some(e => e.id === target.id);
+  return { inRange: true, blocked: !connects, hits };
+}
+
+/** Attack `target` now if in range (even into cover — the blocked shot is visual feedback that
+ *  makes cover feel impactful); otherwise close the distance and attack from where we land. */
 function pursue(entity: Entity, target: Entity, state: GameState): PlayerAction[] {
   const attack = getAttackAbility(entity);
-  if (attack && canAffordAbility(entity, attack) && attackConnects(state, entity, attack, target)) {
+  if (attack && canAffordAbility(entity, attack) && probeAttack(state, entity, attack, target).inRange) {
     return [aimAt(entity, attack, target)];
   }
 
@@ -95,7 +107,8 @@ function pursue(entity: Entity, target: Entity, state: GameState): PlayerAction[
   const movedTarget = afterMove.entities.get(target.id);
   const attackAfter = movedSelf ? getAttackAbility(movedSelf) : null;
   if (movedSelf && movedTarget && !movedTarget.dead && attackAfter
-      && canAffordAbility(movedSelf, attackAfter) && attackConnects(afterMove, movedSelf, attackAfter, movedTarget)) {
+      && canAffordAbility(movedSelf, attackAfter)
+      && probeAttack(afterMove, movedSelf, attackAfter, movedTarget).inRange) {
     actions.push(aimAt(movedSelf, attackAfter, movedTarget));
   }
   return actions;
@@ -121,7 +134,8 @@ export const kiteStrategy: AiStrategy = {
     if (dist < preferredMin) {
       const actions: PlayerAction[] = [];
       let working = state;
-      if (canAffordAbility(entity, attackAbility) && attackConnects(working, entity, attackAbility, target)) {
+      if (canAffordAbility(entity, attackAbility)
+          && probeAttack(working, entity, attackAbility, target).inRange) {
         const shot = aimAt(entity, attackAbility, target);
         actions.push(shot);
         working = apply(working, shot) ?? working;

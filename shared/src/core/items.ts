@@ -89,6 +89,7 @@ export const UNIT_TEMPLATES = {
     abilities: PLAYER_INNATE_ABILITIES,
     hp: 120,
     energy: { red: 2, blue: 2 },
+    energyBankFactor: 1,
     collisionRadius: 16,
     className: "Player",
     heightMeters: 2,

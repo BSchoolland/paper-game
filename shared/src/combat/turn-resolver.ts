@@ -6,6 +6,7 @@ import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { processEffects } from "../encounter/effects.js";
 import { getEffectiveDistance, getEffectiveRegen } from "./status-modifiers.js";
 import { createZone, canPlaceWallZone, tickZones } from "./zones.js";
+import { powerToMultiplier, scaleAttack } from "./power.js";
 
 function checkWinner(state: GameState): TeamId | null {
   let hasRed = false;
@@ -87,15 +88,17 @@ function resolveAttack(
   state: GameState,
   entity: Entity,
   ability: AttackAbility,
-  aimDirection: AimDirection
+  aimDirection: AimDirection,
+  power: number | undefined
 ): ActionResult {
   const entityId = entity.id;
+  const scaled = scaleAttack(ability, powerToMultiplier(power));
 
   const targets = resolveWeaponAttack(
     entity,
     aimDirection,
     state.entities,
-    ability,
+    scaled,
     state.grid
   );
 
@@ -108,7 +111,7 @@ function resolveAttack(
 
   let hits: readonly AttackHit[] = [];
   if (targets.length > 0) {
-    const result = applyDamage(newState, targets, ability.damage);
+    const result = applyDamage(newState, targets, scaled.damage);
     newState = result.state;
     hits = result.hits;
   }
@@ -120,7 +123,7 @@ function resolveAttack(
       attackerId: entityId,
       attackerPosition: entity.position,
       aimDirection,
-      ability,
+      ability: scaled,
       hits,
     }],
   };
@@ -178,7 +181,8 @@ function resolveAbility(
   entityId: string,
   abilityId: string,
   aimDirection?: AimDirection,
-  destination?: { x: number; y: number }
+  destination?: { x: number; y: number },
+  power?: number
 ): ActionResult {
   const entity = state.entities.get(entityId);
   if (!entity || entity.dead) return NO_CHANGE(state);
@@ -198,7 +202,7 @@ function resolveAbility(
     }
     case "attack": {
       if (!aimDirection) return NO_CHANGE(state);
-      result = resolveAttack(state, entity, ability, aimDirection);
+      result = resolveAttack(state, entity, ability, aimDirection, power);
       break;
     }
     case "barrier":
@@ -343,7 +347,7 @@ export function resolveAction(
 
   switch (action.type) {
     case "ability":
-      return resolveAbility(state, action.entityId, action.abilityId, action.aimDirection, action.destination);
+      return resolveAbility(state, action.entityId, action.abilityId, action.aimDirection, action.destination, action.power);
     case "endTurn":
       return resolveEndTurn(state);
   }

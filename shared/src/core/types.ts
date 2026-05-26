@@ -224,7 +224,7 @@ export interface GameState {
 }
 
 export type PlayerAction =
-  | { type: "ability"; entityId: EntityId; abilityId: string; aimDirection?: AimDirection; destination?: Vec2 }
+  | { type: "ability"; entityId: EntityId; abilityId: string; aimDirection?: AimDirection; destination?: Vec2; power?: number }
   | { type: "endTurn" };
 
 export type GameEvent =

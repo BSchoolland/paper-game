@@ -17,6 +17,7 @@ export * from "./combat/combat.js";
 export * from "./combat/status-modifiers.js";
 export * from "./combat/zones.js";
 export * from "./combat/turn-resolver.js";
+export * from "./combat/power.js";
 export * from "./combat/movement.js";
 export * from "./encounter/encounter.js";
 export * from "./encounter/encounter-profiles.js";

@@ -11,6 +11,10 @@ export class ClientState {
   selectedAbilityId: string | null = null;
   inputMode: "select" | "attack" = "select";
   showDebugWalls = false;
+  /** Live timing power while timing bar is active (null = inactive). */
+  timingPower: number | null = null;
+  /** Frozen aim direction during timing phase. */
+  timingAim: { x: number; y: number } | null = null;
 
   constructor(private gameStore: GameStore) {
     gameStore.subscribe(() => this.notify());
@@ -122,7 +126,7 @@ export class ClientState {
     };
   }
 
-  private notify() {
+  notify() {
     for (const listener of this.listeners) {
       listener();
     }

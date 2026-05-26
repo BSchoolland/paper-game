@@ -38,7 +38,7 @@ export function makeEntity(
     maxHp: 100,
     barrier: 0,
     teamId,
-    energy: { red: 2, blue: 2, regenRed: 2, regenBlue: 2, maxRed: 4, maxBlue: 4 },
+    energy: { red: 2, blue: 2, regenRed: 2, regenBlue: 2, maxRed: 2, maxBlue: 2 },
     abilities: [TEST_MOVE, TEST_SLASH],
     ...overrides,
   };
