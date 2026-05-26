@@ -8,9 +8,10 @@ import {
   getBottomY,
 } from "./grid-renderer.js";
 import { EntityManager } from "./entity-manager.js";
-import { drawTargetingPreview, drawEffectPreview } from "./targeting-renderer.js";
+import { drawTargetingPreview, drawEffectPreview, drawIncomingAttackPreview } from "./targeting-renderer.js";
 import { drawZones } from "./zone-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
+import { ScreenFlash, type FlashOptions } from "./screen-flash.js";
 import type { FramePacer, PacerToken } from "./frame-pacer.js";
 
 const PADDING = 75;
@@ -51,6 +52,7 @@ export class GameRenderer {
   private baseOffsetX = 0;
   private baseOffsetY = 0;
   private lastMouseWorld: Vec2 = { x: 0, y: 0 };
+  private screenFlash: ScreenFlash;
 
   constructor(
     private app: Application,
@@ -60,8 +62,33 @@ export class GameRenderer {
     this.outerContainer.addChild(this.dimGfx);
     this.outerContainer.addChild(this.frameGfx);
     this.outerContainer.addChild(this.worldContainer);
+    this.screenFlash = new ScreenFlash(this.outerContainer);
     this.app.stage.addChild(this.outerContainer);
     this.outerContainer.visible = false;
+  }
+
+  flash(opts?: FlashOptions) {
+    this.screenFlash.trigger(opts);
+  }
+
+  /** Locally play the attacker swing + shape flash for an incoming attack — used by the
+   *  defense prompt so the visual lands at the press window, not after the server roundtrip. */
+  previewIncomingAttack(attackerId: string, attackerPosition: Vec2, aimDirection: Vec2, ability: AttackAbility): void {
+    const state = this.clientState.getState();
+    if (!state || !this.entities) return;
+    this.entities.previewIncomingAttack(attackerId, attackerPosition, aimDirection, ability, state);
+  }
+
+  /** Locally play the defender block animation + perfect-block screen flash. */
+  triggerLocalBlock(defenderId: string, attackerPosition: Vec2, tier: "perfect" | "decent"): void {
+    if (!this.entities) return;
+    this.entities.triggerLocalBlock(defenderId, attackerPosition, tier);
+  }
+
+  /** Spawn an impact-feedback floating label (CRIT, PARRY, etc.) at a world position. */
+  spawnFloatingText(x: number, y: number, message: string, color: number, opts?: import("./floating-text.js").FloatingTextOptions): void {
+    if (!this.entities) return;
+    this.entities.spawnFloatingText(x, y, message, color, opts);
   }
 
   bringToFront() {
@@ -79,6 +106,9 @@ export class GameRenderer {
       this.shakeIntensity = req.intensity;
       this.shakeTimer = 0.3;
     };
+    this.entities.onPerfectBlock = () => {
+      this.screenFlash.trigger({ intensity: 0.65, duration: 0.22, color: 0xfff4d0 });
+    };
     this.layout();
     const enterState = this.clientState.getState();
     if (enterState) {
@@ -95,7 +125,8 @@ export class GameRenderer {
         if (!this.outerContainer.visible || !this.entities) return;
         const dt = (ticker.deltaTime / 60) * this.playbackSpeed;
         const shaking = this.shakeTimer > 0;
-        const animating = this.entities.isAnimating() || shaking;
+        const flashing = this.screenFlash.active;
+        const animating = this.entities.isAnimating() || shaking || flashing;
         if (animating !== this.wasAnimating) {
           if (animating) {
             this.animToken = this.pacer.request(60);
@@ -104,6 +135,10 @@ export class GameRenderer {
             this.animToken = null;
           }
           this.wasAnimating = animating;
+        }
+
+        if (flashing) {
+          this.screenFlash.tick(dt);
         }
 
         if (shaking) {
@@ -220,6 +255,22 @@ export class GameRenderer {
     if (this.entities) this.entities.clearDamagePreview();
     const state = this.clientState.getState();
     if (!state) return;
+
+    const incoming = this.clientState.incomingAttack;
+    if (incoming) {
+      drawIncomingAttackPreview(
+        this.targetingGfx,
+        incoming.attackerId,
+        incoming.attackerPosition,
+        incoming.aimDirection,
+        incoming.ability,
+        state.entities,
+        state.grid,
+        0.5,
+        0.08,
+      );
+    }
+
     const selectedId = this.clientState.selectedEntityId;
 
     if (!selectedId || state.winner) return;
@@ -325,6 +376,8 @@ export class GameRenderer {
     this.dimGfx.clear();
     this.dimGfx.rect(0, 0, screenW, screenH);
     this.dimGfx.fill({ color: DIM_COLOR, alpha: DIM_ALPHA });
+
+    this.screenFlash.resize(screenW, screenH);
 
     const combatX = this.offsetX;
     const combatY = this.offsetY;

@@ -4,11 +4,29 @@ import { ShapeKind, computeShapeFootprint, normalize, length as vecLength, rayca
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark, drawRoughCircle } from "./sketch-utils.js";
 import { FloatingTextManager } from "./floating-text.js";
+import { VisualEffectDispatcher, type EffectKey } from "./visual-effect-dispatcher.js";
+import { defenseLabel } from "./impact-labels.js";
 
 const FOOT_OFFSET = 272 * 0.2 * (1 - 0.75);
 const DEFAULT_FLASH_COLOR = 0x8b2020;
 const FLASH_DURATION = 0.4;
 const HIT_DELAY = 0.2;
+
+// Dispatcher keys: stable identifiers for visual effects that can fire from either local
+// prediction or a server event. The same key from each source dedupes via VisualEffectDispatcher.
+// The enum constrains the prefix; `makeKey` builds the branded `EffectKey` so raw strings can't
+// reach the dispatcher API.
+enum EffectKind {
+  Swing = "swing",
+  Flash = "flash",
+  Shake = "shake",
+  Defender = "defender",
+}
+const makeKey = (kind: EffectKind, scope: string) => `${kind}:${scope}` as EffectKey;
+const swingKey = (attackerId: string) => makeKey(EffectKind.Swing, attackerId);
+const flashKey = (attackerId: string) => makeKey(EffectKind.Flash, attackerId);
+const shakeKey = (attackerId: string) => makeKey(EffectKind.Shake, attackerId);
+const defenderKey = (defenderId: string) => makeKey(EffectKind.Defender, defenderId);
 
 const ZONE_TICK_LABEL: Record<ZoneEffectKind, (m: number) => string> = {
   damage: (m) => `-${m}`,
@@ -38,6 +56,8 @@ interface DelayedHit {
   targetId: string;
   timer: number;
   killed: boolean;
+  defenseTier?: "perfect" | "decent";
+  attackerPos?: Vec2;
 }
 
 export type ShakeRequest = { intensity: number };
@@ -49,6 +69,8 @@ export class EntityManager {
   private delayedHits: DelayedHit[] = [];
   private floatingText: FloatingTextManager;
   onShake: ((req: ShakeRequest) => void) | null = null;
+  onPerfectBlock: (() => void) | null = null;
+  private dispatcher = new VisualEffectDispatcher();
 
   constructor(private layer: Container) {
     this.floatingText = new FloatingTextManager(layer);
@@ -119,6 +141,26 @@ export class EntityManager {
         if (visual) {
           if (hit.killed) {
             visual.triggerDeath();
+          } else if (hit.defenseTier) {
+            // Block: pose-and-screen-flash is delegated to the per-tier methods on EntityVisual
+            // so weapon-specific block poses live in one place.
+            const facingX = hit.attackerPos?.x ?? visual.container.position.x;
+            if (hit.defenseTier === "perfect") {
+              visual.triggerPerfectBlock(facingX);
+              this.onPerfectBlock?.();
+            } else {
+              visual.triggerBlock(facingX);
+            }
+            const label = defenseLabel(hit.defenseTier);
+            const pos = visual.container.position;
+            this.floatingText.spawn(pos.x, pos.y - 55, label.text, label.color, {
+              fontSize: label.fontSize,
+              lifetime: label.lifetime,
+              strokeColor: label.strokeColor,
+              strokeWidth: label.strokeWidth,
+              fontWeight: label.fontWeight,
+              fontFamily: label.fontFamily,
+            });
           } else {
             visual.triggerHit();
           }
@@ -143,6 +185,7 @@ export class EntityManager {
     this.attackFlashes.length = 0;
     this.delayedHits.length = 0;
     this.pendingEvents.length = 0;
+    this.dispatcher.clear();
     this.floatingText.destroy();
   }
 
@@ -174,6 +217,51 @@ export class EntityManager {
     }
   }
 
+  /** Play just the attacker-side visuals of an attack (swing sprite + shape flash + screen shake)
+   *  using the same code path the real `attack` event uses. Called from the defense prompt to
+   *  visualize the incoming swing during the timing window. */
+  previewIncomingAttack(
+    attackerId: string,
+    attackerPosition: Vec2,
+    aimDirection: AimDirection,
+    ability: AttackAbility,
+    state: GameState,
+  ): void {
+    this.dispatcher.playLocal(swingKey(attackerId), () => {
+      const visual = this.visuals.get(attackerId);
+      if (visual) visual.triggerAttack(attackerPosition.x + aimDirection.x);
+    });
+    this.dispatcher.playLocal(flashKey(attackerId), () => {
+      this.spawnAttackFlash(attackerPosition, aimDirection, ability, attackerId, state);
+    });
+    const shake = ability.visual?.screenShake;
+    if (shake && shake > 0) {
+      this.dispatcher.playLocal(shakeKey(attackerId), () => this.onShake?.({ intensity: shake }));
+    }
+  }
+
+  /** Spawn a floating text label in world space. Used for impact-feedback callouts (CRIT!,
+   *  BLOCK!, PARRY!) on top of the standard damage/status floats. */
+  spawnFloatingText(x: number, y: number, message: string, color: number, opts?: import("./floating-text.js").FloatingTextOptions): void {
+    this.floatingText.spawn(x, y, message, color, opts);
+  }
+
+  /** Trigger the defender's block animation immediately when the player presses, so the visual
+   *  response is instant rather than waiting for the server round-trip. The server's matching
+   *  delayed-hit visual is consumed via the same dispatcher key. */
+  triggerLocalBlock(defenderId: string, attackerPosition: Vec2, tier: "perfect" | "decent"): void {
+    this.dispatcher.playLocal(defenderKey(defenderId), () => {
+      const visual = this.visuals.get(defenderId);
+      if (!visual) return;
+      if (tier === "perfect") {
+        visual.triggerPerfectBlock(attackerPosition.x);
+        this.onPerfectBlock?.();
+      } else {
+        visual.triggerBlock(attackerPosition.x);
+      }
+    });
+  }
+
   depthSort() {
     for (const visual of this.visuals.values()) {
       visual.container.zIndex = visual.container.position.y + FOOT_OFFSET;
@@ -199,21 +287,40 @@ export class EntityManager {
         break;
       }
       case "attack": {
-        const visual = this.visuals.get(event.attackerId);
-        if (visual) {
-          const aimX = event.attackerPosition.x + event.aimDirection.x;
-          visual.triggerAttack(aimX);
-        }
-
-        this.spawnAttackFlash(event.attackerPosition, event.aimDirection, event.ability, event.attackerId, state);
-
+        this.dispatcher.playFromServer(swingKey(event.attackerId), () => {
+          const visual = this.visuals.get(event.attackerId);
+          if (visual) visual.triggerAttack(event.attackerPosition.x + event.aimDirection.x);
+        });
+        this.dispatcher.playFromServer(flashKey(event.attackerId), () => {
+          this.spawnAttackFlash(event.attackerPosition, event.aimDirection, event.ability, event.attackerId, state);
+        });
         const shake = event.ability.visual?.screenShake;
-        if (shake && shake > 0 && this.onShake) {
-          this.onShake({ intensity: shake });
+        if (shake && shake > 0) {
+          this.dispatcher.playFromServer(shakeKey(event.attackerId), () => this.onShake?.({ intensity: shake }));
         }
 
         for (const hit of event.hits) {
-          this.delayedHits.push({ targetId: hit.targetId, timer: HIT_DELAY, killed: hit.killed });
+          // Deaths always play (terminal — even a successful block can't refund a kill).
+          if (hit.killed) {
+            this.delayedHits.push({
+              targetId: hit.targetId,
+              timer: HIT_DELAY,
+              killed: true,
+              defenseTier: hit.defenseTier,
+              attackerPos: event.attackerPosition,
+            });
+            continue;
+          }
+          // Non-fatal hits dedupe against the local prediction (if any) via the dispatcher.
+          this.dispatcher.playFromServer(defenderKey(hit.targetId), () => {
+            this.delayedHits.push({
+              targetId: hit.targetId,
+              timer: HIT_DELAY,
+              killed: false,
+              defenseTier: hit.defenseTier,
+              attackerPos: event.attackerPosition,
+            });
+          });
         }
         break;
       }

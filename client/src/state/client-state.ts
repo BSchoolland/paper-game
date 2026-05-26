@@ -1,8 +1,19 @@
-import type { AbilityDefinition, GameState, PlayerAction } from "shared";
+import type { AbilityDefinition, AimDirection, AttackAbility, GameState, PlayerAction, Vec2 } from "shared";
 import type { GameStore } from "./game-store.js";
 
 
 type Listener = () => void;
+
+export interface IncomingAttack {
+  attackerId: string;
+  attackerPosition: Vec2;
+  aimDirection: AimDirection;
+  ability: AttackAbility;
+  /** "windup" = pre-window telegraph, "window" = press-now window. */
+  phase: "windup" | "window";
+  /** 0..1 progress within the current phase. */
+  phaseProgress: number;
+}
 
 export class ClientState {
   private listeners: Listener[] = [];
@@ -15,6 +26,8 @@ export class ClientState {
   timingPower: number | null = null;
   /** Frozen aim direction during timing phase. */
   timingAim: { x: number; y: number } | null = null;
+  /** Incoming enemy attack being telegraphed for defensive timing (null = none). */
+  incomingAttack: IncomingAttack | null = null;
 
   constructor(private gameStore: GameStore) {
     gameStore.subscribe(() => this.notify());

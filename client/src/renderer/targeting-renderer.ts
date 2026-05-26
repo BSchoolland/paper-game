@@ -1,5 +1,5 @@
 import type { Graphics } from "pixi.js";
-import type { AttackAbility, Entity, GameEvent, GameState, Vec2 } from "shared";
+import type { AimDirection, AttackAbility, Entity, GameEvent, GameState, GridState, Vec2 } from "shared";
 import { ShapeKind, computeShapeFootprint, sub, length } from "shared";
 import {
   PENCIL,
@@ -111,6 +111,64 @@ export function drawEffectPreview(g: Graphics, events: readonly GameEvent[]): vo
       g.stroke({ color: PENCIL_HIT, alpha: 0.75, width: 1.6 });
     } else if (event.type === "zoneCreated") {
       drawZonePreview(g, event.zone, true);
+    }
+  }
+}
+
+/**
+ * Telegraphs an incoming enemy attack as a sketched shape footprint at the attacker's position.
+ * `strokeAlpha` and `fillAlpha` are controlled by the caller so the same draw can be used for
+ * the subtle windup pulse and the brighter "press now" window flash.
+ */
+export function drawIncomingAttackPreview(
+  g: Graphics,
+  attackerId: string,
+  attackerPos: Vec2,
+  aimDirection: AimDirection,
+  ability: AttackAbility,
+  entities: ReadonlyMap<string, Entity>,
+  grid: GridState,
+  strokeAlpha: number,
+  fillAlpha: number,
+): void {
+  if (length(aimDirection) < 1) return;
+
+  const footprint = computeShapeFootprint(
+    ability.shape,
+    attackerPos,
+    aimDirection,
+    entities,
+    grid,
+    attackerId,
+    ability.ignoreCoverRange,
+  );
+
+  switch (footprint.kind) {
+    case ShapeKind.Sector: {
+      g.moveTo(footprint.origin.x, footprint.origin.y);
+      drawRoughArc(g, footprint.origin.x, footprint.origin.y, footprint.radius, footprint.startAngle, footprint.endAngle, 1.5, 24, 53);
+      g.lineTo(footprint.origin.x, footprint.origin.y);
+      g.fill({ color: PENCIL, alpha: fillAlpha });
+      g.stroke({ color: PENCIL, alpha: strokeAlpha, width: 1.4 });
+      break;
+    }
+    case ShapeKind.Rectangle: {
+      drawRoughRect(g, footprint.corners, 1, 57);
+      g.fill({ color: PENCIL, alpha: fillAlpha });
+      g.stroke({ color: PENCIL, alpha: strokeAlpha, width: 1.4 });
+      break;
+    }
+    case ShapeKind.Circle: {
+      drawRoughArc(g, footprint.center.x, footprint.center.y, footprint.radius, 0, Math.PI * 2, 1.5, 24, 59);
+      g.fill({ color: PENCIL, alpha: fillAlpha });
+      g.stroke({ color: PENCIL, alpha: strokeAlpha, width: 1.4 });
+      break;
+    }
+    case ShapeKind.Point: {
+      const { from, to } = footprint;
+      drawRoughLine(g, from.x, from.y, to.x, to.y, 0.8, 61);
+      g.stroke({ color: PENCIL, alpha: strokeAlpha, width: 1.4 });
+      break;
     }
   }
 }

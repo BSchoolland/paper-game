@@ -20,9 +20,24 @@ function scaleShape(shape: CombatShapeDefinition, mult: number): CombatShapeDefi
   }
 }
 
+export type DefenseTier = "perfect" | "decent" | "none";
+
+export function defenseTierFromPower(power: number): DefenseTier {
+  if (power >= 0.99) return "perfect";
+  if (power >= 0.4) return "decent";
+  return "none";
+}
+
+export function defenseTierToMultiplier(tier: DefenseTier): number {
+  switch (tier) {
+    case "perfect": return 0;
+    case "decent": return 0.67;
+    case "none": return 1;
+  }
+}
+
 export function defenseToMultiplier(power: number): number {
-  const clamped = Math.max(0, Math.min(1, power));
-  return 1 - clamped * 0.5;
+  return defenseTierToMultiplier(defenseTierFromPower(power));
 }
 
 export function scaleAttack(ability: AttackAbility, mult: number): AttackAbility {

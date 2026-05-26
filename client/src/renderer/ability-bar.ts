@@ -39,6 +39,9 @@ export class AbilityBar {
     this.endTurnBtn = document.createElement("button");
     this.endTurnBtn.id = "end-turn-btn";
     this.endTurnBtn.textContent = "End Turn";
+    // Skip the focus ring entirely — the button is mouse-only. Without this, focus follows the
+    // click and space presses re-activate it (which breaks the defense prompt).
+    this.endTurnBtn.tabIndex = -1;
     this.endTurnBtn.style.cssText = `
       position: fixed;
       bottom: 24px;
@@ -58,6 +61,9 @@ export class AbilityBar {
     `;
     this.endTurnBtn.addEventListener("click", (e) => {
       e.stopPropagation();
+      // Drop focus so subsequent space/Enter presses don't re-activate the button. Otherwise
+      // space-to-defend during the enemy turn doubles as an end-turn dispatch.
+      this.endTurnBtn.blur();
       this.clientState.endTurn();
     });
     document.body.appendChild(this.endTurnBtn);

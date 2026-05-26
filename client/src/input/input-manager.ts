@@ -3,6 +3,7 @@ import { distance, sub, clampToMovementRange } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import type { GameRenderer } from "../renderer/game-renderer.js";
 import { TimingBar } from "../renderer/timing-bar.js";
+import { attackPowerLabel, PERFECT_ATTACK_THRESHOLD } from "../renderer/impact-labels.js";
 
 export class InputManager {
   mouseWorld: Vec2 = { x: 0, y: 0 };
@@ -152,6 +153,21 @@ export class InputManager {
       this.enabled = false;
       this.clientState.timingAim = aimDirection;
       this.timingBar.run((ability as AttackAbility).shape.kind).then((power) => {
+        const label = attackPowerLabel(power);
+        if (label) {
+          this.renderer.spawnFloatingText(entity.position.x, entity.position.y - 55, label.text, label.color, {
+            fontSize: label.fontSize,
+            lifetime: label.lifetime,
+            strokeColor: label.strokeColor,
+            strokeWidth: label.strokeWidth,
+            fontWeight: label.fontWeight,
+            fontFamily: label.fontFamily,
+          });
+        }
+        if (power >= PERFECT_ATTACK_THRESHOLD) {
+          // Warm amber tint to differentiate the offensive perfect from the cream perfect-block.
+          this.renderer.flash({ intensity: 0.55, duration: 0.2, color: 0xffd080 });
+        }
         this.clientState.dispatch({
           type: "ability",
           entityId,

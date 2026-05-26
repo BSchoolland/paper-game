@@ -37,7 +37,7 @@ function entitiesOverlap(
   return false;
 }
 
-export function processEffects(result: ActionResult): ActionResult {
+export function processEffects(result: ActionResult, defenseMap?: ReadonlyMap<string, number>): ActionResult {
   let { state } = result;
   const events = [...result.events];
 
@@ -46,23 +46,31 @@ export function processEffects(result: ActionResult): ActionResult {
 
     const ability = event.ability;
     for (const hit of event.hits) {
-      if (ability.knockback > 0) {
-        const applied = knockbackTarget(hit.targetId, event.attackerPosition, ability.knockback, state);
+      // A defended hit attenuates displacement-style consequences in equal measure: perfect block
+      // (multiplier 0) eats all knockback and on-hit pull, decent reduces them proportionally,
+      // unblocked hits behave as normal.
+      const defMult = defenseMap?.get(hit.targetId) ?? 1;
+      const scaledKnockback = ability.knockback * defMult;
+      if (scaledKnockback > 0) {
+        const applied = knockbackTarget(hit.targetId, event.attackerPosition, scaledKnockback, state);
         state = applied.state;
         events.push(...applied.events);
         // Knocked into a wall, an edge, or another body: pay the slam toll.
         if (applied.blocked && ability.wallSlamDamage && ability.wallSlamDamage > 0) {
           const target = state.entities.get(hit.targetId);
           if (target && !target.dead) {
-            const slam = applyDamage(state, [target], ability.wallSlamDamage);
-            state = slam.state;
-            events.push({ type: "collision", entityId: target.id, at: target.position, damage: ability.wallSlamDamage, killed: slam.hits[0]!.killed });
+            const slamDamage = Math.round(ability.wallSlamDamage * defMult);
+            if (slamDamage > 0) {
+              const slam = applyDamage(state, [target], slamDamage);
+              state = slam.state;
+              events.push({ type: "collision", entityId: target.id, at: target.position, damage: slamDamage, killed: slam.hits[0]!.killed });
+            }
           }
         }
       }
       if (ability.onHit) {
         for (const effect of ability.onHit) {
-          const applied = applyWeaponEffect(effect, hit.targetId, event.attackerPosition, state);
+          const applied = applyWeaponEffect(effect, hit.targetId, event.attackerPosition, state, defMult);
           state = applied.state;
           events.push(...applied.events);
         }
@@ -105,11 +113,15 @@ function applyWeaponEffect(
   effect: WeaponEffect,
   targetId: string,
   attackerPos: Vec2,
-  state: ActionResult["state"]
+  state: ActionResult["state"],
+  defenseMult: number = 1
 ): { state: ActionResult["state"]; events: GameEvent[] } {
   switch (effect.type) {
-    case "pull":
-      return pullTarget(targetId, attackerPos, effect.distance, state);
+    case "pull": {
+      const scaled = effect.distance * defenseMult;
+      if (scaled <= 0) return { state, events: [] };
+      return pullTarget(targetId, attackerPos, scaled, state);
+    }
     case "applyStatus":
       return applyStatusEffect(targetId, { type: effect.status, duration: effect.duration, value: effect.value }, state);
   }

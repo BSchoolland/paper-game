@@ -6,7 +6,17 @@ const FLOAT_DURATION = 0.8;
 interface FloatingLabel {
   text: Text;
   timer: number;
+  lifetime: number;
   startY: number;
+}
+
+export interface FloatingTextOptions {
+  fontSize?: number;
+  lifetime?: number;
+  strokeColor?: number;
+  strokeWidth?: number;
+  fontWeight?: "normal" | "bold";
+  fontFamily?: string;
 }
 
 export class FloatingTextManager {
@@ -14,24 +24,37 @@ export class FloatingTextManager {
 
   constructor(private layer: Container) {}
 
-  spawn(x: number, y: number, message: string, color: number) {
+  spawn(x: number, y: number, message: string, color: number, opts: FloatingTextOptions = {}) {
+    const fontSize = opts.fontSize ?? 11;
+    const lifetime = opts.lifetime ?? FLOAT_DURATION;
+    const strokeColor = opts.strokeColor ?? 0x000000;
+    const strokeWidth = opts.strokeWidth ?? 2;
+    const fontWeight = opts.fontWeight ?? "bold";
+    const fontFamily = opts.fontFamily ?? "Georgia, serif";
+
     const text = new Text({
       text: message,
-      style: { fontSize: 11, fill: color, fontFamily: "Georgia, serif", fontWeight: "bold", stroke: { color: 0x000000, width: 2 } },
+      style: {
+        fontSize,
+        fill: color,
+        fontFamily,
+        fontWeight,
+        stroke: { color: strokeColor, width: strokeWidth },
+      },
     });
     text.anchor.set(0.5);
     text.position.set(x, y);
     this.layer.addChild(text);
-    this.labels.push({ text, timer: FLOAT_DURATION, startY: y });
+    this.labels.push({ text, timer: lifetime, lifetime, startY: y });
   }
 
   tick(dt: number) {
     for (let i = this.labels.length - 1; i >= 0; i--) {
       const label = this.labels[i]!;
       label.timer -= dt;
-      const elapsed = FLOAT_DURATION - label.timer;
+      const elapsed = label.lifetime - label.timer;
       label.text.position.y = label.startY - elapsed * FLOAT_SPEED;
-      label.text.alpha = Math.max(0, label.timer / FLOAT_DURATION);
+      label.text.alpha = Math.max(0, label.timer / label.lifetime);
       if (label.timer <= 0) {
         this.layer.removeChild(label.text);
         label.text.destroy();

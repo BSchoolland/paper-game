@@ -129,7 +129,7 @@ function resolveAttack(
     }],
   };
 
-  result = processEffects(result);
+  result = processEffects(result, defenseMap);
 
   return {
     state: { ...result.state, winner: checkWinner(result.state) },

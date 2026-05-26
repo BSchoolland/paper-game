@@ -69,19 +69,20 @@ async function init() {
   combatStore.setAnimatingCheck(() => combatRenderer.isAnimating());
   combatStore.subscribeEvents((events) => combatRenderer.pushEvents(events));
 
-  const defendPrompt = new DefendPrompt(clientState);
-  defendPrompt.setRenderer(combatRenderer);
+  const defendPrompt = new DefendPrompt(clientState, combatRenderer);
   conn.on("defendPrompt", async (msg) => {
-    console.log("[DEFEND] prompt received", msg);
     await waitForQueue(combatStore, combatRenderer);
-    console.log("[DEFEND] queue drained, running prompt");
     const results: Record<string, number> = {};
+    const power = await defendPrompt.run({
+      attackerId: msg.attackerId,
+      attackerPosition: msg.attackerPosition,
+      aimDirection: msg.aimDirection,
+      ability: msg.ability,
+      targetIds: msg.targetIds as string[],
+    });
     for (const targetId of msg.targetIds as string[]) {
-      const power = await defendPrompt.run(targetId);
-      console.log(`[DEFEND] target=${targetId} power=${power.toFixed(2)}`);
       results[targetId] = power;
     }
-    console.log("[DEFEND] sending result", results);
     conn.send({ type: "defendResult", results });
   });
   clientState.subscribe(() => {

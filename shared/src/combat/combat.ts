@@ -42,7 +42,11 @@ export function applyDamage(
     const newBarrier = target.barrier - barrierAbsorbed;
     const newHp = target.hp - remainingDamage;
     const killed = newHp <= 0;
-    hits.push({ targetId: target.id, damage: effectiveDamage, killed });
+    const defenseTier: AttackHit["defenseTier"] =
+      defenseMult === 0 ? "perfect" :
+      defenseMult < 1 ? "decent" :
+      undefined;
+    hits.push({ targetId: target.id, damage: effectiveDamage, killed, ...(defenseTier ? { defenseTier } : {}) });
     if (killed) {
       entities.set(target.id, { ...target, hp: 0, barrier: 0, dead: true });
     } else {

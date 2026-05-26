@@ -403,6 +403,14 @@ Bun.serve({
       }
 
       if (msg.type === "action") {
+        // Defense in depth: drop player actions when it isn't the player's turn. In PvE/duel
+        // the human is always red; a stray endTurn or ability during the AI turn (e.g. a
+        // focused End Turn button activating on space-press) would otherwise flip the active
+        // team mid-AI-resolution and break the pending-defense state machine.
+        if ((gameMode === "pve" || gameMode === "duel") && session.state.activeTeam !== "red") {
+          console.log(`[ACTION] dropped ${msg.action.type} — activeTeam=${session.state.activeTeam}`);
+          return;
+        }
         console.log(`[ACTION] ${msg.action.type} activeTeam=${session.state.activeTeam}`);
         const { changed, events } = session.applyAction(msg.action);
         console.log(`[ACTION] result changed=${changed} events=${events.map(e => e.type).join(",")}`);

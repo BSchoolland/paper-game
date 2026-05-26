@@ -255,6 +255,8 @@ export interface AttackHit {
   readonly targetId: EntityId;
   readonly damage: number;
   readonly killed: boolean;
+  /** When set, the target's timed-defense tier — "perfect" fully negates, "decent" reduces. */
+  readonly defenseTier?: "perfect" | "decent";
 }
 
 export type EffectTrigger = "onDeath";

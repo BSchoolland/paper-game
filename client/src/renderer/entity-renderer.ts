@@ -197,7 +197,9 @@ export class EntityVisual {
     if (this.tweenProgress < 1 && !this.isKnockback && this.animState !== "move") {
       this.setAnimState("move");
     }
-    if (this.tweenProgress >= 1 && this.animState === "move") {
+    // Auto-revert "move" → "idle" when the position tween finishes. Guarded by animTimer so
+    // that a manually-driven `move`-state animation (e.g. a bow's block dodge) plays out.
+    if (this.tweenProgress >= 1 && this.animState === "move" && this.animTimer <= 0) {
       this.setAnimState("idle");
     }
 
@@ -294,6 +296,28 @@ export class EntityVisual {
   triggerHit(): void {
     this.setAnimState("hit");
     this.animTimer = 0.6;
+  }
+
+  triggerBlock(attackerX: number): void {
+    this.playBlockAnimation(attackerX, 0.55);
+  }
+
+  triggerPerfectBlock(attackerX: number): void {
+    this.playBlockAnimation(attackerX, 0.65);
+  }
+
+  /** Pose for a block. There's no dedicated block sprite, so we reuse an existing state per
+   *  weapon — most parry-style weapons (sword, spear, staff, two-handed, dual-wield) look right
+   *  with the attack pose (a counter-swing); the bow reads better with the move pose (a quick
+   *  dodge). Enemies fall through to the attack pose since they don't have a weapon animSet.
+   *  Drop a new branch in here if a specific weapon should pose differently. */
+  private playBlockAnimation(attackerX: number, holdSeconds: number): void {
+    const dx = attackerX - this.container.position.x;
+    if (Math.abs(dx) > 1) this.setFacing(dx < 0);
+    const animSet = this.charSprite?.currentAnimSet ?? null;
+    const useMoveSprite = animSet === "bow";
+    this.setAnimState(useMoveSprite ? "move" : "attack");
+    this.animTimer = holdSeconds;
   }
 
   setDamagePreview(damage: number, currentHp: number, maxHp: number, barrier: number): void {
