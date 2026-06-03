@@ -242,9 +242,10 @@ export class TimingBar {
 
     setTimeout(() => {
       this.container.style.display = "none";
-      this.clientState.timingPower = null;
-      this.clientState.timingAim = null;
-      this.clientState.notify();
+      // Resolve while ui is still "attackTiming" so finishAttackTiming can read it and own the
+      // transition. The timing bar must not mutate the interaction state machine itself — once
+      // finishAttackTiming flips ui to "submittingAction", the timingPower getter returns null
+      // on its own, so there is nothing to reset here.
       this.resolve?.(power);
       this.resolve = null;
     }, RESULT_HOLD_MS);

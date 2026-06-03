@@ -35,12 +35,7 @@ export class ClientState {
     return this.ui.tag === "attackTiming" ? this.ui.power : null;
   }
   set timingPower(power: number | null) {
-    if (this.ui.tag !== "attackTiming") return;
-    if (power === null) {
-      this.timingAim = null;
-      this.ui = isPlayerTurn(this.getState()) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
-      return;
-    }
+    if (this.ui.tag !== "attackTiming" || power === null) return;
     this.ui = { ...this.ui, power };
   }
 

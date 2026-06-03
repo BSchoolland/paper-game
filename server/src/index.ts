@@ -409,6 +409,9 @@ Bun.serve({
         // team mid-AI-resolution and break the pending-defense state machine.
         if ((gameMode === "pve" || gameMode === "duel") && session.state.activeTeam !== "red") {
           console.log(`[ACTION] dropped ${msg.action.type} — activeTeam=${session.state.activeTeam}`);
+          // Ack with the authoritative state so the client reconciles out of its optimistic
+          // "submittingAction" lock instead of freezing on a dropped action.
+          sendTo(ws, { type: "state", state: session.serialize(), events: [] });
           return;
         }
         console.log(`[ACTION] ${msg.action.type} activeTeam=${session.state.activeTeam}`);
@@ -428,6 +431,11 @@ Bun.serve({
           } else {
             runAiTurn(ws);
           }
+        } else {
+          // No-op (illegal move into a wall, unaffordable, etc.): the resolver changed nothing
+          // and would otherwise send no reply, stranding the client in "submittingAction". Ack
+          // with the current state so it unlocks.
+          sendTo(ws, { type: "state", state: session.serialize(), events: [] });
         }
       }
 
