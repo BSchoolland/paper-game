@@ -21,6 +21,8 @@ export * from "./combat/zones.js";
 export * from "./combat/turn-resolver.js";
 export * from "./combat/power.js";
 export * from "./combat/movement.js";
+export * from "./combat/phase.js";
+export * from "./overworld/movement-vote.js";
 export * from "./encounter/encounter.js";
 export * from "./encounter/encounter-profiles.js";
 export * from "./encounter/dimension.js";
