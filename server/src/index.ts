@@ -35,7 +35,6 @@ import { join } from "path";
 import { existsSync } from "fs";
 
 export function initSeeds(): void {
-  seedDiscovery(15);
   seedDimension0();
   seedDimension1();
   seedDimension2();
@@ -45,8 +44,13 @@ export function initSeeds(): void {
 
 // Auto-seed on normal boot. Tests/harnesses set GAME_SKIP_SEED=1 (with an
 // in-memory GAME_DB_PATH) to import the server without touching disk seeds.
+// Transitional single global run for this pre-Room server (replaced in Phase 6 by
+// per-room runs); exploration is run-scoped now, so the old global map lives under it.
+let GLOBAL_RUN_ID = 0;
 if (process.env.GAME_SKIP_SEED !== "1") {
   initSeeds();
+  GLOBAL_RUN_ID = startNewRun(0, "local");
+  seedDiscovery(GLOBAL_RUN_ID, 15);
 }
 
 type GameMode = "pvp" | "pve" | "duel";
@@ -89,11 +93,11 @@ interface SocketData {
 const ORIGIN: HexCoord = { q: 0, r: 0 };
 const ORIGIN_KEY = hexKey(ORIGIN);
 
-function loadHexMapFromDb(): HexMapState {
-  const hexes = loadExploredHexes();
+function loadHexMapFromDb(runId: number): HexMapState {
+  const hexes = loadExploredHexes(runId);
   if (!(ORIGIN_KEY in hexes)) {
     hexes[ORIGIN_KEY] = "explored";
-    saveExploredHex(ORIGIN);
+    saveExploredHex(runId, ORIGIN, true);
   }
   const icons: Record<string, HexIconType> = { [ORIGIN_KEY]: "town" };
   return { playerPos: ORIGIN, hexes, icons };
@@ -106,7 +110,7 @@ function freshVisitedSet(): Set<string> {
 function resetToOrigin(data: SocketData): void {
   data.hexMap = { ...data.hexMap, playerPos: ORIGIN };
   data.visitedThisRun = freshVisitedSet();
-  data.runId = startNewRun();
+  data.runId = startNewRun(data.dimensionId, "local");
   data.phase = "map";
   data.pendingHex = null;
 }
@@ -119,7 +123,7 @@ function exploreHex(data: SocketData, target: HexCoord): void {
     hexes: { ...data.hexMap.hexes, [tk]: "explored" as const },
   };
   data.visitedThisRun.add(tk);
-  saveExploredHex(target);
+  saveExploredHex(GLOBAL_RUN_ID, target, true);
 }
 
 let gameMode: GameMode = "pvp";
@@ -243,11 +247,11 @@ Bun.serve({
           team: null,
           mode,
           dimensionId,
-          hexMap: loadHexMapFromDb(),
+          hexMap: loadHexMapFromDb(GLOBAL_RUN_ID),
           phase: (mode === "pve" ? "map" : "combat") as Phase,
           pendingHex: null,
           visitedThisRun: freshVisitedSet(),
-          runId: startNewRun(),
+          runId: startNewRun(dimensionId, "local"),
           inventory: buildDefaultInventory(dimensionId),
         },
       });
@@ -500,10 +504,10 @@ Bun.serve({
           sendTo(ws, { type: "hexCombatResult", won: false });
           sendHexMapState(ws);
         } else if (gameMode === "pve" && ws.data.phase === "map") {
-          clearExploredHexes();
-          ws.data.hexMap = loadHexMapFromDb();
+          clearExploredHexes(GLOBAL_RUN_ID);
+          ws.data.hexMap = loadHexMapFromDb(GLOBAL_RUN_ID);
           ws.data.visitedThisRun = freshVisitedSet();
-          ws.data.runId = startNewRun();
+          ws.data.runId = startNewRun(ws.data.dimensionId, "local");
           sendHexMapState(ws);
         } else {
           session = await EncounterSession.create(gameMode);
