@@ -177,6 +177,13 @@ export interface EntityCore {
    *  `collisionRadius` when unset — resolve via `moveRadiusOf`. */
   readonly moveRadius?: number;
   readonly teamId: TeamId;
+  /**
+   * The co-op seat that controls this hero (`"s0".."s3"`). Undefined for enemies and for
+   * legacy single-seat play. Orthogonal to {@link teamId} (`"red"` is the whole player party).
+   * The pure combat resolver never reads this — it is ownership metadata for the server Room
+   * and the client, and round-trips through serialization for free (entities are copied whole).
+   */
+  readonly controllerId?: string;
 }
 
 export interface EntityCombat {

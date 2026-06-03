@@ -27,12 +27,19 @@ export function canAffordAbility(entity: Entity, ability: AbilityDefinition): bo
   return true;
 }
 
+/** True if this entity is alive and can still afford at least one of its abilities. */
+export function entityHasAffordableAction(entity: Entity): boolean {
+  if (entity.dead) return false;
+  for (const ability of entity.abilities) {
+    if (canAffordAbility(entity, ability)) return true;
+  }
+  return false;
+}
+
 export function shouldAutoEndTurn(state: GameState): boolean {
   for (const entity of state.entities.values()) {
-    if (entity.teamId !== state.activeTeam || entity.dead) continue;
-    for (const ability of entity.abilities) {
-      if (canAffordAbility(entity, ability)) return false;
-    }
+    if (entity.teamId !== state.activeTeam) continue;
+    if (entityHasAffordableAction(entity)) return false;
   }
   return true;
 }
