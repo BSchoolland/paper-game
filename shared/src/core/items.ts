@@ -91,6 +91,9 @@ export const UNIT_TEMPLATES = {
     energy: { red: 2, blue: 2 },
     energyBankFactor: 1,
     collisionRadius: 16,
+    // Move/occupancy radius is smaller than the hurtbox, so the player slips through tighter gaps and
+    // click-to-move snaps to spots a full 16px body wouldn't fit — without being any easier to hit.
+    moveRadius: 10,
     className: "Player",
     heightMeters: 2,
   },

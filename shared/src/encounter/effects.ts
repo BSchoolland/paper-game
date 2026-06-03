@@ -4,6 +4,7 @@ import { makeEntity } from "./entity-factory.js";
 import { applyDamage } from "../combat/combat.js";
 import { normalize, sub, add, scale, distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds, findWalkablePosition } from "../map/collision-grid.js";
+import { moveRadiusOf } from "../combat/movement.js";
 
 let activeTemplateRegistry: Record<string, UnitTemplate> | null = null;
 
@@ -32,7 +33,7 @@ function entitiesOverlap(
 ): boolean {
   for (const e of entities.values()) {
     if (e.id === excludeId || e.dead) continue;
-    if (distance(pos, e.position) < radius + e.collisionRadius) return true;
+    if (distance(pos, e.position) < radius + moveRadiusOf(e)) return true;
   }
   return false;
 }
@@ -150,12 +151,13 @@ function slideEntity(
   if (dir.x === 0 && dir.y === 0) return { state, events: [], blocked: false };
 
   let full = true;
+  const moveR = moveRadiusOf(entity);
   for (let d = maxDist; d > 0; d -= 5) {
     const dest = add(entity.position, scale(dir, d));
     if (
-      isPositionWalkable(state.grid, dest, entity.collisionRadius) &&
-      isWithinBounds(state.grid, dest, entity.collisionRadius) &&
-      !entitiesOverlap(dest, entity.collisionRadius, state.entities, entity.id)
+      isPositionWalkable(state.grid, dest, moveR) &&
+      isWithinBounds(state.grid, dest, moveR) &&
+      !entitiesOverlap(dest, moveR, state.entities, entity.id)
     ) {
       const from = entity.position;
       const entities = new Map(state.entities);
@@ -247,6 +249,7 @@ function spawnEntities(
   let currentState = state;
   for (let i = 0; i < count; i++) {
     const angle = angleStep * i + Math.PI / 4;
+    // Spawn placement uses the full hurtbox so a summoned unit never starts clipping a wall.
     const offset = template.collisionRadius * 2;
     const raw: Vec2 = {
       x: origin.x + Math.cos(angle) * offset,

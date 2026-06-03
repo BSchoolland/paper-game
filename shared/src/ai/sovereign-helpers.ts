@@ -9,6 +9,7 @@
 import { resolveAction as engineResolve } from "../combat/turn-resolver.js";
 import { pathfindMove, pathfindFlood } from "../map/pathfinding.js";
 import { getEffectiveDistance } from "../combat/status-modifiers.js";
+import { moveRadiusOf } from "../combat/movement.js";
 import { getTemplateRegistry } from "../encounter/effects.js";
 import type { FloodResult } from "../map/pathfinding.js";
 import type {
@@ -109,7 +110,7 @@ export function pathFloodFor(s: GameState, entityId: EntityId): { flood: FloodRe
   // Move-candidate destinations are deduped to ~8px downstream, and the flood already requires full
   // body clearance (so it never threads sub-body corridors), so an 8px node step settles ~15× fewer
   // cells than the raw collision resolution with identical post-dedup candidates.
-  const flood = pathfindFlood(e.position, s.grid, e.collisionRadius, s.entities, e.id, cap, Math.max(s.grid.cellSize, 8));
+  const flood = pathfindFlood(e.position, s.grid, moveRadiusOf(e), s.entities, e.id, cap, Math.max(s.grid.cellSize, 8));
   return { flood, cap };
 }
 

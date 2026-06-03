@@ -1,44 +1,29 @@
 import type { Graphics } from "pixi.js";
 import type { Entity, GameState, Vec2 } from "shared";
 import {
-  clampToMovementRange,
-  getAffordableMoveDistance,
-  isPositionWalkable,
-  isWithinBounds,
-  distance,
+  pathfind,
+  smoothPath,
+  moveRadiusOf,
   CELL_WALL,
 } from "shared";
 import { Rng } from "shared";
 import {
   PENCIL,
-  PENCIL_HIT,
   drawRoughCircle,
 } from "./sketch-utils.js";
 
-function isDestinationValid(
-  entity: Entity,
-  destination: Vec2,
-  state: GameState
-): boolean {
-  if (!isPositionWalkable(state.grid, destination, entity.collisionRadius))
-    return false;
-  if (!isWithinBounds(state.grid, destination, entity.collisionRadius))
-    return false;
-  for (const other of state.entities.values()) {
-    if (other.id === entity.id || other.dead) continue;
-    if (
-      distance(destination, other.position) <
-      entity.collisionRadius + other.collisionRadius
-    )
-      return false;
-  }
-  return true;
-}
-
+/**
+ * Draws the path-based move preview: the wall shading plus a dotted line that bends around obstacles
+ * to `displayTarget`, ending at the move-radius landing marker. `displayTarget` is the *eased*
+ * on-screen target (see GameRenderer) — it glides between the 12px-snapped destinations and may sit
+ * briefly between cells while easing, which is fine since it's purely visual. Pass `null` to draw
+ * just the wall shading (no reachable target near the cursor). The line uses the same smoothing as
+ * move playback, so preview and animation match.
+ */
 export function drawMovePreview(
   g: Graphics,
   entity: Entity,
-  mouseWorld: Vec2,
+  displayTarget: Vec2 | null,
   state: GameState
 ): void {
   const grid = state.grid;
@@ -51,56 +36,27 @@ export function drawMovePreview(
   }
   g.fill({ color: 0x000000, alpha: 0.25 });
 
-  const clamped = clampToMovementRange(entity, mouseWorld);
-  const valid = isDestinationValid(entity, clamped, state);
-  const color = valid ? PENCIL : PENCIL_HIT;
+  if (!displayTarget) return;
 
-  const affordableRange = getAffordableMoveDistance(entity);
-
-  const dx = clamped.x - entity.position.x;
-  const dy = clamped.y - entity.position.y;
-  const dist = Math.sqrt(dx * dx + dy * dy);
-
-  drawRoughCircle(
-    g,
-    entity.position.x,
-    entity.position.y,
-    affordableRange,
-    1.5,
-    48,
-    7
-  );
-  g.stroke({ color: PENCIL, alpha: 0.4, width: 1.2 });
-
-  if (dist > 1) {
-    const nx = dx / dist;
-    const ny = dy / dist;
-    const rng = Rng.seeded(42, 0);
-    const dotSpacing = 6;
-    let d = 0;
-
-    while (d < dist) {
-      const ox = rng.symmetric() * 0.8;
-      const oy = rng.symmetric() * 0.8;
-      const x = entity.position.x + nx * d + ox;
-      const y = entity.position.y + ny * d + oy;
-      g.circle(x, y, 1.2);
-      d += dotSpacing;
+  const radius = moveRadiusOf(entity);
+  const raw = pathfind(entity.position, displayTarget, grid, radius);
+  const waypoints: Vec2[] = smoothPath([entity.position, ...raw], grid, radius);
+  const rng = Rng.seeded(42, 0);
+  const dotSpacing = 6;
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const a = waypoints[i]!, b = waypoints[i + 1]!;
+    const segDx = b.x - a.x, segDy = b.y - a.y;
+    const segLen = Math.hypot(segDx, segDy);
+    if (segLen < 0.001) continue;
+    const nx = segDx / segLen, ny = segDy / segLen;
+    for (let d = 0; d < segLen; d += dotSpacing) {
+      g.circle(a.x + nx * d + rng.symmetric() * 0.8, a.y + ny * d + rng.symmetric() * 0.8, 1.2);
     }
-    g.fill({ color, alpha: 0.6 });
   }
+  g.fill({ color: PENCIL, alpha: 0.6 });
 
-  drawRoughCircle(
-    g,
-    clamped.x,
-    clamped.y,
-    entity.collisionRadius,
-    1,
-    24,
-    13
-  );
-  g.stroke({ color, alpha: 0.5, width: 1.2 });
-
-  g.circle(clamped.x, clamped.y, 2.5);
-  g.fill({ color, alpha: 0.7 });
+  drawRoughCircle(g, displayTarget.x, displayTarget.y, entity.collisionRadius, 1, 24, 13);
+  g.stroke({ color: PENCIL, alpha: 0.5, width: 1.2 });
+  g.circle(displayTarget.x, displayTarget.y, 2.5);
+  g.fill({ color: PENCIL, alpha: 0.7 });
 }

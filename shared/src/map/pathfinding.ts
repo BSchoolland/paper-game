@@ -1,6 +1,7 @@
 import type { Entity, GridState, Vec2 } from "../core/types.js";
 import { distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds } from "./collision-grid.js";
+import { moveRadiusOf } from "../combat/movement.js";
 
 // The pathfinder searches on a node grid whose spacing == the collision grid's own cellSize, so it
 // can navigate any corridor the collision grid can represent (down to a single cell wide). A coarser
@@ -91,7 +92,7 @@ function buildBlockers(
     if (e.dead || e.id === selfId) continue;
     bx[i] = e.position.x;
     by[i] = e.position.y;
-    const r = agentRadius + e.collisionRadius;
+    const r = agentRadius + moveRadiusOf(e);
     br2[i] = r * r;
     i++;
   }
@@ -305,8 +306,14 @@ function reconstructPath(
  * the same entity layout — build the flood once, look up each target in O(touched cells).
  */
 export interface FloodResult {
-  /** Cost-to-reach for each settled cell index; Infinity elsewhere. */
+  /** Cost-to-reach for each cell index; only valid where `seen[idx]` is 1 (the fill is skipped). */
   readonly gScore: Float64Array;
+  /** 1 for cells reached within budget (gScore valid), 0 otherwise. The reachable-cell bitmap. */
+  readonly seen: Uint8Array;
+  /** Node-grid dimensions and spacing for decoding `gScore`/`seen` indices (idx = cx*pgH + cy). */
+  readonly pgW: number;
+  readonly pgH: number;
+  readonly step: number;
   /** Snapped start cell index (gScore[startIdx] === 0). */
   readonly startIdx: number;
   /**
@@ -343,7 +350,7 @@ export function pathfindFlood(
   const touched: number[] = [];
   const startIdx = scx * pgH + scy;
   if (scx < 0 || scx >= pgW || scy < 0 || scy >= pgH) {
-    return makeFloodResult(gScore, seen, startIdx, touched, pgH, step, from, buildBlockers(entities, selfId, collisionRadius));
+    return makeFloodResult(gScore, seen, startIdx, touched, pgW, pgH, step, from, buildBlockers(entities, selfId, collisionRadius));
   }
   gScore[startIdx] = 0; seen[startIdx] = 1;
   touched.push(startIdx);
@@ -381,14 +388,18 @@ export function pathfindFlood(
     }
   }
 
-  return makeFloodResult(gScore, seen, startIdx, touched, pgH, step, from, blockers);
+  return makeFloodResult(gScore, seen, startIdx, touched, pgW, pgH, step, from, blockers);
 }
 
 function makeFloodResult(
-  gScore: Float64Array, seen: Uint8Array, startIdx: number, touched: number[], pgH: number, step: number, from: Vec2, blockers: BlockerArrays,
+  gScore: Float64Array, seen: Uint8Array, startIdx: number, touched: number[], pgW: number, pgH: number, step: number, from: Vec2, blockers: BlockerArrays,
 ): FloodResult {
   return {
     gScore,
+    seen,
+    pgW,
+    pgH,
+    step,
     startIdx,
     pathTo(target: Vec2, maxDist: number): Vec2 | null {
       const tcx = Math.round(target.x / step);
@@ -542,13 +553,131 @@ export function pathfindMove(
 
   // 2. Advance the move budget along that path.
   const desired = clipPathToBudget(entity.position, path, budget);
-  const blockers = buildBlockers(entities, entity.id, entity.collisionRadius);
+  const r = moveRadiusOf(entity);
+  const blockers = buildBlockers(entities, entity.id, r);
 
-  // 3. Commit the stop if it's already legal at full radius; otherwise flood-fill to the nearest legal.
-  if (isLegalStop(grid, entity.collisionRadius, desired, blockers)) {
+  // 3. Commit the stop if it's already a legal move-radius stop; otherwise flood-fill to the nearest.
+  if (isLegalStop(grid, r, desired, blockers)) {
     return distance(desired, entity.position) < 1 ? null : desired;
   }
-  const legal = nudgeToLegal(grid, entity.collisionRadius, entity.position, desired, budget, blockers);
+  const legal = nudgeToLegal(grid, r, entity.position, desired, budget, blockers);
   if (!legal || distance(legal, entity.position) < 1) return null;
   return legal;
+}
+
+/** True iff the straight segment a→b stays walkable for a body of `radius` (sampled). */
+function hasClearance(grid: GridState, a: Vec2, b: Vec2, radius: number): boolean {
+  const d = distance(a, b);
+  const steps = Math.max(1, Math.ceil(d / Math.max(2, radius * 0.5)));
+  for (let i = 0; i <= steps; i++) {
+    const f = i / steps;
+    const p = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+    if (!isWithinBounds(grid, p, radius) || !isPositionWalkable(grid, p, radius)) return false;
+  }
+  return true;
+}
+
+/**
+ * Smooth a grid path for display/animation: string-pull (drop any waypoint you can see past with
+ * body clearance — collapses the axis/diagonal staircase into straight runs hugging the real
+ * corners), then round the remaining corners with endpoint-preserving Chaikin. `polyline` includes
+ * the start point; the returned polyline keeps both endpoints, so the unit still lands exactly on the
+ * destination. This is a *visual* smoothing — energy cost still comes from the raw `playerMovePath`.
+ */
+export function smoothPath(polyline: Vec2[], grid: GridState, radius: number): Vec2[] {
+  if (polyline.length <= 2) return polyline.slice();
+
+  // 1. String-pull: greedily skip waypoints the previous anchor has clear line-of-sight past.
+  const pulled: Vec2[] = [polyline[0]!];
+  let anchor = 0;
+  for (let i = 2; i < polyline.length; i++) {
+    if (!hasClearance(grid, polyline[anchor]!, polyline[i]!, radius)) {
+      pulled.push(polyline[i - 1]!);
+      anchor = i - 1;
+    }
+  }
+  pulled.push(polyline[polyline.length - 1]!);
+
+  // 2. Round the corners (open Chaikin, endpoints fixed). Corners sit on LOS-clear chords, so the
+  //    cut stays within the body-clearance margin.
+  let pts = pulled;
+  for (let it = 0; it < 2; it++) {
+    if (pts.length < 3) break;
+    const out: Vec2[] = [pts[0]!];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const a = pts[i]!, b = pts[i + 1]!;
+      out.push({ x: a.x * 0.75 + b.x * 0.25, y: a.y * 0.75 + b.y * 0.25 });
+      out.push({ x: a.x * 0.25 + b.x * 0.75, y: a.y * 0.25 + b.y * 0.75 });
+    }
+    out.push(pts[pts.length - 1]!);
+    pts = out;
+  }
+  return pts;
+}
+
+export interface MovePathPlan {
+  /** True iff `destination` is reachable by a body-clearance route within the move budget. */
+  readonly reachable: boolean;
+  /** Route distance from the entity to `destination` (the energy-cost yardstick for path-based moves). */
+  readonly cost: number;
+  /** Waypoints from the entity to `destination` (for drawing the bent move line / animating travel). */
+  readonly path: Vec2[];
+}
+
+/**
+ * Plan a *path-based* move to `destination`: the shortest route the body (moveRadius) can actually
+ * travel, its length (the energy cost), and whether that length is within `maxDistance`. Unlike the
+ * AI's point-transit pathing, this requires full move-radius clearance along the whole route, because
+ * the unit travels it. The single source of truth shared by the authoritative resolver and the
+ * client's preview/prediction, so server cost and client display can't drift.
+ */
+export function playerMovePath(
+  entity: Entity,
+  destination: Vec2,
+  grid: GridState,
+  maxDistance: number,
+): MovePathPlan {
+  const r = moveRadiusOf(entity);
+  const path = pathfind(entity.position, destination, grid, r, MAX_PATHFIND_NODES, Infinity);
+  if (path.length === 0) return { reachable: false, cost: 0, path: [] };
+  let cost = 0;
+  let prev = entity.position;
+  for (const wp of path) { cost += distance(prev, wp); prev = wp; }
+  const end = path[path.length - 1]!;
+  // pathfind returns the exact goal as the last waypoint only when it actually reached it; a
+  // best-partial ends short. Reachable iff we reached the destination within the move budget.
+  const reachable = distance(end, destination) < 0.5 && cost <= maxDistance + 0.01;
+  return { reachable, cost, path };
+}
+
+/**
+ * Snap `desired` to the nearest spot the entity could legally stand, within its straight-line move
+ * budget. For player move input on dense maps: clicking near/inside a wall lands on the closest legal
+ * spot instead of being silently rejected. Player moves are straight-line (the resolver validates
+ * only the endpoint), so this nudges the *endpoint* — it does not route around obstacles. `desired`
+ * is first clamped to `maxDistance` of the entity, so an out-of-range click snaps to the reachable
+ * boundary. Returns `null` if no legal spot exists within range near `desired`.
+ *
+ * Cheap enough to call every frame for the move preview: the common case (open ground) is a single
+ * occupancy check, and the flood-fill only runs — and early-exits at the first legal ring — when the
+ * point is illegal.
+ */
+export function nearestLegalDestination(
+  entity: Entity,
+  desired: Vec2,
+  grid: GridState,
+  entities: ReadonlyMap<string, Entity>,
+  maxDistance: number,
+): Vec2 | null {
+  // Clamp to the straight-line move budget first so the nudge searches near the reachable boundary.
+  const dx = desired.x - entity.position.x, dy = desired.y - entity.position.y;
+  const d = Math.hypot(dx, dy);
+  const aim = d > maxDistance
+    ? { x: entity.position.x + (dx / d) * maxDistance, y: entity.position.y + (dy / d) * maxDistance }
+    : desired;
+
+  const r = moveRadiusOf(entity);
+  const blockers = buildBlockers(entities, entity.id, r);
+  if (isLegalStop(grid, r, aim, blockers)) return aim;
+  return nudgeToLegal(grid, r, entity.position, aim, maxDistance, blockers);
 }

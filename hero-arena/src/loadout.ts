@@ -43,6 +43,9 @@ export const HERO_TEMPLATE: UnitTemplate = {
   energy: { red: 2, blue: 2 },
   energyBankFactor: 1,
   collisionRadius: 16,
+  // Smaller move/occupancy radius than the hurtbox: the hero slips through tighter gaps and
+  // click-to-move snaps to spots a full 16px body wouldn't fit — without being easier to hit.
+  moveRadius: 10,
   className: "Hero",
   // Flagged for HeroController-driven AI. The scripted runner falls back to "rush" if invoked,
   // and the rollout-opponent classifier (e.g. Sovereign's isHeroLike) uses this to recognize heroes.

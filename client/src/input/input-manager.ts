@@ -1,5 +1,5 @@
 import type { AttackAbility, Vec2 } from "shared";
-import { distance, sub, clampToMovementRange, canEntityOccupy } from "shared";
+import { distance, sub, getAffordableMoveDistance, reachableArea } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import type { GameRenderer } from "../renderer/game-renderer.js";
 import { TimingBar } from "../renderer/timing-bar.js";
@@ -69,16 +69,17 @@ export class InputManager {
       if (selectedAbility?.kind === "move" && this.clientState.selectedEntityId) {
         const entity = state.entities.get(this.clientState.selectedEntityId);
         if (entity && this.clientState.canSelectAbility(selectedAbility.id)) {
-          const clamped = clampToMovementRange(entity, pos);
-          // Don't even activate a move the server would reject (wall / out of bounds / onto
-          // another entity). Ignoring the click keeps the ability selected so the player can
-          // immediately click a valid spot, instead of submitting a no-op that deselects.
-          if (!canEntityOccupy(state, entity, clamped)) return;
+          // Snap the click to the nearest *path-reachable* tile within move range (matches the
+          // server's path-based rule and the preview's deformed area), so dense maps don't require
+          // pixel-perfect clicks. Ignore the click only when nothing is reachable near it.
+          const budget = getAffordableMoveDistance(entity);
+          const dest = reachableArea(entity, state.grid, state.entities, budget).flood.pathTo(pos, budget);
+          if (!dest) return;
           this.clientState.submitAction({
             type: "ability",
             entityId: this.clientState.selectedEntityId,
             abilityId: selectedAbility.id,
-            destination: clamped,
+            destination: dest,
           });
         }
       }

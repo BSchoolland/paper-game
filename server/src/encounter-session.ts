@@ -117,7 +117,10 @@ export class EncounterSession {
 
   applyAction(action: PlayerAction): { changed: boolean; events: readonly GameEvent[] } {
     if (!isActionLegal(this.state, action)) return { changed: false, events: [] };
-    const result = resolveAction(this.state, action);
+    // Player moves are path-based (cost = the route around obstacles); the AI keeps the cheap
+    // straight-line check via its own resolve call sites (ai-turn-runner). Server-trusted: the flag
+    // isn't part of the action, so a client can't ask for the cheaper rule.
+    const result = resolveAction(this.state, action, { pathBased: true });
     if (result.state !== this.state) {
       this.state = result.state;
       return { changed: true, events: result.events };

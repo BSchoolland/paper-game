@@ -170,7 +170,12 @@ export interface EntityCore {
   readonly id: EntityId;
   readonly name: string;
   readonly position: Vec2;
+  /** Hurtbox radius: what attack shapes hit, and the body's physical size. */
   readonly collisionRadius: number;
+  /** Optional smaller radius used only for movement/occupancy (pathing, standing, click-snapping),
+   *  so a unit can slip through gaps and stop in spots tighter than its hurtbox. Defaults to
+   *  `collisionRadius` when unset — resolve via `moveRadiusOf`. */
+  readonly moveRadius?: number;
   readonly teamId: TeamId;
 }
 
@@ -292,6 +297,9 @@ export interface UnitTemplate {
   readonly hp: number;
   readonly energy: { red: number; blue: number };
   readonly collisionRadius: number;
+  /** Optional movement/occupancy radius (see {@link EntityCore.moveRadius}). Defaults to
+   *  `collisionRadius`. */
+  readonly moveRadius?: number;
   readonly className: string;
   readonly sprites?: SpriteSet;
   readonly spriteScale?: number;

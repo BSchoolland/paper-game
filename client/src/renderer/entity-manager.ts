@@ -1,6 +1,6 @@
 import { Container, Graphics } from "pixi.js";
 import type { AimDirection, AttackAbility, CombatShapeDefinition, Entity, GameEvent, GameState, ShapeFootprint, TrailEffect, Vec2, ZoneEffectKind } from "shared";
-import { ShapeKind, computeShapeFootprint, normalize, length as vecLength, raycast, STATUS_META } from "shared";
+import { ShapeKind, computeShapeFootprint, normalize, length as vecLength, raycast, STATUS_META, pathfind, smoothPath, moveRadiusOf, distance } from "shared";
 import { EntityVisual } from "./entity-renderer.js";
 import { drawRoughArc, drawRoughRect, drawRoughLine, drawXMark, drawRoughCircle } from "./sketch-utils.js";
 import { FloatingTextManager } from "./floating-text.js";
@@ -282,7 +282,16 @@ export class EntityManager {
       case "move": {
         const visual = this.visuals.get(event.entityId);
         if (visual) {
-          visual.triggerMove(event.from.x, event.from.y, event.to.x, event.to.y);
+          // Recompute the body-clearance route locally so playback follows the path around obstacles
+          // instead of sliding straight through them. Only use it if it actually reaches the
+          // destination (an AI unit may have threaded a gap its body can't follow) — else fall back
+          // to a straight tween.
+          const mover = state.entities.get(event.entityId);
+          const radius = mover ? moveRadiusOf(mover) : 16;
+          const route = pathfind(event.from, event.to, state.grid, radius);
+          const followsPath = route.length > 0 && distance(route[route.length - 1]!, event.to) < radius;
+          const smoothed = followsPath ? smoothPath([event.from, ...route], state.grid, radius) : undefined;
+          visual.triggerMove(event.from.x, event.from.y, event.to.x, event.to.y, smoothed);
         }
         break;
       }

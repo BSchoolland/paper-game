@@ -17,6 +17,7 @@ export function makeEntity(
     name,
     position: { x, y },
     collisionRadius: template.collisionRadius,
+    moveRadius: template.moveRadius,
     hp: template.hp,
     maxHp: template.hp,
     barrier: 0,

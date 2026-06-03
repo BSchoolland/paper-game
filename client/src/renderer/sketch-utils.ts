@@ -26,6 +26,30 @@ export function drawRoughCircle(
   }
 }
 
+/**
+ * Sketchy pencil stroke along an arbitrary polyline — same hand-drawn wobble as `drawRoughCircle`
+ * but for any path (e.g. the deformed reachable-area outline). Jitters each vertex perpendicular-ish
+ * via a seeded RNG so the line stays deterministic frame-to-frame. Pass `closed` to join the ends.
+ */
+export function drawRoughPath(
+  g: Graphics,
+  points: readonly { x: number; y: number }[],
+  wobble: number,
+  seed: number,
+  closed: boolean
+) {
+  if (points.length < 2) return;
+  const rng = Rng.seeded(seed, 0);
+  const n = closed ? points.length + 1 : points.length;
+  for (let i = 0; i < n; i++) {
+    const p = points[i % points.length]!;
+    const x = p.x + rng.symmetric() * wobble;
+    const y = p.y + rng.symmetric() * wobble;
+    if (i === 0) g.moveTo(x, y);
+    else g.lineTo(x, y);
+  }
+}
+
 export function drawRoughEllipse(
   g: Graphics,
   cx: number,

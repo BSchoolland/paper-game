@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Sprite, Text } from "pixi.js";
 import type { AttackAbility, BarrierAbility, GameEvent, GridState, Vec2, ZoneAbility } from "shared";
-import { CELL_WALL, CELL_COVER, clampToMovementRange, distance, getAbilityCost, resolveAction, sub, length as vecLength, scaleAttack, powerToMultiplier } from "shared";
+import { CELL_WALL, CELL_COVER, distance, getAbilityCost, resolveAction, sub, length as vecLength, scaleAttack, powerToMultiplier, reachableArea, playerMovePath, getAffordableMoveDistance } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import {
   createBackground,
@@ -24,6 +24,17 @@ const SHADOW_COLOR = 0x1a140e;
 const SHADOW_BLUR = 18;
 const SHADOW_ALPHA = 0.35;
 
+// Per-frame exponential ease for the move preview target. Fixed factor (the selection token pins the
+// frame rate to ~45fps while aiming), snapping the last fraction of a pixel so it settles cleanly.
+function easeToward(cur: Vec2 | null, target: Vec2): Vec2 {
+  if (!cur) return { x: target.x, y: target.y };
+  const k = 0.35;
+  const nx = cur.x + (target.x - cur.x) * k;
+  const ny = cur.y + (target.y - cur.y) * k;
+  if (Math.hypot(target.x - nx, target.y - ny) < 0.5) return { x: target.x, y: target.y };
+  return { x: nx, y: ny };
+}
+
 export class GameRenderer {
   private outerContainer = new Container();
   private dimGfx = new Graphics();
@@ -35,6 +46,9 @@ export class GameRenderer {
   private zonesGfx = new Graphics();
   private targetingGfx = new Graphics();
   private moveGfx = new Graphics();
+  /** Eased on-screen move target — chases the (12px-snapped) reachable destination so the preview
+   *  line/marker glide instead of jumping. May sit briefly between cells while easing. */
+  private movePreviewTarget: Vec2 | null = null;
   private costLabel = new Text({ text: "", style: { fontSize: 11, fontFamily: "monospace", fontWeight: "bold", fill: 0x4a3728 } });
   private scale = 1;
   private offsetX = 0;
@@ -152,6 +166,12 @@ export class GameRenderer {
           if (this.shakeTimer <= 0) {
             this.worldContainer.position.set(this.baseOffsetX, this.baseOffsetY);
           }
+        }
+
+        // While aiming a move, keep redrawing the overlay each frame so the eased target glides to
+        // rest even when the mouse is idle (the selection token already holds ~45fps here).
+        if (this.clientState.getSelectedAbility()?.kind === "move" && this.clientState.selectedEntityId) {
+          this.renderOverlay(this.lastMouseWorld);
         }
 
         if (!this.entities.isAnimating()) return;
@@ -279,6 +299,7 @@ export class GameRenderer {
     if (!entity || entity.dead) return;
 
     const selectedAbility = this.clientState.getSelectedAbility();
+    if (selectedAbility?.kind !== "move") this.movePreviewTarget = null; // drop stale ease state
     if (selectedAbility?.kind === "attack" && entity.energy.red > 0) {
       const atk = selectedAbility as AttackAbility;
       const timingActive = this.clientState.timingPower !== null;
@@ -336,9 +357,14 @@ export class GameRenderer {
       selectedAbility?.kind === "move" &&
       entity.energy.blue > 0
     ) {
-      drawMovePreview(this.moveGfx, entity, mouseWorld, state);
-      const clamped = clampToMovementRange(entity, mouseWorld);
-      const dist = distance(entity.position, clamped);
+      const budget = getAffordableMoveDistance(entity);
+      // Real (snapped) destination a click commits to; ease the displayed target toward it so the
+      // line/marker glide rather than snapping in 12px steps.
+      const snapped = reachableArea(entity, state.grid, state.entities, budget).flood.pathTo(mouseWorld, budget);
+      this.movePreviewTarget = snapped ? easeToward(this.movePreviewTarget, snapped) : null;
+      drawMovePreview(this.moveGfx, entity, this.movePreviewTarget, state);
+      // Bill the cost for the real path distance to where the click lands (not the eased point).
+      const dist = snapped ? playerMovePath(entity, snapped, state.grid, budget).cost : 0;
       const moveCost = getAbilityCost(selectedAbility, { distance: dist });
       const cost = Math.min(moveCost.blue ?? 0, entity.energy.blue);
       this.showCostLabel(entity, cost, entity.energy.blue, "#2980b9");

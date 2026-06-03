@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { pathfind, pathfindMove, pathfindFlood } from "../map/pathfinding.js";
+import { pathfind, pathfindMove, pathfindFlood, nearestLegalDestination, smoothPath } from "../map/pathfinding.js";
 import { createGrid, setBlocked, isPositionWalkable } from "../map/collision-grid.js";
 import { makeEntity } from "./test-helpers.js";
 
@@ -191,6 +191,81 @@ describe("pathfind", () => {
     expect(isPositionWalkable(grid, dest!, 12)).toBe(true);
     // Real horizontal progress toward the target — the nudge didn't collapse the move.
     expect(dest!.x - self.position.x).toBeGreaterThan(40);
+  });
+
+  test("nearestLegalDestination: a legal in-range click is returned unchanged", () => {
+    const grid = createGrid(40, 40, 16);
+    const self = makeEntity("self", 100, 100, "red", { collisionRadius: 12 });
+    const dest = nearestLegalDestination(self, { x: 150, y: 100 }, grid, new Map([["self", self]]), 130);
+    expect(dest).toEqual({ x: 150, y: 100 });
+  });
+
+  test("nearestLegalDestination: a click inside a wall snaps clear of it, within range", () => {
+    let grid = createGrid(40, 40, 16);
+    for (let cx = 18; cx <= 22; cx++) for (let cy = 18; cy <= 22; cy++) grid = setBlocked(grid, cx, cy);
+    const self = makeEntity("self", 240, 320, "red", { collisionRadius: 12 });
+    const dest = nearestLegalDestination(self, { x: 320, y: 320 }, grid, new Map([["self", self]]), 130);
+    expect(dest).not.toBeNull();
+    expect(isPositionWalkable(grid, dest!, 12)).toBe(true);
+    expect(Math.hypot(dest!.x - 240, dest!.y - 320)).toBeLessThanOrEqual(130);
+  });
+
+  test("nearestLegalDestination: an out-of-range click clamps to the reachable boundary", () => {
+    const grid = createGrid(40, 40, 16);
+    const self = makeEntity("self", 100, 100, "red", { collisionRadius: 12 });
+    const dest = nearestLegalDestination(self, { x: 600, y: 100 }, grid, new Map([["self", self]]), 80);
+    expect(dest).not.toBeNull();
+    expect(Math.hypot(dest!.x - 100, dest!.y - 100)).toBeLessThanOrEqual(85); // ~80 budget + snap slack
+  });
+
+  test("nearestLegalDestination: a click on another entity snaps off it", () => {
+    const grid = createGrid(40, 40, 16);
+    const self = makeEntity("self", 100, 100, "red", { collisionRadius: 12 });
+    const other = makeEntity("o", 180, 100, "blue", { collisionRadius: 16 });
+    const dest = nearestLegalDestination(self, { x: 180, y: 100 }, grid, new Map([["self", self], ["o", other]]), 130);
+    expect(dest).not.toBeNull();
+    expect(Math.hypot(dest!.x - 180, dest!.y - 100)).toBeGreaterThanOrEqual(12 + 16);
+  });
+
+  test("moveRadius: a unit can be placed closer to a wall than its (larger) hurtbox would allow", () => {
+    let grid = createGrid(160, 160, 2); // 320×320 world, fine cells
+    for (let cx = 150; cx < 160; cx++) for (let cy = 0; cy < 160; cy++) grid = setBlocked(grid, cx, cy); // wall at x≥300
+    const slim = makeEntity("slim", 200, 160, "red", { collisionRadius: 16, moveRadius: 10 });
+    const fat = makeEntity("fat", 200, 160, "red", { collisionRadius: 16 }); // hurtbox = move radius
+    const target = { x: 296, y: 160 }; // right up against the wall
+    const slimDest = nearestLegalDestination(slim, target, grid, new Map([["slim", slim]]), 130);
+    const fatDest = nearestLegalDestination(fat, target, grid, new Map([["fat", fat]]), 130);
+    expect(slimDest).not.toBeNull();
+    expect(fatDest).not.toBeNull();
+    // The slim move-radius lets it stop nearer the wall; both clear their own move radius.
+    expect(slimDest!.x).toBeGreaterThan(fatDest!.x);
+    expect(isPositionWalkable(grid, slimDest!, 10)).toBe(true);
+    expect(isPositionWalkable(grid, fatDest!, 16)).toBe(true);
+  });
+
+  test("smoothPath: collapses an off-angle staircase to a near-straight line on open ground", () => {
+    const grid = createGrid(60, 60, 8); // 480×480
+    const from = { x: 80, y: 80 }, to = { x: 380, y: 220 }; // off-axis → raw path zig-zags
+    const raw = pathfind(from, to, grid, 12);
+    const smooth = smoothPath([from, ...raw], grid, 12);
+    // endpoints preserved
+    expect(Math.hypot(smooth[0]!.x - from.x, smooth[0]!.y - from.y)).toBeLessThan(1);
+    const last = smooth[smooth.length - 1]!;
+    expect(Math.hypot(last.x - to.x, last.y - to.y)).toBeLessThan(1);
+    // string-pull collapses the staircase to ≈ the straight-line distance (much less than the raw path)
+    const straight = Math.hypot(to.x - from.x, to.y - from.y);
+    expect(pathDistance(from, smooth)).toBeLessThan(straight * 1.05);
+    expect(pathDistance(from, smooth)).toBeLessThanOrEqual(pathDistance(from, raw) + 1);
+  });
+
+  test("smoothPath: keeps the routed path clear of a wall while smoothing", () => {
+    let grid = createGrid(60, 60, 8);
+    for (let cy = 10; cy < 40; cy++) grid = setBlocked(grid, 30, cy); // wall x≈240, forces a detour
+    const from = { x: 160, y: 320 }, to = { x: 360, y: 320 };
+    const raw = pathfind(from, to, grid, 12);
+    const smooth = smoothPath([from, ...raw], grid, 12);
+    expect(Math.hypot(smooth[smooth.length - 1]!.x - to.x, smooth[smooth.length - 1]!.y - to.y)).toBeLessThan(1);
+    for (const p of smooth) expect(isPositionWalkable(grid, p, 12)).toBe(true); // never cuts through the wall
   });
 
   test("pathfindFlood: respects walls — does not flood through them", () => {

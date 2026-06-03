@@ -44,6 +44,26 @@ function easeOutQuad(t: number): number {
   return t * (2 - t);
 }
 
+/** Position at arc-length fraction `t` (0..1) along a polyline — used to animate a move along its
+ *  routed path rather than straight. Recomputed per frame (one moving unit; negligible cost). */
+function pointAlongPolyline(pts: { x: number; y: number }[], t: number): { x: number; y: number } {
+  if (pts.length === 1) return pts[0]!;
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
+  if (total < 1e-6) return pts[pts.length - 1]!;
+  let target = t * total;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1]!, b = pts[i]!;
+    const seg = Math.hypot(b.x - a.x, b.y - a.y);
+    if (target <= seg || i === pts.length - 1) {
+      const f = seg < 1e-6 ? 0 : target / seg;
+      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+    }
+    target -= seg;
+  }
+  return pts[pts.length - 1]!;
+}
+
 const DEATH_DURATION = 0.5;
 const STATUS_DOT_RADIUS = 2.5;
 const STATUS_DOT_SPACING = 7;
@@ -67,6 +87,8 @@ export class EntityVisual {
   private lastHpRatio: number;
   private tweenFrom: { x: number; y: number } | null = null;
   private tweenProgress = 1;
+  /** Full polyline [start, ...waypoints] for path-following move playback; null = straight tween. */
+  private tweenPath: { x: number; y: number }[] | null = null;
   private facingLeft: boolean;
   private wasSelected = false;
   private readonly scale: number;
@@ -177,12 +199,20 @@ export class EntityVisual {
       const speed = this.isKnockback ? 2.8 : 1.6;
       this.tweenProgress = Math.min(1, this.tweenProgress + dt * speed);
       const t = easeOutQuad(this.tweenProgress);
-      const from = this.tweenFrom!;
-      this.container.position.set(
-        from.x + (entity.position.x - from.x) * t,
-        from.y + (entity.position.y - from.y) * t
-      );
-      if (this.tweenProgress >= 1) this.isKnockback = false;
+      if (this.tweenPath) {
+        const prevX = this.container.position.x;
+        const p = pointAlongPolyline(this.tweenPath, t);
+        this.container.position.set(p.x, p.y);
+        // Face the direction of travel so the unit doesn't moonwalk around bends.
+        if (Math.abs(p.x - prevX) > 0.5) this.setFacing(p.x < prevX);
+      } else {
+        const from = this.tweenFrom!;
+        this.container.position.set(
+          from.x + (entity.position.x - from.x) * t,
+          from.y + (entity.position.y - from.y) * t
+        );
+      }
+      if (this.tweenProgress >= 1) { this.isKnockback = false; this.tweenPath = null; }
     } else {
       this.container.position.set(entity.position.x, entity.position.y);
     }
@@ -255,10 +285,13 @@ export class EntityVisual {
     fromX: number,
     fromY: number,
     toX: number,
-    toY: number
+    toY: number,
+    path?: readonly { x: number; y: number }[]
   ): void {
     this.tweenFrom = { x: fromX, y: fromY };
     this.tweenProgress = 0;
+    // `path` is the full smoothed polyline (start → … → destination); null = straight tween.
+    this.tweenPath = path && path.length > 1 ? path.map((p) => ({ x: p.x, y: p.y })) : null;
 
     const dx = toX - fromX;
     if (Math.abs(dx) > 1) {
@@ -274,6 +307,7 @@ export class EntityVisual {
   ): void {
     this.tweenFrom = { x: fromX, y: fromY };
     this.tweenProgress = 0;
+    this.tweenPath = null; // knockback is a straight shove, never a routed path
     this.isKnockback = true;
     this.setAnimState("hit");
     this.animTimer = 0.6;

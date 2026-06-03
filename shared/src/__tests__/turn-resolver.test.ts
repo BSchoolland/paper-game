@@ -3,7 +3,7 @@ import { resolveAction, isActionLegal } from "../combat/turn-resolver.js";
 import { makeEntity, makeState } from "./test-helpers.js";
 import type { AttackAbility, StatusEffect } from "../core/types.js";
 import { ShapeKind } from "../core/types.js";
-import { createGrid, CELL_WALL } from "../map/collision-grid.js";
+import { createGrid, CELL_WALL, setBlocked } from "../map/collision-grid.js";
 
 describe("turn-resolver", () => {
   it("move updates position", () => {
@@ -22,6 +22,29 @@ describe("turn-resolver", () => {
     const state = makeState([makeEntity("r1", 100, 100, "red")]);
     const { state: next } = resolveAction(state, { type: "ability", entityId: "r1", abilityId: "move", destination: { x: 400, y: 100 } });
     expect(next).toBe(state);
+  });
+
+  it("path-based move: straight-line in range, but rejected when the route around a wall exceeds budget", () => {
+    // Tall wall at x≈128 (touching the top edge) — the only way around is the long way under it.
+    let grid = createGrid(50, 50, 8); // 400×400 world
+    for (let cy = 0; cy <= 40; cy++) grid = setBlocked(grid, 16, cy);
+    const state = makeState([makeEntity("r1", 100, 200, "red")], { grid });
+    const action = { type: "ability" as const, entityId: "r1", abilityId: "move", destination: { x: 160, y: 200 } };
+    // Straight-line (default): 60px ≤ budget → allowed.
+    expect(resolveAction(state, action).state).not.toBe(state);
+    // Path-based: the detour around the wall is >130 → no legal route → rejected.
+    expect(resolveAction(state, action, { pathBased: true }).state).toBe(state);
+  });
+
+  it("path-based move to an open spot succeeds and updates position", () => {
+    const state = makeState([makeEntity("r1", 100, 100, "red")]);
+    const { state: next } = resolveAction(
+      state,
+      { type: "ability", entityId: "r1", abilityId: "move", destination: { x: 180, y: 100 } },
+      { pathBased: true },
+    );
+    expect(next).not.toBe(state);
+    expect(next.entities.get("r1")!.position.x).toBeCloseTo(180);
   });
 
   it("flags a wrong-team action as illegal", () => {
