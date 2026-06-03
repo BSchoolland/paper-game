@@ -1,7 +1,8 @@
 import type { AbilityDefinition, AimDirection, AttackAbility, GameState, PlayerAction, Vec2 } from "shared";
 import type { GameStore } from "./game-store.js";
-import { canUseAbility, getAbility, isPlayerTurn, playerEntity } from "./combat-ui-state.js";
+import { canUseAbility, getAbility, isMyEntity, isPlayerPhase, myHeroEntity } from "./combat-ui-state.js";
 import type { IncomingAttackData, InteractionState } from "./combat-ui-state.js";
+import { SeatContext } from "./seat-context.js";
 
 type Listener = () => void;
 
@@ -24,7 +25,7 @@ export class ClientState {
   /** Incoming enemy attack being telegraphed for defensive timing (null = none). */
   incomingAttack: IncomingAttack | null = null;
 
-  constructor(private gameStore: GameStore) {
+  constructor(private gameStore: GameStore, public seat: SeatContext = new SeatContext()) {
     gameStore.subscribe(() => {
       this.reconcileWithGameState();
       this.notify();
@@ -55,11 +56,11 @@ export class ClientState {
   }
 
   canAcceptPlayerInput(): boolean {
-    return isPlayerTurn(this.getState()) && ["playerIdle", "abilitySelected", "aiming"].includes(this.ui.tag);
+    return isPlayerPhase(this.getState(), this.seat) && ["playerIdle", "abilitySelected", "aiming"].includes(this.ui.tag);
   }
 
   canSelectAbility(abilityId: string): boolean {
-    return this.canAcceptPlayerInput() && canUseAbility(this.getState(), this.selectedEntityId, abilityId);
+    return this.canAcceptPlayerInput() && canUseAbility(this.getState(), this.selectedEntityId, abilityId, this.seat);
   }
 
   canEndTurn(): boolean {
@@ -67,7 +68,7 @@ export class ClientState {
   }
 
   selectEntity(entityId: string | null) {
-    if (!isPlayerTurn(this.getState())) return;
+    if (!isPlayerPhase(this.getState(), this.seat)) return;
     this.selectedEntityId = entityId;
     this.selectedAbilityId = null;
     this.ui = { tag: "playerIdle" };
@@ -77,7 +78,7 @@ export class ClientState {
   selectAbility(abilityId: string | null) {
     if (abilityId === null) {
       this.selectedAbilityId = null;
-      this.ui = isPlayerTurn(this.getState()) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+      this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
       this.notify();
       return;
     }
@@ -100,7 +101,7 @@ export class ClientState {
 
   confirmAbility() {
     if (!this.selectedEntityId || !this.selectedAbilityId) return;
-    if (!canUseAbility(this.getState(), this.selectedEntityId, this.selectedAbilityId)) return;
+    if (!canUseAbility(this.getState(), this.selectedEntityId, this.selectedAbilityId, this.seat)) return;
     const action: PlayerAction = {
       type: "ability",
       entityId: this.selectedEntityId,
@@ -112,7 +113,7 @@ export class ClientState {
   beginAttackTiming(entityId: string, abilityId: string, aim: Vec2): boolean {
     const ability = getAbility(this.getState(), entityId, abilityId);
     if (!ability || ability.kind !== "attack") return false;
-    if (!canUseAbility(this.getState(), entityId, abilityId)) return false;
+    if (!canUseAbility(this.getState(), entityId, abilityId, this.seat)) return false;
     this.selectedEntityId = entityId;
     this.selectedAbilityId = abilityId;
     this.timingAim = aim;
@@ -139,7 +140,7 @@ export class ClientState {
 
   clearDefensePrompt() {
     this.incomingAttack = null;
-    this.ui = isPlayerTurn(this.getState()) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
     this.notify();
   }
 
@@ -150,7 +151,7 @@ export class ClientState {
   resetSelection() {
     this.selectedEntityId = null;
     this.selectedAbilityId = null;
-    this.ui = isPlayerTurn(this.getState()) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
   }
 
   toggleDebugWalls() {
@@ -166,10 +167,10 @@ export class ClientState {
 
   autoSelectPlayer() {
     const state = this.getState();
-    const player = playerEntity(state);
+    const player = myHeroEntity(state, this.seat);
     if (player) this.selectedEntityId = player.id;
     this.selectedAbilityId = null;
-    this.ui = isPlayerTurn(state) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+    this.ui = isPlayerPhase(state, this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
     this.notify();
   }
 
@@ -205,22 +206,22 @@ export class ClientState {
     }
     if (this.incomingAttack) return;
     if (this.ui.tag === "attackTiming") {
-      if (!canUseAbility(state, this.ui.entityId, this.ui.abilityId)) {
+      if (!canUseAbility(state, this.ui.entityId, this.ui.abilityId, this.seat)) {
         this.selectedAbilityId = null;
         this.timingAim = null;
-        this.ui = isPlayerTurn(state) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+        this.ui = isPlayerPhase(state, this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
       }
       return;
     }
     if (this.selectedEntityId) {
       const selected = state.entities.get(this.selectedEntityId);
-      if (!selected || selected.dead || selected.teamId !== "red") this.selectedEntityId = null;
+      if (!selected || selected.dead || !isMyEntity(selected, this.seat)) this.selectedEntityId = null;
     }
-    if (this.selectedAbilityId && !canUseAbility(state, this.selectedEntityId, this.selectedAbilityId)) {
+    if (this.selectedAbilityId && !canUseAbility(state, this.selectedEntityId, this.selectedAbilityId, this.seat)) {
       this.selectedAbilityId = null;
       if (this.ui.tag === "aiming" || this.ui.tag === "abilitySelected") this.ui = { tag: "playerIdle" };
     }
-    if (!isPlayerTurn(state)) {
+    if (!isPlayerPhase(state, this.seat)) {
       this.selectedAbilityId = null;
       this.ui = { tag: "enemyTurn" };
     } else if (this.ui.tag === "enemyTurn" || this.ui.tag === "submittingAction") {

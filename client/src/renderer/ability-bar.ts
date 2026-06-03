@@ -2,6 +2,7 @@ import type { AbilityDefinition, Entity, Vec2 } from "shared";
 import { clampToMovementRange, distance, getAbilityCost, getEffectiveRegen } from "shared";
 import type { ItemDefinition } from "shared/src/core/items.js";
 import type { ClientState } from "../state/client-state.js";
+import { myHeroEntity } from "../state/combat-ui-state.js";
 import { itemSpriteUrl } from "./item-sprites.js";
 
 interface Region {
@@ -168,7 +169,7 @@ export class AbilityBar {
       return;
     }
 
-    const entity = [...state.entities.values()].find(e => e.teamId === "red");
+    const entity = myHeroEntity(state, this.clientState.seat);
     if (!entity) {
       this.container.innerHTML = "";
       this.energyEl.innerHTML = "";
