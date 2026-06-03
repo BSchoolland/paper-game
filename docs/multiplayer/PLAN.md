@@ -64,3 +64,30 @@ ONE commit (the file is monolithic):
 - Wire AFK + 3s disconnect grace + defend timeout constants (R28); `protocolMismatch` banner in main.ts.
 - Run full manual checklist (lobby, shared phase, defend AoE, disconnect/reclaim, per-player bag, vote tie-break + timeout, win→explore, no pvp/duel path, `?mode=replay` still works). Document the `explored_hexes` one-time wipe and in-memory inventory in the PR body.
 - Verify: `bun test` + `bun run typecheck` + `bun scripts/sim-battle.ts` exit 0; open PR on `multiplayer-coop`.
+
+
+---
+
+## Durable-persistence plan deltas (overrides R13; full detail in PERSISTENCE.md)
+
+### Phase 0 — Test runner + DB testability foundation
+Add to scope: require GAME_TOKEN_SECRET env handling stub — server reads process.env.GAME_TOKEN_SECRET, fails fast in production if unset/<256 bits, falls back to a fixed dev secret otherwise (R29). Keep initSeeds() extraction but make it run-scoped-aware (seedDiscovery will take runId in Phase 3). No behavior change to single-global-run boot.
+
+### Phase 3 — Server Room scaffold + registry + run-scoped DB
+Expand the DB migration well beyond the original run_id+ALTER. user_version bumps to a single new version that (one transaction): (a) recreates explored_hexes(run_id,q,r,cleared INTEGER NOT NULL DEFAULT 0, PK(run_id,q,r)) — note the new `cleared` column (R13.2); (b) ALTERs runs to add dimension_id, capacity, host_client_id, active, party_q, party_r, created_at, updated_at, completed_at, outcome (R13 DDL); (c) CREATEs run_seats with the CHECK and the UNIQUE partial index idx_run_seats_client_live (R32) plus client_lookup column (R33); (d) CREATEs run_seat_items, run_seat_attachments, explored_hex_icons. Each ALTER in try/catch per the dimensions pattern. Test against :memory:. Add functions: startNewRun(dimensionId, hostClientId) (host_token→host_client_id rename, R14); markRunInactive(runId, outcome) that ALSO left_at-stamps all seats (R32); saveExploredHex(runId, coord, cleared) and loadExploredHexes(runId) returning BOTH visible map and cleared set (R13.2); findActiveSeatForClient(clientLookup) with deterministic ORDER BY (R32); upsertRunSeat / leftAtStampSeat / loadSeatInventory / saveSeatInventory (full DELETE+reINSERT) / saveSeatAttachments (R13.3); updateRunPartyPos(runId, q, r) single-statement (R35); setRunHost(runId, hostClientId) (write point 8); the prior-run-abandon-on-join transaction (R32); eraseClient(clientLookup) + a retention housekeeping function (R33). Add token_salt generation at bind and HMAC helpers + constant-time compare (R29). reconstructRoomForRun(runId) skeleton.
+
+### Phase 3 — Server Room scaffold + registry + run-scoped DB
+RoomRegistry gains a transient Map<runId, Room> with check-or-throw registerRoomForRun(runId, room) as the PRIMARY anti-split-brain guard (R30), plus the assertion that a reconstructed/new Room never reuses a code held by another live Room (R36). room.ts Room type adds runId mutability for run-swap re-keying, and Seat gains token_salt persistence handling. dispose() does NOT delete durable rows (R13.1).
+
+### Phase 5 — Room combat machine: phase/ready/pass, defend round, vote machine
+Add reconstruction liveness: a Room reconstructed with human-disconnected seats installs a transient sovereignFor(seat) brain from t0 so maybeEndPlayerPhase and the vote machine never wait on a never-present human (R31); reclaim-with-valid-token drops the bot brain and always wins over a pending bot-drive (R31). Arm the reap timer at reconstruction, cancel on first bind (R31). The vote machine's visited-hex YES path must call updateRunPartyPos synchronously in-handler before yielding (R35); the combat-entry path keeps no durable write (R7) — the departure tile is already durable.
+
+### Phase 6 — ATOMIC index.ts rewrite
+Wire all durable write points (R13.6): createRoom run-create transaction (with R32 prior-run cleanup), seat bind/join/bot-fill, equip/unequip/updateAttachment with R29 write-time identity re-check AND write-before-ack ordering (R34), exploreHex atomic party_q/r + cleared=1 (R13.2/R13.4), visited-hex move synchronous party_q/r (R35), victory/defeat/reset run-lifecycle transactions that left_at-stamp all seats (R13.5/R32) and re-key Map<runId,Room> on swap (R30). Implement the resume algorithm in the hello handler: findActiveSeatForClient → token verify with NO no-token branch for human seats + run-swap reconciliation (R29), reconstructRoomForRun idempotent via registerRoomForRun (R30), constant-time non-enumerating lobby response (R29). Force-takeover clears displaced socket.data.seatId before sending displaced (R29). Build visitedThisRun strictly from the cleared set (R13.2).
+
+### Phase 7 — Client: RoomConnection, lobby, party HUD, vote UI
+Client caches sessionToken across reloads (localStorage alongside clientId) and replays it in hello so a post-restart reconnect verifies (R29). On welcome carrying a different sessionToken (run-swap reconciliation), adopt the new token. Surface an 'encounter restarted' banner when resumed into overworld from a mid-combat crash (R13.1). map-screen renders the cleared vs explored distinction if it affects UI affordances (a visible-uncleared hex shows it will trigger combat).
+
+### Phase 8 — Hardening, manual QA, PR finalize
+Manual QA additions: kill+restart the server mid-overworld and assert resume (inventory + explored + cleared + party tile intact); kill mid-combat and assert resume-at-overworld on the departure tile with the encounter re-enterable; win then createRoom (no constraint crash, R32); two clients reconnect simultaneously (single Room, R30); defeat→new-run then reconnect with stale token (run-swap reconciliation, R29); abandoned-run reap (R31); GAME_TOKEN_SECRET unset in prod fails fast (R29). Document in PR body: GAME_TOKEN_SECRET is the single config dependency for resume; the explored_hexes one-time wipe; the durable overworld/run/inventory layer + transient-in-combat boundary; retention/erasure (R33).
+

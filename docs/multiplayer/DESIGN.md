@@ -42,7 +42,7 @@ These rulings are binding; the sections below implement them.
 
 - **R12 — `heroBrains` is derived, never independently mutated (HIGH/MED, double-drive).** `heroBrains` is **rebuilt from seat controllers** at every `startPlayerPhase` and `startEnemyPhase` (`set` iff `controller.kind==="ai"`, else delete). The two stores (`seat.controller.kind` and `heroBrains` membership) can never drift. On reclaim of the currently-driven entity, abort its remaining queued `currentActions` in the runner.
 
-- **R13 — DB is run-scoped (MED, cross-design contradiction).** We adopt `run_id` columns on `explored_hexes` and `runs` (migration via `PRAGMA user_version`). **Every** read/write takes `runId` — no global-read caller remains. Two concurrent rooms are isolated. We accept a one-time wipe of `explored_hexes` (documented in PR). Per-seat inventory is **in-memory only** (matches today's per-connection reconstruction); it survives reconnect-by-token while the room lives, not a server restart. Stated as a known follow-up, not this PR.
+- **R13 — DB is run-scoped — SUPERSEDED by §11 (Durable Persistence).** The run-scoping below still holds, but the *in-memory-only / fresh-run* stance is overridden by the durable-across-restarts product decision (see §11 and docs/multiplayer/PERSISTENCE.md). Original text kept for history. We adopt `run_id` columns on `explored_hexes` and `runs` (migration via `PRAGMA user_version`). **Every** read/write takes `runId` — no global-read caller remains. Two concurrent rooms are isolated. We accept a one-time wipe of `explored_hexes` (documented in PR). Per-seat inventory is **in-memory only** (matches today's per-connection reconstruction); it survives reconnect-by-token while the room lives, not a server restart. Stated as a known follow-up, not this PR.
 
 - **R14 — Host model is mutable (HIGH).** `Room.hostSeatId: SeatId | null` (mutable; the overworld design's `readonly hostToken` is rejected). `migrateHost()` runs on **every** human disconnect regardless of phase: host moves to the lowest-index connected human, or `null` if none. Host-gated messages (`startGame`, `reset`, `debugWin`) no-op with `NOT_HOST` when `hostSeatId===null` or sender isn't host. The idle reaper handles a host-less room.
 
@@ -405,3 +405,27 @@ On `winner`: `combatEnd{won}` broadcast (animation gate). If `won && pendingHex`
 
 ## 10. How each high/critical finding is closed (index)
 R1/§4,§3 (state carrier); R2/§2.4,§3 (controllerId only); R3/§3,§4 (endTurn kept, router-rejected); R4/§3 (one protocol file); R5/R6/§7 (server token, live-seat reject, displaced); R7/§6 (atomic build); R8/§4 (single latch); R9/§4 (drive-on-disconnect); R10/§7 (reclaim rules + actedThisPhase); R11/§5 (DefendRound authority + timeout); R12/§4 (heroBrains derived); R13/§6 (run-scoped DB); R14/§7 (mutable host); R15/§6 (frozen electorate); R16/§4,§5 (burst friendly-fire); R17/§4 (generation guard); R18/§8 (actionCount guard + per-seat reject); R19/§7 (dispose); R20/§2 (codes); R21/§2,§7 (seat-state machine); R22/§2.3 (handshake); R23/§9 (runner); R24/§6 (spread); R25/§6 (deletion order); R26/§8 (lobby loadout); R27/§6 (atomic index rewrite, solo); R28/§4 (timeouts/grace).
+
+
+---
+
+## 11. Durable persistence & run-resume (supersedes R13)
+
+The run / per-seat inventory / overworld layer is **durable across server restarts**. The in-combat
+`GameState`/`EncounterSession`/`DefendRound`/`MovementVote` stay transient; a mid-combat server
+death resumes the party **at the overworld departure tile** (the encounter is simply re-entered).
+
+Full design — rulings **R13(rev) + R29–R36**, the resume/reconstruction algorithm, token verification
+after restart, every durable write point, schema DDL, and the 22 stress-test findings (9 high/critical,
+all resolved) — lives in **docs/multiplayer/PERSISTENCE.md**.
+
+Headline:
+- New/altered tables: `runs` (ALTER: dimension_id, capacity, host_client_id, active, party_q/r,
+  created_at, updated_at, completed_at, outcome), `explored_hexes` (recreate, run-scoped, + `cleared`),
+  `explored_hex_icons`, `run_seats`, `run_seat_items`, `run_seat_attachments`.
+- Identity: HMAC session token salted per seat (`GAME_TOKEN_SECRET`); **seat lookup by raw `client_id`**
+  in v1 (HMAC at-rest hardening deferred). No secret rotation in v1.
+- Anti-split-brain: a transient `Map<runId, Room>` with check-or-throw `registerRoomForRun` (R30);
+  two near-simultaneous reconnects reconstruct exactly one Room.
+- Resume lands at `overworld` on `runs.party_q/party_r`; `visitedThisRun` rebuilt from the `cleared` set.
+- v1 calls on the 4 open items (secret/​lookup/​housekeeping/​icons) are recorded at the top of PERSISTENCE.md.
