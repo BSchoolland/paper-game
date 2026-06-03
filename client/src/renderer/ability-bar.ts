@@ -1,5 +1,5 @@
 import type { AbilityDefinition, Entity, Vec2 } from "shared";
-import { clampToMovementRange, distance, canAffordAbility, getAbilityCost, getEffectiveRegen } from "shared";
+import { clampToMovementRange, distance, getAbilityCost, getEffectiveRegen } from "shared";
 import type { ItemDefinition } from "shared/src/core/items.js";
 import type { ClientState } from "../state/client-state.js";
 import { itemSpriteUrl } from "./item-sprites.js";
@@ -191,6 +191,9 @@ export class AbilityBar {
       `<span style="color:#8a7a68"> / ${entity.energy.maxBlue}</span>` +
       regenTag(blueRegen, entity.energy.regenBlue);
 
+    this.endTurnBtn.disabled = !this.clientState.canEndTurn();
+    this.endTurnBtn.style.opacity = this.clientState.canEndTurn() ? "1" : "0.5";
+
     this.container.innerHTML = "";
     this.variableCostEl = null;
     this.variableCostAbility = null;
@@ -247,10 +250,10 @@ export class AbilityBar {
   private createCard(ability: AbilityDefinition, entity: Entity, sourceItem: ItemDefinition | null): HTMLDivElement {
     const card = document.createElement("div");
     const isSelected = this.clientState.selectedAbilityId === ability.id;
-    const canAfford = canAffordAbility(entity, ability);
+    const canActivate = this.clientState.canSelectAbility(ability.id);
 
     const s = this.scale;
-    const opacity = canAfford ? "1" : "0.5";
+    const opacity = canActivate ? "1" : "0.5";
     const highlight = isSelected ? "brightness(1.2) drop-shadow(0 0 6px rgba(240,192,64,0.8))" : "";
 
     card.style.cssText = `
@@ -259,7 +262,7 @@ export class AbilityBar {
       background-image: url(${FRAME_PATH});
       background-size: ${this.cardWidth}px ${CARD_HEIGHT}px;
       position: relative;
-      cursor: ${canAfford ? "pointer" : "default"};
+      cursor: ${canActivate ? "pointer" : "default"};
       opacity: ${opacity};
       user-select: none;
       filter: ${highlight};
@@ -372,12 +375,12 @@ export class AbilityBar {
       card.appendChild(el);
     }
 
-    if (canAfford) {
-      card.addEventListener("click", (e) => {
-        e.stopPropagation();
+    card.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (this.clientState.canSelectAbility(ability.id)) {
         this.clientState.selectAbility(ability.id);
-      });
-    }
+      }
+    });
 
     return card;
   }

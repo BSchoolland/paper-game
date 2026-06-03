@@ -46,14 +46,13 @@ export class DefendPrompt {
       this.pressed = false;
       this.active = true;
 
-      this.clientState.incomingAttack = {
+      const incoming = {
         attackerId: input.attackerId,
         attackerPosition: input.attackerPosition,
         aimDirection: input.aimDirection,
         ability: input.ability,
-        phase: "windup",
-        phaseProgress: 0,
       };
+      this.clientState.setDefensePrompt(incoming, "windup", 0);
 
       const startTime = performance.now();
       this.impactTime = startTime + WINDUP_MS;
@@ -63,6 +62,8 @@ export class DefendPrompt {
         if (this.pressed || !this.active) return;
         if (e instanceof KeyboardEvent && e.key !== " " && e.key !== "Enter") return;
         e.preventDefault();
+        e.stopPropagation();
+
         this.pressed = true;
 
         const offset = performance.now() - this.impactTime; // negative = early, positive = late
@@ -111,17 +112,10 @@ export class DefendPrompt {
         if (!this.active) return;
         const now = performance.now();
         const elapsed = now - startTime;
-        const incoming = this.clientState.incomingAttack;
-
-        if (incoming) {
-          if (elapsed < WINDUP_MS) {
-            incoming.phase = "windup";
-            incoming.phaseProgress = elapsed / WINDUP_MS;
-          } else {
-            incoming.phase = "window";
-            incoming.phaseProgress = Math.min(1, (elapsed - WINDUP_MS) / WINDOW_MS);
-          }
-          this.clientState.notify();
+        if (elapsed < WINDUP_MS) {
+          this.clientState.setDefensePrompt(incoming, "windup", elapsed / WINDUP_MS);
+        } else {
+          this.clientState.setDefensePrompt(incoming, "window", Math.min(1, (elapsed - WINDUP_MS) / WINDOW_MS));
         }
 
         // At the end of the windup, kick off the actual swing + shape-flash visuals so the
@@ -153,8 +147,7 @@ export class DefendPrompt {
     cancelAnimationFrame(this.animFrame);
     setTimeout(() => {
       this.active = false;
-      this.clientState.incomingAttack = null;
-      this.clientState.notify();
+      this.clientState.clearDefensePrompt();
       this.resolve?.(power);
       this.resolve = null;
     }, RESULT_HOLD_MS);

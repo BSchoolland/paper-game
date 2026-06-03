@@ -1,14 +1,11 @@
 import type { AbilityDefinition, AimDirection, AttackAbility, GameState, PlayerAction, Vec2 } from "shared";
 import type { GameStore } from "./game-store.js";
-
+import { canUseAbility, getAbility, isPlayerTurn, playerEntity } from "./combat-ui-state.js";
+import type { IncomingAttackData, InteractionState } from "./combat-ui-state.js";
 
 type Listener = () => void;
 
-export interface IncomingAttack {
-  attackerId: string;
-  attackerPosition: Vec2;
-  aimDirection: AimDirection;
-  ability: AttackAbility;
+export interface IncomingAttack extends IncomingAttackData {
   /** "windup" = pre-window telegraph, "window" = press-now window. */
   phase: "windup" | "window";
   /** 0..1 progress within the current phase. */
@@ -18,19 +15,33 @@ export interface IncomingAttack {
 export class ClientState {
   private listeners: Listener[] = [];
 
+  ui: InteractionState = { tag: "enemyTurn" };
   selectedEntityId: string | null = null;
   selectedAbilityId: string | null = null;
-  inputMode: "select" | "attack" = "select";
   showDebugWalls = false;
-  /** Live timing power while timing bar is active (null = inactive). */
-  timingPower: number | null = null;
   /** Frozen aim direction during timing phase. */
   timingAim: { x: number; y: number } | null = null;
   /** Incoming enemy attack being telegraphed for defensive timing (null = none). */
   incomingAttack: IncomingAttack | null = null;
 
   constructor(private gameStore: GameStore) {
-    gameStore.subscribe(() => this.notify());
+    gameStore.subscribe(() => {
+      this.reconcileWithGameState();
+      this.notify();
+    });
+  }
+
+  get timingPower(): number | null {
+    return this.ui.tag === "attackTiming" ? this.ui.power : null;
+  }
+  set timingPower(power: number | null) {
+    if (this.ui.tag !== "attackTiming") return;
+    if (power === null) {
+      this.timingAim = null;
+      this.ui = isPlayerTurn(this.getState()) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+      return;
+    }
+    this.ui = { ...this.ui, power };
   }
 
   getState(): GameState | null {
@@ -41,27 +52,43 @@ export class ClientState {
     this.gameStore.dispatch(action);
   }
 
+  submitAction(action: PlayerAction) {
+    this.ui = { tag: "submittingAction", action };
+    this.selectedAbilityId = null;
+    this.notify();
+    this.gameStore.dispatch(action);
+  }
+
+  canAcceptPlayerInput(): boolean {
+    return isPlayerTurn(this.getState()) && ["playerIdle", "abilitySelected", "aiming"].includes(this.ui.tag);
+  }
+
+  canSelectAbility(abilityId: string): boolean {
+    return this.canAcceptPlayerInput() && canUseAbility(this.getState(), this.selectedEntityId, abilityId);
+  }
+
+  canEndTurn(): boolean {
+    return this.canAcceptPlayerInput();
+  }
+
   selectEntity(entityId: string | null) {
+    if (!isPlayerTurn(this.getState())) return;
     this.selectedEntityId = entityId;
     this.selectedAbilityId = null;
-    this.inputMode = "select";
+    this.ui = { tag: "playerIdle" };
     this.notify();
   }
 
   selectAbility(abilityId: string | null) {
-    if (!this.selectedEntityId) return;
     if (abilityId === null) {
       this.selectedAbilityId = null;
-      this.inputMode = "select";
+      this.ui = isPlayerTurn(this.getState()) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
       this.notify();
       return;
     }
+    if (!this.selectedEntityId || !this.canSelectAbility(abilityId)) return;
 
-    const state = this.getState();
-    if (!state) return;
-    const entity = state.entities.get(this.selectedEntityId);
-    if (!entity) return;
-    const ability = entity.abilities.find(a => a.id === abilityId);
+    const ability = getAbility(this.getState(), this.selectedEntityId, abilityId);
     if (!ability) return;
 
     if (this.selectedAbilityId === abilityId && ability.kind === "barrier") {
@@ -70,36 +97,65 @@ export class ClientState {
     }
 
     this.selectedAbilityId = abilityId;
-    // Attacks and zone placements both aim at a world point; everything else uses select-mode.
-    this.inputMode = ability.kind === "attack" || ability.kind === "zone" ? "attack" : "select";
+    this.ui = ability.kind === "attack" || ability.kind === "zone"
+      ? { tag: "aiming", entityId: this.selectedEntityId, abilityId }
+      : { tag: "abilitySelected", entityId: this.selectedEntityId, abilityId };
     this.notify();
   }
 
   confirmAbility() {
     if (!this.selectedEntityId || !this.selectedAbilityId) return;
-    this.dispatch({
+    if (!canUseAbility(this.getState(), this.selectedEntityId, this.selectedAbilityId)) return;
+    const action: PlayerAction = {
       type: "ability",
       entityId: this.selectedEntityId,
       abilityId: this.selectedAbilityId,
-    });
+    };
+    this.submitAction(action);
+  }
+
+  beginAttackTiming(entityId: string, abilityId: string, aim: Vec2): boolean {
+    const ability = getAbility(this.getState(), entityId, abilityId);
+    if (!ability || ability.kind !== "attack") return false;
+    if (!canUseAbility(this.getState(), entityId, abilityId)) return false;
+    this.selectedEntityId = entityId;
+    this.selectedAbilityId = abilityId;
+    this.timingAim = aim;
+    this.ui = { tag: "attackTiming", entityId, abilityId, aim, power: 0 };
+    this.notify();
+    return true;
+  }
+
+  finishAttackTiming(power: number) {
+    if (this.ui.tag !== "attackTiming") return null;
+    const { entityId, abilityId, aim } = this.ui;
+    this.timingAim = null;
+    const action: PlayerAction = { type: "ability", entityId, abilityId, aimDirection: aim, power };
+    this.submitAction(action);
+    return action;
+  }
+
+  setDefensePrompt(input: IncomingAttackData, phase: "windup" | "window", progress: number) {
     this.selectedAbilityId = null;
-    this.inputMode = "select";
+    this.incomingAttack = { ...input, phase, phaseProgress: progress };
+    this.ui = { tag: "defensePrompt", phase, progress, incoming: input };
+    this.notify();
+  }
+
+  clearDefensePrompt() {
+    this.incomingAttack = null;
+    this.ui = isPlayerTurn(this.getState()) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
     this.notify();
   }
 
   getSelectedAbility(): AbilityDefinition | null {
-    if (!this.selectedEntityId || !this.selectedAbilityId) return null;
-    const state = this.getState();
-    if (!state) return null;
-    const entity = state.entities.get(this.selectedEntityId);
-    if (!entity) return null;
-    return entity.abilities.find(a => a.id === this.selectedAbilityId) ?? null;
+    return getAbility(this.getState(), this.selectedEntityId, this.selectedAbilityId);
   }
 
   resetSelection() {
     this.selectedEntityId = null;
     this.selectedAbilityId = null;
-    this.inputMode = "select";
+    this.ui = isPlayerTurn(this.getState()) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
   }
 
   toggleDebugWalls() {
@@ -108,28 +164,27 @@ export class ClientState {
   }
 
   endTurn() {
-    this.dispatch({ type: "endTurn" });
-    this.selectedAbilityId = null;
-    this.inputMode = "select";
+    if (!this.canEndTurn()) return;
+    const action: PlayerAction = { type: "endTurn" };
+    this.submitAction(action);
   }
 
   autoSelectPlayer() {
     const state = this.getState();
-    if (!state) return;
-    const player = [...state.entities.values()].find(e => e.teamId === "red");
-    if (player) {
-      this.selectedEntityId = player.id;
-      this.selectedAbilityId = null;
-      this.inputMode = "select";
-      this.notify();
-    }
+    const player = playerEntity(state);
+    if (player) this.selectedEntityId = player.id;
+    this.selectedAbilityId = null;
+    this.ui = isPlayerTurn(state) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+    this.notify();
   }
 
   reset() {
     this.gameStore.reset();
     this.selectedEntityId = null;
     this.selectedAbilityId = null;
-    this.inputMode = "select";
+    this.timingAim = null;
+    this.incomingAttack = null;
+    this.ui = { tag: "enemyTurn" };
   }
 
   subscribe(listener: Listener) {
@@ -140,8 +195,41 @@ export class ClientState {
   }
 
   notify() {
-    for (const listener of this.listeners) {
-      listener();
+    for (const listener of this.listeners) listener();
+  }
+
+  private reconcileWithGameState() {
+    const state = this.getState();
+    if (!state) return;
+    if (state.winner) {
+      this.selectedAbilityId = null;
+      this.timingAim = null;
+      this.incomingAttack = null;
+      this.ui = { tag: "enemyTurn" };
+      return;
+    }
+    if (this.incomingAttack) return;
+    if (this.ui.tag === "attackTiming") {
+      if (!canUseAbility(state, this.ui.entityId, this.ui.abilityId)) {
+        this.selectedAbilityId = null;
+        this.timingAim = null;
+        this.ui = isPlayerTurn(state) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+      }
+      return;
+    }
+    if (this.selectedEntityId) {
+      const selected = state.entities.get(this.selectedEntityId);
+      if (!selected || selected.dead || selected.teamId !== "red") this.selectedEntityId = null;
+    }
+    if (this.selectedAbilityId && !canUseAbility(state, this.selectedEntityId, this.selectedAbilityId)) {
+      this.selectedAbilityId = null;
+      if (this.ui.tag === "aiming" || this.ui.tag === "abilitySelected") this.ui = { tag: "playerIdle" };
+    }
+    if (!isPlayerTurn(state)) {
+      this.selectedAbilityId = null;
+      this.ui = { tag: "enemyTurn" };
+    } else if (this.ui.tag === "enemyTurn" || this.ui.tag === "submittingAction") {
+      this.ui = { tag: "playerIdle" };
     }
   }
 }

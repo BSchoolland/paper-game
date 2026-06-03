@@ -55,7 +55,7 @@ export class InputManager {
       if (!this.enabled) return;
       const pos = this.screenToWorld(e);
       const state = this.clientState.getState();
-      if (!state || state.winner) return;
+      if (!state || state.winner || !this.clientState.canAcceptPlayerInput()) return;
 
       const selectedAbility = this.clientState.getSelectedAbility();
       if (selectedAbility?.kind === "attack" || selectedAbility?.kind === "zone") {
@@ -68,9 +68,9 @@ export class InputManager {
       }
       if (selectedAbility?.kind === "move" && this.clientState.selectedEntityId) {
         const entity = state.entities.get(this.clientState.selectedEntityId);
-        if (entity) {
+        if (entity && this.clientState.canSelectAbility(selectedAbility.id)) {
           const clamped = clampToMovementRange(entity, pos);
-          this.clientState.dispatch({
+          this.clientState.submitAction({
             type: "ability",
             entityId: this.clientState.selectedEntityId,
             abilityId: selectedAbility.id,
@@ -99,6 +99,8 @@ export class InputManager {
         e.preventDefault();
         this.clientState.toggleDebugWalls();
       }
+
+      if (!this.clientState.canAcceptPlayerInput()) return;
 
       const numKey = parseInt(e.key);
       if (numKey >= 1 && numKey <= 9) {
@@ -143,16 +145,20 @@ export class InputManager {
     const state = this.clientState.getState();
     if (!state) return;
     const entity = state.entities.get(entityId);
-    if (!entity) return;
+    if (!entity || !this.clientState.canAcceptPlayerInput()) return;
 
     const aimDirection = sub(mousePos, entity.position);
     const abilityId = this.clientState.selectedAbilityId ?? entity.abilities.find(a => a.kind === "attack")?.id ?? "punch";
     const ability = entity.abilities.find(a => a.id === abilityId);
 
     if (ability?.kind === "attack") {
+      if (!this.clientState.beginAttackTiming(entityId, abilityId, aimDirection)) return;
       this.enabled = false;
-      this.clientState.timingAim = aimDirection;
       this.timingBar.run((ability as AttackAbility).shape.kind).then((power) => {
+        if (this.clientState.ui.tag !== "attackTiming") {
+          this.enabled = true;
+          return;
+        }
         const label = attackPowerLabel(power);
         if (label) {
           this.renderer.spawnFloatingText(entity.position.x, entity.position.y - 55, label.text, label.color, {
@@ -168,19 +174,14 @@ export class InputManager {
           // Warm amber tint to differentiate the offensive perfect from the cream perfect-block.
           this.renderer.flash({ intensity: 0.55, duration: 0.2, color: 0xffd080 });
         }
-        this.clientState.dispatch({
-          type: "ability",
-          entityId,
-          abilityId,
-          aimDirection,
-          power,
-        });
+        this.clientState.finishAttackTiming(power);
         this.enabled = true;
       });
       return;
     }
 
-    this.clientState.dispatch({
+    if (!this.clientState.canSelectAbility(abilityId)) return;
+    this.clientState.submitAction({
       type: "ability",
       entityId,
       abilityId,
