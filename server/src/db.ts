@@ -16,7 +16,8 @@ function loadMapManifest(dimId: number): MapManifest | null {
   }
 }
 
-const db = new Database("hex-discovery.sqlite", { create: true });
+const DB_PATH = process.env.GAME_DB_PATH ?? "hex-discovery.sqlite";
+const db = new Database(DB_PATH, { create: true });
 db.exec("PRAGMA busy_timeout = 30000");
 db.exec("PRAGMA journal_mode = WAL");
 db.exec(`

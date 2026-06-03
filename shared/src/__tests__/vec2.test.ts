@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { add, sub, scale, normalize, length, distance, dot, angle, rotate, equals } from "../core/vec2.js";
 
 describe("vec2", () => {

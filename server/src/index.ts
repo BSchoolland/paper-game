@@ -34,12 +34,20 @@ import { seedDimension501 } from "./seed-dimension-501.js";
 import { join } from "path";
 import { existsSync } from "fs";
 
-seedDiscovery(15);
-seedDimension0();
-seedDimension1();
-seedDimension2();
-seedDimension3();
-seedDimension501();
+export function initSeeds(): void {
+  seedDiscovery(15);
+  seedDimension0();
+  seedDimension1();
+  seedDimension2();
+  seedDimension3();
+  seedDimension501();
+}
+
+// Auto-seed on normal boot. Tests/harnesses set GAME_SKIP_SEED=1 (with an
+// in-memory GAME_DB_PATH) to import the server without touching disk seeds.
+if (process.env.GAME_SKIP_SEED !== "1") {
+  initSeeds();
+}
 
 type GameMode = "pvp" | "pve" | "duel";
 type Phase = "map" | "combat";

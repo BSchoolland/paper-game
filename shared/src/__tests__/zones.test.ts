@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { resolveAction } from "../combat/turn-resolver.js";
 import { makeEntity, makeState } from "./test-helpers.js";
 import { CELL_WALL, CELL_EMPTY } from "../map/collision-grid.js";

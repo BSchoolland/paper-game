@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { pointInSector } from "../geometry/sector.js";
 import { entityInRectangle } from "../geometry/rectangle.js";
 import { resolveWeaponAttack } from "../combat/combat.js";

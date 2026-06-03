@@ -7,6 +7,7 @@
     "predev": "fuser -k 3001/tcp 5173/tcp 2>/dev/null; true",
     "dev": "bun --filter '*' dev",
     "sim-battle": "bun scripts/sim-battle.ts",
+    "test": "bun test",
     "typecheck": "bunx tsc",
     "lint": "eslint ."
   },

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { resolveAction, isActionLegal } from "../combat/turn-resolver.js";
 import { makeEntity, makeState } from "./test-helpers.js";
 import type { AttackAbility, StatusEffect } from "../core/types.js";

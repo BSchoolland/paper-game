@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "bun:test";
 import { computeShapeFootprint } from "../geometry/footprint.js";
 import { ShapeKind } from "../core/types.js";
 import { createGrid } from "../map/collision-grid.js";
