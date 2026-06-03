@@ -1,0 +1,148 @@
+[
+  {
+    "name": "Phase 0 — Test runner + DB testability",
+    "summary": "Standardize on bun test (migrate 6 vitest imports), add root + shared test scripts, add GAME_DB_PATH env to db.ts and gate module-load seeding behind initSeeds(). No behavior change. Precondition for all server-side tests.",
+    "filesTouched": [
+      "/home/ben/Projects/turn-based-game/package.json",
+      "/home/ben/Projects/turn-based-game/shared/package.json",
+      "/home/ben/Projects/turn-based-game/shared/src/__tests__/zones.test.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/__tests__/combat.test.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/__tests__/collision-grid.test.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/__tests__/footprint.test.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/__tests__/vec2.test.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/__tests__/turn-resolver.test.ts",
+      "/home/ben/Projects/turn-based-game/server/src/db.ts",
+      "/home/ben/Projects/turn-based-game/server/src/index.ts"
+    ],
+    "dependsOn": [],
+    "testable": "bun test runs all 10 existing files green; bun run typecheck clean; server still boots normally."
+  },
+  {
+    "name": "Phase 1 — Shared protocol + controllerId + pure helper",
+    "summary": "Create the single canonical shared/src/net/protocol.ts; add optional controllerId to EntityCore (round-trips for free, no serialization edit); add entityHasAffordableAction and reimplement shouldAutoEndTurn over it. Keep endTurn in PlayerAction and GameState untouched.",
+    "filesTouched": [
+      "/home/ben/Projects/turn-based-game/shared/src/net/protocol.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/index.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/core/types.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/combat/ability-cost.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/__tests__/determinism.test.ts"
+    ],
+    "dependsOn": [
+      "Phase 0 — Test runner + DB testability"
+    ],
+    "testable": "bun test green incl. new determinism round-trip (controllerId survives serialize/deserialize); typecheck clean; current game still compiles and runs (controllerId optional/unused)."
+  },
+  {
+    "name": "Phase 2 — Client faction/seat accessors (replace hardcoded red, back-compat)",
+    "summary": "Add SeatContext and seat-aware combat-ui-state accessors (ownership via controllerId, phase via coopStatus) with a single-seat fallback so the existing game keeps working until the full client rewrite. Grep-gate every hardcoded ===\"red\" site and classify it.",
+    "filesTouched": [
+      "/home/ben/Projects/turn-based-game/client/src/state/seat-context.ts",
+      "/home/ben/Projects/turn-based-game/client/src/state/combat-ui-state.ts",
+      "/home/ben/Projects/turn-based-game/client/src/renderer/ability-bar.ts",
+      "/home/ben/Projects/turn-based-game/client/src/renderer/entity-renderer.ts"
+    ],
+    "dependsOn": [
+      "Phase 1 — Shared protocol + controllerId + pure helper"
+    ],
+    "testable": "typecheck clean; bun test green; current single-seat flow visually unchanged; sim-battle exit 0."
+  },
+  {
+    "name": "Phase 3 — Server Room scaffold + registry + run-scoped DB",
+    "summary": "Run-scope db.ts (user_version migration, runId on every exploration fn, startNewRun(dim,host)); create room.ts (Room/Seat/SeatState, SeatBuildSpec, buildDefaultInventory, code gen, sovereignFor, dispose, stubs) and room-registry.ts (rooms, tokenIndex, code quarantine). Compiles alongside old globals.",
+    "filesTouched": [
+      "/home/ben/Projects/turn-based-game/server/src/db.ts",
+      "/home/ben/Projects/turn-based-game/server/src/room.ts",
+      "/home/ben/Projects/turn-based-game/server/src/room-registry.ts",
+      "/home/ben/Projects/turn-based-game/server/src/index.ts"
+    ],
+    "dependsOn": [
+      "Phase 1 — Shared protocol + controllerId + pure helper"
+    ],
+    "testable": "typecheck clean (new files compile, not yet wired); bun test green; old server boots with run-scoped DB and a single global run."
+  },
+  {
+    "name": "Phase 4 — Per-seat encounter builder + per-room session + generalized AI runner",
+    "summary": "placeEncounterEntities builds one red hero per seat (controllerId via spread, formation spawns); EncounterSession.createEncounter co-op path; AiTurnRunner generalized to RunnerMode (enemyPhase|playerBots) with promptsDefense predicate, runHero, promptId on pendingDefend, abortable currentActions. Old create() paths kept temporarily.",
+    "filesTouched": [
+      "/home/ben/Projects/turn-based-game/server/src/encounter-builder.ts",
+      "/home/ben/Projects/turn-based-game/server/src/encounter-session.ts",
+      "/home/ben/Projects/turn-based-game/server/src/ai-turn-runner.ts",
+      "/home/ben/Projects/turn-based-game/server/src/__tests__/ai-turn-runner.test.ts"
+    ],
+    "dependsOn": [
+      "Phase 3 — Server Room scaffold + registry + run-scoped DB"
+    ],
+    "testable": "typecheck clean; bun test green incl. new ai-turn-runner tests (single player-bot drive, no bot-vs-enemy defend prompt, friendly-fire prompt, restartable); resolver tests unchanged."
+  },
+  {
+    "name": "Phase 5 — Room combat machine, defend round, vote machine (pure phase/vote tests)",
+    "summary": "Implement the player/enemy phase machine with the single end-phase latch, drive-on-disconnect, heroBrains-derived-from-seats, aiPlayerBusy/phaseTransitioning/generation/building guards; DefendRound with server timeout and per-target authority; MovementVote with frozen electorate, tie-break, proposer-cancel; host migration; reclaim ready rules; AFK/grace timers. Back with pure phase.ts + movement-vote.ts modules and unit tests.",
+    "filesTouched": [
+      "/home/ben/Projects/turn-based-game/server/src/room.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/combat/phase.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/overworld/movement-vote.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/__tests__/phase.test.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/__tests__/movement-vote.test.ts"
+    ],
+    "dependsOn": [
+      "Phase 4 — Per-seat encounter builder + per-room session + generalized AI runner"
+    ],
+    "testable": "typecheck clean; bun test green incl. phase-end latch / exhaustion / dead-seat tests and vote electorate / tie-break / timeout / disconnect / proposer-cancel tests. Server not yet rewired."
+  },
+  {
+    "name": "Phase 6 — Atomic index.ts rewrite + delete pvp/duel end-to-end",
+    "summary": "Single commit: delete globals/GameMode/?mode/pvp/duel/'Game is full'; add rooms; route messages by scope; implement identity/reclaim (server token, live-seat reject, displaced), host migration, dispose, atomic combat entry/end, broadcast helpers; delete legacy auto-end. Delete placePvp/PveEntities + duel session branches in the same commit. Add integration harness + tests.",
+    "filesTouched": [
+      "/home/ben/Projects/turn-based-game/server/src/index.ts",
+      "/home/ben/Projects/turn-based-game/server/src/encounter-session.ts",
+      "/home/ben/Projects/turn-based-game/shared/src/maps/scenarios.ts",
+      "/home/ben/Projects/turn-based-game/server/src/__tests__/coop-harness.ts",
+      "/home/ben/Projects/turn-based-game/server/src/__tests__/coop-integration.test.ts",
+      "/home/ben/Projects/turn-based-game/server/src/__tests__/inventory.test.ts"
+    ],
+    "dependsOn": [
+      "Phase 5 — Room combat machine, defend round, vote machine (pure phase/vote tests)",
+      "Phase 2 — Client faction/seat accessors (replace hardcoded red, back-compat)"
+    ],
+    "testable": "typecheck clean; bun test green incl. full multi-client coop-integration lifecycle and negative identity tests (live-seat reclaim rejected, force-takeover sends displaced); sim-battle exit 0."
+  },
+  {
+    "name": "Phase 7 — Client room rewrite: RoomConnection, lobby, party HUD, vote, per-seat input; delete dead stores",
+    "summary": "RoomConnection + player-token; combat-store seatId+actionCount guard+actionRejected (drop no-op queue flush); finalize seat-aware client-state/combat-ui-state (per-seat submit lock, passTurn, defending promptId, autoSelectMyHero); delete RemoteGameStore + LocalGameStore (keep interface, keep ReplayStore); new lobby/party-hud/vote-panel; rework map/combat/inventory screens; main.ts boots to lobby and wires all new messages.",
+    "filesTouched": [
+      "/home/ben/Projects/turn-based-game/client/src/net/connection.ts",
+      "/home/ben/Projects/turn-based-game/client/src/net/player-token.ts",
+      "/home/ben/Projects/turn-based-game/client/src/state/combat-store.ts",
+      "/home/ben/Projects/turn-based-game/client/src/state/client-state.ts",
+      "/home/ben/Projects/turn-based-game/client/src/state/combat-ui-state.ts",
+      "/home/ben/Projects/turn-based-game/client/src/state/game-store.ts",
+      "/home/ben/Projects/turn-based-game/client/src/state/remote-game-store.ts",
+      "/home/ben/Projects/turn-based-game/client/src/screens/lobby-screen.ts",
+      "/home/ben/Projects/turn-based-game/client/src/renderer/party-hud.ts",
+      "/home/ben/Projects/turn-based-game/client/src/renderer/vote-panel.ts",
+      "/home/ben/Projects/turn-based-game/client/src/screens/map-screen.ts",
+      "/home/ben/Projects/turn-based-game/client/src/screens/combat-screen.ts",
+      "/home/ben/Projects/turn-based-game/client/src/screens/inventory-screen.ts",
+      "/home/ben/Projects/turn-based-game/client/src/renderer/ability-bar.ts",
+      "/home/ben/Projects/turn-based-game/client/src/input/input-manager.ts",
+      "/home/ben/Projects/turn-based-game/client/src/main.ts"
+    ],
+    "dependsOn": [
+      "Phase 6 — Atomic index.ts rewrite + delete pvp/duel end-to-end"
+    ],
+    "testable": "typecheck clean; bun test green; manual /run two-tab walkthrough: create/join by code, start with a bot, shared free phase with live ally animation, per-seat ready/pass, routed (and AoE) defend, disconnect->bot, reclaim mid-battle, per-player bag, vote move + tie-break + timeout, win->explore together."
+  },
+  {
+    "name": "Phase 8 — Hardening + manual QA + PR finalize",
+    "summary": "Wire AFK auto-pass, 3s disconnect grace, defend timeout constants; protocolMismatch client banner. Run full manual checklist, document the one-time explored_hexes wipe and in-memory inventory in the PR body, finalize PR on multiplayer-coop.",
+    "filesTouched": [
+      "/home/ben/Projects/turn-based-game/server/src/room.ts",
+      "/home/ben/Projects/turn-based-game/server/src/index.ts",
+      "/home/ben/Projects/turn-based-game/client/src/main.ts"
+    ],
+    "dependsOn": [
+      "Phase 7 — Client room rewrite: RoomConnection, lobby, party HUD, vote, per-seat input; delete dead stores"
+    ],
+    "testable": "bun test + bun run typecheck + bun scripts/sim-battle.ts all green/exit 0; manual checklist passes in two browser tabs; no pvp/duel path remains and ?mode=replay still works."
+  }
+]
