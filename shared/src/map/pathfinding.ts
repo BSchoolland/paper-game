@@ -2,22 +2,36 @@ import type { Entity, GridState, Vec2 } from "../core/types.js";
 import { distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds } from "./collision-grid.js";
 
-// Pathfinder operates on a 16-px sub-grid on top of the collision grid. Cell index encoding:
-// every cell maps to an integer in [0, pgW*pgH). gScore / cameFrom / closed are typed-array
-// backed; the open set is a binary min-heap. Together these replace the previous Map+linear-scan
-// implementation and cut A* self-time by an order of magnitude on real boards.
-const STEP = 16;
-const DIAG_COST = Math.SQRT2 * STEP;
-const NEIGHBOR_COUNT = 8;
-const NDX = new Int32Array([-STEP, STEP, 0, 0, -STEP, STEP, -STEP, STEP]);
-const NDY = new Int32Array([0, 0, -STEP, STEP, -STEP, -STEP, STEP, STEP]);
-const NCOST = new Float64Array([STEP, STEP, STEP, STEP, DIAG_COST, DIAG_COST, DIAG_COST, DIAG_COST]);
+// The pathfinder searches on a node grid whose spacing == the collision grid's own cellSize, so it
+// can navigate any corridor the collision grid can represent (down to a single cell wide). A coarser
+// node grid (the old fixed 16px) skips over thin corridors entirely — no node lands inside them — so
+// A* can't even find the route. Node (cx,cy) maps to world (cx*step, cy*step) and flat index
+// cx*pgH+cy. gScore / cameFrom / closed are typed-array backed; the open set is a binary min-heap.
+function pathStep(grid: GridState): number { return grid.cellSize; }
 
-function pgDims(grid: GridState): { pgW: number; pgH: number } {
+// A* treats the agent as a true point (radius 0) so the route may thread any open gap regardless of
+// body size; the endpoint is then validated at full radius and, if illegal, flood-filled outward to
+// the nearest legal stop (see `nudgeToLegal`).
+const TRANSIT_RADIUS = 0;
+// `pathfindMove` searches the whole route to the target (no per-turn distance cap), so the unit
+// always commits to the globally-correct path instead of a myopic best-partial that can point into
+// a dead end. The closed-set bounds real work at the cell count; this is just a safety ceiling.
+const MAX_PATHFIND_NODES = 1_000_000;
+const NEIGHBOR_COUNT = 8;
+// 8-neighbour offsets in *node* units (scaled by `step` for world px). Costs likewise in node units.
+const NOX = [-1, 1, 0, 0, -1, 1, -1, 1];
+const NOY = [0, 0, -1, 1, -1, -1, 1, 1];
+const NOC = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
+
+// Step used for the optional coarse pre-pass in `pathfindMove` (see there). Bigger than any real
+// cellSize, so the coarse search has ~(16/cellSize)² fewer nodes.
+const COARSE_STEP = 16;
+
+function pgDims(grid: GridState, step: number): { pgW: number; pgH: number } {
   const worldW = grid.width * grid.cellSize;
   const worldH = grid.height * grid.cellSize;
   // +1 so a snapped cell at the world boundary is in range.
-  return { pgW: Math.ceil(worldW / STEP) + 1, pgH: Math.ceil(worldH / STEP) + 1 };
+  return { pgW: Math.ceil(worldW / step) + 1, pgH: Math.ceil(worldH / step) + 1 };
 }
 
 /**
@@ -29,22 +43,23 @@ function pgDims(grid: GridState): { pgW: number; pgH: number } {
  * rectangle scan of collision cells) → single Uint8Array byte read.
  */
 const walkableCache = new WeakMap<GridState, Map<number, Uint8Array>>();
-function getWalkableMask(grid: GridState, agentRadius: number): Uint8Array {
-  let byRadius = walkableCache.get(grid);
-  if (!byRadius) { byRadius = new Map(); walkableCache.set(grid, byRadius); }
-  const cached = byRadius.get(agentRadius);
+function getWalkableMask(grid: GridState, agentRadius: number, step: number): Uint8Array {
+  let byKey = walkableCache.get(grid);
+  if (!byKey) { byKey = new Map(); walkableCache.set(grid, byKey); }
+  const key = agentRadius * 1000 + step; // mask depends on both the body radius and the node step
+  const cached = byKey.get(key);
   if (cached) return cached;
-  const { pgW, pgH } = pgDims(grid);
+  const { pgW, pgH } = pgDims(grid, step);
   const mask = new Uint8Array(pgW * pgH);
   for (let cx = 0; cx < pgW; cx++) {
     for (let cy = 0; cy < pgH; cy++) {
-      const pos = { x: cx * STEP, y: cy * STEP };
+      const pos = { x: cx * step, y: cy * step };
       if (isWithinBounds(grid, pos, agentRadius) && isPositionWalkable(grid, pos, agentRadius)) {
         mask[cx * pgH + cy] = 1;
       }
     }
   }
-  byRadius.set(agentRadius, mask);
+  byKey.set(key, mask);
   return mask;
 }
 
@@ -104,6 +119,7 @@ class MinHeap {
     this.ix = new Int32Array(capacity);
   }
   get size(): number { return this.n; }
+  clear(): void { this.n = 0; }
   push(f: number, idx: number): void {
     if (this.n === this.fs.length) {
       const nf = new Float64Array(this.n * 2);
@@ -145,6 +161,35 @@ class MinHeap {
   }
 }
 
+// --- reusable A* scratch, keyed by node-count -------------------------------
+// A fresh A* would allocate gScore/cameFrom/closed (~N each) and fill gScore with Infinity every
+// call — O(N) overhead that dominates now that N is the fine collision-grid cell count (~120k).
+// Instead we keep one buffer set per node-count and tag each write with a monotonic generation: a
+// cell is "unvisited this call" unless its stamp == the current generation. No per-call fill, no
+// realloc; cost drops to O(cells actually touched). Behaviour is identical to the cleared version.
+interface AStarScratch {
+  gScore: Float64Array;
+  cameFrom: Int32Array;
+  stamp: Int32Array;        // generation that last wrote gScore/cameFrom for the cell
+  closedStamp: Int32Array;  // generation that closed the cell
+  touched: Int32Array;      // indices written this call (drives the best-partial fallback)
+  heap: MinHeap;
+}
+const scratchBySize = new Map<number, AStarScratch>();
+let astarGen = 0;
+function getScratch(total: number): AStarScratch {
+  let s = scratchBySize.get(total);
+  if (!s) {
+    s = {
+      gScore: new Float64Array(total), cameFrom: new Int32Array(total),
+      stamp: new Int32Array(total), closedStamp: new Int32Array(total),
+      touched: new Int32Array(total), heap: new MinHeap(256),
+    };
+    scratchBySize.set(total, s);
+  }
+  return s;
+}
+
 /**
  * A* path through static geometry only. Entities don't block transit — `pathfindMove` handles
  * picking an entity-free endpoint along the returned path. (Engine semantics: the move resolver
@@ -158,84 +203,82 @@ export function pathfind(
   maxNodes = 2000,
   /** If provided, A* skips cells whose cost-to-reach exceeds this. */
   maxDistance: number = Infinity,
+  /** Node spacing override (defaults to the collision cellSize). Used for the coarse pre-pass. */
+  stepOverride?: number,
 ): Vec2[] {
-  const { pgW, pgH } = pgDims(grid);
-  const scx = Math.round(from.x / STEP);
-  const scy = Math.round(from.y / STEP);
-  const gcx = Math.round(to.x / STEP);
-  const gcy = Math.round(to.y / STEP);
+  const step = stepOverride ?? pathStep(grid);
+  const { pgW, pgH } = pgDims(grid, step);
+  const scx = Math.round(from.x / step);
+  const scy = Math.round(from.y / step);
+  const gcx = Math.round(to.x / step);
+  const gcy = Math.round(to.y / step);
   if (scx === gcx && scy === gcy) return [to];
   if (scx < 0 || scx >= pgW || scy < 0 || scy >= pgH) return [];
   const startIdx = scx * pgH + scy;
-  const walkable = getWalkableMask(grid, collisionRadius);
+  const walkable = getWalkableMask(grid, collisionRadius, step);
 
   const total = pgW * pgH;
-  const gScore = new Float64Array(total);
-  gScore.fill(Infinity);
-  const cameFrom = new Int32Array(total);
-  cameFrom.fill(-1);
-  const closed = new Uint8Array(total);
-  // Track only the cells we've touched, so the "best partial path" fallback doesn't scan the
-  // whole grid.
-  const touched: number[] = [];
+  const sc = getScratch(total);
+  const gen = ++astarGen;
+  const { gScore, cameFrom, stamp, closedStamp, touched, heap } = sc;
+  heap.clear();
+  let tCount = 0;
 
-  gScore[startIdx] = 0;
-  touched.push(startIdx);
-  const open = new MinHeap(64);
-  open.push(heuristic(scx * STEP, scy * STEP, gcx * STEP, gcy * STEP), startIdx);
+  stamp[startIdx] = gen; gScore[startIdx] = 0; cameFrom[startIdx] = -1;
+  touched[tCount++] = startIdx;
+  const gx = gcx * step, gy = gcy * step;
+  heap.push(heuristic(scx * step, scy * step, gx, gy), startIdx);
 
   let explored = 0;
-  while (open.size > 0) {
+  while (heap.size > 0) {
     if (++explored > maxNodes) break;
-    const curIdx = open.popIdx();
-    if (closed[curIdx]) continue;
-    closed[curIdx] = 1;
+    const curIdx = heap.popIdx();
+    if (closedStamp[curIdx] === gen) continue;
+    closedStamp[curIdx] = gen;
     const cx = (curIdx / pgH) | 0;
     const cy = curIdx - cx * pgH;
     if (cx === gcx && cy === gcy) {
-      return reconstructPath(cameFrom, curIdx, pgH, to);
+      return reconstructPath(cameFrom, curIdx, pgH, step, to);
     }
     const currentG = gScore[curIdx]!;
-    const px = cx * STEP, py = cy * STEP;
     for (let i = 0; i < NEIGHBOR_COUNT; i++) {
-      const nx = px + NDX[i]!;
-      const ny = py + NDY[i]!;
-      const ncx = nx / STEP | 0;
-      const ncy = ny / STEP | 0;
+      const ncx = cx + NOX[i]!;
+      const ncy = cy + NOY[i]!;
       if (ncx < 0 || ncx >= pgW || ncy < 0 || ncy >= pgH) continue;
       const nIdx = ncx * pgH + ncy;
-      if (closed[nIdx]) continue;
-      const tentG = currentG + NCOST[i]!;
+      if (closedStamp[nIdx] === gen) continue;
+      const tentG = currentG + NOC[i]! * step;
       if (tentG > maxDistance) continue;
-      if (tentG >= gScore[nIdx]!) continue;
+      const known = stamp[nIdx] === gen ? gScore[nIdx]! : Infinity;
+      if (tentG >= known) continue;
 
       if (!walkable[nIdx]) continue;
 
-      if (gScore[nIdx] === Infinity) touched.push(nIdx);
-      gScore[nIdx] = tentG;
-      cameFrom[nIdx] = curIdx;
-      open.push(tentG + heuristic(nx, ny, gcx * STEP, gcy * STEP), nIdx);
+      if (stamp[nIdx] !== gen) touched[tCount++] = nIdx;
+      stamp[nIdx] = gen; gScore[nIdx] = tentG; cameFrom[nIdx] = curIdx;
+      heap.push(tentG + heuristic(ncx * step, ncy * step, gx, gy), nIdx);
     }
   }
 
   // No path — best partial: closest touched cell by heuristic to goal.
   let bestIdx = startIdx;
-  let bestD = heuristic(scx * STEP, scy * STEP, gcx * STEP, gcy * STEP);
-  for (let i = 0; i < touched.length; i++) {
+  let bestD = heuristic(scx * step, scy * step, gx, gy);
+  for (let i = 0; i < tCount; i++) {
     const k = touched[i]!;
     const cx = (k / pgH) | 0;
     const cy = k - cx * pgH;
-    const d = heuristic(cx * STEP, cy * STEP, gcx * STEP, gcy * STEP);
+    const d = heuristic(cx * step, cy * step, gx, gy);
     if (d < bestD) { bestD = d; bestIdx = k; }
   }
   if (bestIdx === startIdx) return [];
-  return reconstructPath(cameFrom, bestIdx, pgH, null);
+  return reconstructPath(cameFrom, bestIdx, pgH, step, null);
 }
 
 function reconstructPath(
   cameFrom: Int32Array,
   endIdx: number,
   pgH: number,
+  step: number,
   exactGoal: Vec2 | null,
 ): Vec2[] {
   const idxs: number[] = [];
@@ -250,7 +293,7 @@ function reconstructPath(
     const k = idxs[i]!;
     const cx = (k / pgH) | 0;
     const cy = k - cx * pgH;
-    path[i] = { x: cx * STEP, y: cy * STEP };
+    path[i] = { x: cx * step, y: cy * step };
   }
   if (exactGoal && path.length > 0) path[path.length - 1] = exactGoal;
   return path;
@@ -280,25 +323,34 @@ export function pathfindFlood(
   entities: ReadonlyMap<string, Entity>,
   selfId: string,
   maxDistance: number,
+  /** Node spacing override. The flood requires full-body clearance (collisionRadius) at every cell,
+   *  so it never threads sub-body corridors regardless of step — callers that only need reachable
+   *  destinations (e.g. move-candidate generation, deduped to ~8px) pass a coarser step to settle far
+   *  fewer cells with identical post-dedup results. Defaults to the collision cellSize. */
+  stepOverride?: number,
 ): FloodResult {
-  const { pgW, pgH } = pgDims(grid);
-  const scx = Math.round(from.x / STEP);
-  const scy = Math.round(from.y / STEP);
+  const step = stepOverride ?? pathStep(grid);
+  const { pgW, pgH } = pgDims(grid, step);
+  const scx = Math.round(from.x / step);
+  const scy = Math.round(from.y / step);
   const total = pgW * pgH;
+  // gScore must outlive this call (it's captured by the returned FloodResult), so it can't use the
+  // shared A* scratch. But we skip the O(N) Infinity fill: a `seen` flag (zero-initialised) marks
+  // which cells hold a real score, so unseen cells read as Infinity without ever being written.
   const gScore = new Float64Array(total);
-  gScore.fill(Infinity);
+  const seen = new Uint8Array(total);
   const closed = new Uint8Array(total);
   const touched: number[] = [];
   const startIdx = scx * pgH + scy;
   if (scx < 0 || scx >= pgW || scy < 0 || scy >= pgH) {
-    return makeFloodResult(gScore, startIdx, touched, pgH, from, buildBlockers(entities, selfId, collisionRadius));
+    return makeFloodResult(gScore, seen, startIdx, touched, pgH, step, from, buildBlockers(entities, selfId, collisionRadius));
   }
-  gScore[startIdx] = 0;
+  gScore[startIdx] = 0; seen[startIdx] = 1;
   touched.push(startIdx);
   // Blockers are NOT used during expansion (entities don't block transit). They're checked only
   // when selecting the endpoint in `pathTo`.
   const blockers = buildBlockers(entities, selfId, collisionRadius);
-  const walkable = getWalkableMask(grid, collisionRadius);
+  const walkable = getWalkableMask(grid, collisionRadius, step);
 
   const open = new MinHeap(64);
   open.push(0, startIdx);
@@ -310,41 +362,39 @@ export function pathfindFlood(
     const curG = gScore[curIdx]!;
     const cx = (curIdx / pgH) | 0;
     const cy = curIdx - cx * pgH;
-    const px = cx * STEP, py = cy * STEP;
     for (let i = 0; i < NEIGHBOR_COUNT; i++) {
-      const tentG = curG + NCOST[i]!;
+      const tentG = curG + NOC[i]! * step;
       if (tentG > maxDistance) continue;
-      const nx = px + NDX[i]!;
-      const ny = py + NDY[i]!;
-      const ncx = nx / STEP | 0;
-      const ncy = ny / STEP | 0;
+      const ncx = cx + NOX[i]!;
+      const ncy = cy + NOY[i]!;
       if (ncx < 0 || ncx >= pgW || ncy < 0 || ncy >= pgH) continue;
       const nIdx = ncx * pgH + ncy;
       if (closed[nIdx]) continue;
-      if (tentG >= gScore[nIdx]!) continue;
+      if (seen[nIdx] && tentG >= gScore[nIdx]!) continue;
 
       if (!walkable[nIdx]) continue;
 
-      if (gScore[nIdx] === Infinity) touched.push(nIdx);
+      if (!seen[nIdx]) touched.push(nIdx);
+      seen[nIdx] = 1;
       gScore[nIdx] = tentG;
       open.push(tentG, nIdx);
     }
   }
 
-  return makeFloodResult(gScore, startIdx, touched, pgH, from, blockers);
+  return makeFloodResult(gScore, seen, startIdx, touched, pgH, step, from, blockers);
 }
 
 function makeFloodResult(
-  gScore: Float64Array, startIdx: number, touched: number[], pgH: number, from: Vec2, blockers: BlockerArrays,
+  gScore: Float64Array, seen: Uint8Array, startIdx: number, touched: number[], pgH: number, step: number, from: Vec2, blockers: BlockerArrays,
 ): FloodResult {
   return {
     gScore,
     startIdx,
     pathTo(target: Vec2, maxDist: number): Vec2 | null {
-      const tcx = Math.round(target.x / STEP);
-      const tcy = Math.round(target.y / STEP);
+      const tcx = Math.round(target.x / step);
+      const tcy = Math.round(target.y / step);
       const tIdx = tcx * pgH + tcy;
-      const exactG = tIdx >= 0 && tIdx < gScore.length ? gScore[tIdx] : Infinity;
+      const exactG = tIdx >= 0 && tIdx < gScore.length && seen[tIdx] ? gScore[tIdx] : Infinity;
       // Exact-goal path is fine only if the endpoint isn't on top of another entity.
       if (exactG !== undefined && exactG <= maxDist && !overlapsBlocker(target.x, target.y, blockers)) {
         if (distance(target, from) < 1) return null;
@@ -358,19 +408,121 @@ function makeFloodResult(
         if (gScore[k]! > maxDist) continue;
         const cx = (k / pgH) | 0;
         const cy = k - cx * pgH;
-        const px = cx * STEP, py = cy * STEP;
+        const px = cx * step, py = cy * step;
         if (overlapsBlocker(px, py, blockers)) continue;
-        const d = heuristic(px, py, tcx * STEP, tcy * STEP);
+        const d = heuristic(px, py, tcx * step, tcy * step);
         if (d < bestD) { bestD = d; bestIdx = k; }
       }
       if (bestIdx < 0) return null;
       const bcx = (bestIdx / pgH) | 0;
       const bcy = bestIdx - bcx * pgH;
-      const bx = bcx * STEP, by = bcy * STEP;
+      const bx = bcx * step, by = bcy * step;
       if (distance({ x: bx, y: by }, from) < 1) return null;
       return { x: bx, y: by };
     },
   };
+}
+
+/** Walk `path` from `start`, spending up to `budget` of arc-length, and return the point where the
+ *  budget runs out (or the path's end, if it's shorter than the budget). This is the agent's desired
+ *  stopping point before any legality adjustment. */
+function clipPathToBudget(start: Vec2, path: Vec2[], budget: number): Vec2 {
+  let remaining = budget;
+  let current = start;
+  for (const waypoint of path) {
+    const segDist = distance(current, waypoint);
+    if (segDist <= remaining) {
+      remaining -= segDist;
+      current = waypoint;
+    } else {
+      const ratio = remaining / segDist;
+      return {
+        x: current.x + (waypoint.x - current.x) * ratio,
+        y: current.y + (waypoint.y - current.y) * ratio,
+      };
+    }
+  }
+  return current;
+}
+
+/** The authoritative "may an agent of `radius` end its move here" predicate, evaluated locally:
+ *  clear of walls, inside bounds, and not overlapping another entity. Mirrors `canEntityOccupy`. */
+function isLegalStop(grid: GridState, radius: number, p: Vec2, blockers: BlockerArrays): boolean {
+  return (
+    isPositionWalkable(grid, p, radius) &&
+    isWithinBounds(grid, p, radius) &&
+    !overlapsBlocker(p.x, p.y, blockers)
+  );
+}
+
+/**
+ * `desired` is illegal at full radius (it sits against a wall and/or on an entity). Flood outward
+ * from it at the collision grid's *own* resolution (full precision — no 16px snapping) and return
+ * the nearest cell-center that is a legal full-radius stop AND within straight-line `budget` of
+ * `start` (so the move resolver won't reject it). Rings expand small→large and the Euclidean-nearest
+ * legal cell within the first non-empty ring wins, so the agent bumps just clear of the wall / to the
+ * nearer doorway mouth rather than rewinding. Returns `null` only if no legal stop exists within
+ * `budget` of the desired point.
+ *
+ * Cost is intentionally unoptimized for now: every candidate runs the full continuous occupancy
+ * check, and the flood spans up to `budget` px at cell resolution.
+ */
+function nudgeToLegal(
+  grid: GridState, radius: number, start: Vec2, desired: Vec2, budget: number, blockers: BlockerArrays,
+): Vec2 | null {
+  const cs = grid.cellSize;
+  const half = cs / 2;
+  const dcx = Math.floor(desired.x / cs);
+  const dcy = Math.floor(desired.y / cs);
+  const maxRing = Math.ceil(budget / cs);
+  const maxD2 = budget * budget;
+  for (let ring = 0; ring <= maxRing; ring++) {
+    let best: Vec2 | null = null;
+    let bestD2 = Infinity;
+    for (let ox = -ring; ox <= ring; ox++) {
+      for (let oy = -ring; oy <= ring; oy++) {
+        if (Math.max(Math.abs(ox), Math.abs(oy)) !== ring) continue; // ring perimeter only
+        const p = { x: (dcx + ox) * cs + half, y: (dcy + oy) * cs + half };
+        const sdx = p.x - start.x, sdy = p.y - start.y;
+        if (sdx * sdx + sdy * sdy > maxD2) continue; // out of move budget
+        if (!isLegalStop(grid, radius, p, blockers)) continue; // walls + bounds + entities, full precision
+        const edx = p.x - desired.x, edy = p.y - desired.y;
+        const d2 = edx * edx + edy * edy;
+        if (d2 < bestD2) { bestD2 = d2; best = p; }
+      }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+/**
+ * Pick this turn's move destination toward `target`, in three steps:
+ *   1. Pathfind the *whole* route to the target (point-sized transit, no distance cap) and keep the
+ *      waypoints. Committing to the full route is what stops the unit walking into maze dead ends.
+ *   2. Walk `budget` (the move distance) along that path to get the desired stopping point.
+ *   3. Validate the stop at full body radius; if it's illegal, flood-fill out to the nearest legal
+ *      position (`nudgeToLegal`).
+ * Returns `null` if no legal forward progress is possible. The route is recomputed each turn (the
+ * target moves), so waypoints aren't cached across turns.
+ */
+/**
+ * Route to `target`, coarse-first: try a cheap COARSE_STEP search first and only fall back to the
+ * fine collision-resolution search when coarse can't actually reach the target — i.e. the only way
+ * there is through a corridor narrower than the coarse step. On open maps (the common case) coarse
+ * succeeds and matches the game's historical 16px behaviour; thin-corridor mazes still get the fine
+ * path. Gated to fine grids (cellSize ≤ ¼ COARSE_STEP) so the coarse pre-pass only runs where it
+ * actually saves work.
+ */
+function routeTo(from: Vec2, target: Vec2, grid: GridState): Vec2[] {
+  const fine = pathStep(grid);
+  if (fine * 4 <= COARSE_STEP) {
+    const coarse = pathfind(from, target, grid, TRANSIT_RADIUS, MAX_PATHFIND_NODES, Infinity, COARSE_STEP);
+    if (coarse.length > 0 && distance(coarse[coarse.length - 1]!, target) <= COARSE_STEP * 1.5) {
+      return coarse; // coarse search reached the target — no need for the fine grid
+    }
+  }
+  return pathfind(from, target, grid, TRANSIT_RADIUS, MAX_PATHFIND_NODES, Infinity);
 }
 
 export function pathfindMove(
@@ -381,40 +533,22 @@ export function pathfindMove(
   maxDistance?: number,
 ): Vec2 | null {
   const moveAbility = entity.abilities.find(a => a.kind === "move");
-  const remainingInitial = maxDistance ?? (moveAbility ? (moveAbility as import("../core/types.js").MoveAbility).distance : 0);
-  // Add a small slack so the search can still find a path that goes slightly around an obstacle —
-  // we clip to the actual budget below. Without slack, going around a corner can be pruned away.
-  const searchCap = remainingInitial * 1.5;
-  const path = pathfind(
-    entity.position, target, grid,
-    entity.collisionRadius, 2000, searchCap,
-  );
+  const budget = maxDistance ?? (moveAbility ? (moveAbility as import("../core/types.js").MoveAbility).distance : 0);
+
+  // 1. Full route to the target (coarse-first; falls back to fine for thin-corridor maps). No
+  //    distance cap so the path reflects the true way around the maze, not a myopic best-partial.
+  const path = routeTo(entity.position, target, grid);
   if (path.length === 0) return null;
 
-  // Entities don't block transit, only endpoints — so walk the path normally but only commit a
-  // waypoint as `bestPoint` if it's entity-free. Keep advancing `current` either way.
+  // 2. Advance the move budget along that path.
+  const desired = clipPathToBudget(entity.position, path, budget);
   const blockers = buildBlockers(entities, entity.id, entity.collisionRadius);
-  let remaining = remainingInitial;
-  let current = entity.position;
-  let bestPoint: Vec2 = entity.position;
 
-  for (const waypoint of path) {
-    const segDist = distance(current, waypoint);
-    if (segDist <= remaining) {
-      remaining -= segDist;
-      if (!overlapsBlocker(waypoint.x, waypoint.y, blockers)) bestPoint = waypoint;
-      current = waypoint;
-    } else {
-      const ratio = remaining / segDist;
-      const clip = {
-        x: current.x + (waypoint.x - current.x) * ratio,
-        y: current.y + (waypoint.y - current.y) * ratio,
-      };
-      if (!overlapsBlocker(clip.x, clip.y, blockers)) bestPoint = clip;
-      break;
-    }
+  // 3. Commit the stop if it's already legal at full radius; otherwise flood-fill to the nearest legal.
+  if (isLegalStop(grid, entity.collisionRadius, desired, blockers)) {
+    return distance(desired, entity.position) < 1 ? null : desired;
   }
-
-  if (distance(bestPoint, entity.position) < 1) return null;
-  return bestPoint;
+  const legal = nudgeToLegal(grid, entity.collisionRadius, entity.position, desired, budget, blockers);
+  if (!legal || distance(legal, entity.position) < 1) return null;
+  return legal;
 }

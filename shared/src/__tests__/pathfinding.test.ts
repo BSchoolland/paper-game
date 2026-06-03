@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { pathfind, pathfindMove, pathfindFlood } from "../map/pathfinding.js";
-import { createGrid, setBlocked } from "../map/collision-grid.js";
+import { createGrid, setBlocked, isPositionWalkable } from "../map/collision-grid.js";
 import { makeEntity } from "./test-helpers.js";
 
 // All tests use a 40×40 collision grid with cellSize=16 → 640×640 world. The pathfinder snaps
@@ -152,6 +152,45 @@ describe("pathfind", () => {
     // The chosen destination must not overlap the ally.
     const distToAlly = Math.hypot(dest!.x - ally.position.x, dest!.y - ally.position.y);
     expect(distToAlly).toBeGreaterThanOrEqual(12 + 18); // self radius + ally radius
+  });
+
+  test("narrow gap: agent squeezes through a gap too tight to stop in, lands legally past it", () => {
+    // Fine collision grid (cellSize 4) like the real game, so geometry isn't quantized to the
+    // pathfinder's 16-px node step. Full-height wall 20px thick (cx 78..82, x 312..332) with a
+    // 20px-tall gap carved at y 312..332. A radius-12 disc (24px) can't fit in the 20px gap in
+    // either axis — it can't stop inside — but at the smaller transit radius it can route through
+    // and must then stop on the far side. Strict-radius A* would find no route at all here.
+    let grid = createGrid(160, 160, 4);
+    for (let cx = 78; cx <= 82; cx++) {
+      for (let cy = 0; cy < 160; cy++) {
+        if (cy >= 78 && cy <= 82) continue; // carve the gap
+        grid = setBlocked(grid, cx, cy);
+      }
+    }
+    const self = makeEntity("self", 288, 320, "red", { collisionRadius: 12 }); // left of the wall
+    const target = makeEntity("target", 400, 320, "blue", { collisionRadius: 12 }); // right of the wall
+    const dest = pathfindMove(self, target.position, grid, new Map([["self", self], ["target", target]]), 200);
+    expect(dest).not.toBeNull();
+    // Made it through to the far side of the 20px-thick wall (east face at x=332)...
+    expect(dest!.x).toBeGreaterThan(332);
+    // ...and the chosen stop is a legal full-disc position (clear of the wall).
+    expect(isPositionWalkable(grid, dest!, 12)).toBe(true);
+  });
+
+  test("wall-hugging endpoint is nudged out, not rewound to the start", () => {
+    let grid = createGrid(40, 40, 16);
+    // Horizontal wall along cy=18 (y≈288). Target sits just on the far side so the straight path
+    // runs into the wall; the budget endpoint lands against it and must bump clear, while keeping
+    // most of the horizontal progress (not rewinding to the start).
+    for (let cx = 0; cx < 40; cx++) grid = setBlocked(grid, cx, 18);
+    const self = makeEntity("self", 100, 320, "red", { collisionRadius: 12 });
+    const target = makeEntity("target", 400, 320, "blue", { collisionRadius: 12 });
+    const dest = pathfindMove(self, target.position, grid, new Map([["self", self], ["target", target]]), 200);
+    expect(dest).not.toBeNull();
+    // Legal stop, clear of the wall.
+    expect(isPositionWalkable(grid, dest!, 12)).toBe(true);
+    // Real horizontal progress toward the target — the nudge didn't collapse the move.
+    expect(dest!.x - self.position.x).toBeGreaterThan(40);
   });
 
   test("pathfindFlood: respects walls — does not flood through them", () => {
