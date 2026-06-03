@@ -1,4 +1,4 @@
-import type { AbilityDefinition, AnimSet, EntityId, GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord, ItemDefinition, AttachmentData } from "shared";
+import type { AbilityDefinition, AnimSet, EntityId, GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord, ItemDefinition, AttachmentData, SeatId } from "shared";
 import {
   resolveAction,
   isActionLegal,
@@ -21,7 +21,8 @@ import {
 import { FIGHTER_TEMPLATE } from "../../hero-arena/src/t2/loadouts.js";
 import { makeSovereign, FIGHTER_WEIGHTS, TANK_WEIGHTS, RANGED_WEIGHTS, PRESETS } from "../../hero-arena/agents/agent-02/sovereign.js";
 import type { HeroController } from "../../hero-arena/src/types.js";
-import { AiTurnRunner, type AiStepResult } from "./ai-turn-runner.js";
+import { AiTurnRunner, type AiStepResult, type RunnerMode } from "./ai-turn-runner.js";
+import type { SeatBuildSpec } from "./room.js";
 
 export type { AiStepResult } from "./ai-turn-runner.js";
 
@@ -34,7 +35,7 @@ export type SessionMode = "pvp" | "pve" | "duel";
 export class EncounterSession {
   state: GameState;
   readonly heroBrains = new Map<EntityId, HeroController>();
-  private turnCounts: Record<TeamId, number> = { red: 0, blue: 0 };
+  private turnIndex = 0;
   private aiRunner: AiTurnRunner;
 
   private constructor(state: GameState) {
@@ -72,7 +73,15 @@ export class EncounterSession {
       } else {
         await loadCollisionGrid(map.grid, map.mapDefinition.objects, dimension.structures);
       }
-      const entities = placeEncounterEntities(encounter, map.grid, itemAbilities, animSet, equipped, attachments);
+      const spec: SeatBuildSpec = {
+        seatId: "s0" as SeatId,
+        heroEntityId: "red1",
+        controllerId: "s0" as SeatId,
+        animSet: animSet ?? "sword",
+        equipped: equipped ?? [],
+        attachments: attachments ?? {},
+      };
+      const entities = placeEncounterEntities(encounter, map.grid, [spec]);
       return new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
     }
 
@@ -111,6 +120,32 @@ export class EncounterSession {
     return new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
   }
 
+  /**
+   * Co-op encounter: one red hero per seat (from each seat's loadout snapshot) vs the generated
+   * blue enemies. This is the sole encounter path post-Phase-6; `create()` above is the legacy
+   * pvp/duel/pve path kept until the index.ts rewrite deletes it.
+   */
+  static async createEncounter(opts: {
+    seats: readonly SeatBuildSpec[];
+    hexType: EncounterType;
+    hexCoord: HexCoord;
+    runId: number;
+    dimensionId: number;
+  }): Promise<EncounterSession> {
+    const { seats, hexType, hexCoord, runId, dimensionId } = opts;
+    const dimension = loadDimension(dimensionId)!;
+    setTemplateRegistry(loadEnemyTemplateRegistry(dimensionId));
+    const encounter = generateEncounter(hexType, dimension, hexCoord.q, hexCoord.r, runId);
+    const map = buildEncounterMap(encounter);
+    if (map.mapDefinition.mapImage) {
+      if (map.mapDefinition.maskImage) await loadMaskCollision(map.grid, map.mapDefinition.maskImage);
+    } else {
+      await loadCollisionGrid(map.grid, map.mapDefinition.objects, dimension.structures);
+    }
+    const entities = placeEncounterEntities(encounter, map.grid, seats);
+    return new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
+  }
+
   serialize(): object {
     return serializeGameState(this.state);
   }
@@ -129,20 +164,35 @@ export class EncounterSession {
   }
 
 
-  startAiTurn(aiTeam: TeamId): void {
-    this.turnCounts[aiTeam]++;
-    this.aiRunner.start(aiTeam, this.turnCounts[aiTeam]);
+  startAiTurn(modeOrTeam: TeamId | RunnerMode): void {
+    const mode: RunnerMode = typeof modeOrTeam === "string" ? { kind: "enemyPhase", team: modeOrTeam } : modeOrTeam;
+    this.turnIndex++;
+    this.aiRunner.start(mode, this.turnIndex);
+  }
+
+  /** Drive a single player-team bot hero during the player phase (e.g. a mid-phase disconnect, R9). */
+  runHero(entityId: EntityId, humanHeroIds: ReadonlySet<EntityId>): void {
+    this.startAiTurn({ kind: "playerBots", entityIds: [entityId], humanHeroIds });
+  }
+
+  /** Abort a reclaimed entity mid-burst (ruling R12). */
+  abortAi(entityId: EntityId): void {
+    this.aiRunner.abort(entityId);
   }
 
   stepAi(): AiStepResult {
     return this.aiRunner.step();
   }
 
-  resolveDefend(defenseResults: Record<string, number>): AiStepResult {
-    return this.aiRunner.resolveDefend(defenseResults);
+  resolveDefend(defenseResults: Record<string, number>, roundId?: string): AiStepResult {
+    return this.aiRunner.resolveDefend(defenseResults, roundId);
   }
 
   get pendingDefend(): boolean {
     return this.aiRunner.hasPendingDefend();
+  }
+
+  get pendingDefendRoundId(): string | null {
+    return this.aiRunner.pendingRoundId();
   }
 }

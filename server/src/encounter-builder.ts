@@ -1,8 +1,9 @@
-import type { AbilityDefinition, AnimSet, Entity, GridState, ItemDefinition, AttachmentData } from "shared";
-import { UNIT_TEMPLATES, PLAYER_INNATE_ABILITIES, makeEntity, findWalkablePosition } from "shared";
+import type { Entity, GridState, ItemDefinition, AttachmentData, Vec2 } from "shared";
+import { UNIT_TEMPLATES, PLAYER_INNATE_ABILITIES, makeEntity, findWalkablePosition, getItemAbilities } from "shared";
 import { createCombatGrid } from "shared";
 import type { GeneratedEncounter } from "shared";
 import type { MapDefinition } from "shared";
+import type { SeatBuildSpec } from "./room.js";
 
 export interface EncounterMap {
   readonly grid: GridState;
@@ -18,28 +19,31 @@ export function buildEncounterMap(encounter: GeneratedEncounter): EncounterMap {
   return { grid, mapDefinition };
 }
 
+/**
+ * Build the combat entities for a party: one red hero per seat (built from that seat's loadout)
+ * plus the encounter's blue enemies. Each hero's `controllerId` is stamped via spread (ruling
+ * R24) so makeEntity's many call sites stay untouched; item abilities are derived from the seat's
+ * equipped items exactly as the live game does.
+ */
 export function placeEncounterEntities(
   encounter: GeneratedEncounter,
   grid: GridState,
-  itemAbilities?: readonly AbilityDefinition[],
-  animSet?: AnimSet,
-  equipped?: readonly ItemDefinition[],
-  attachments?: Record<string, AttachmentData>,
+  seats: readonly SeatBuildSpec[],
 ): Map<string, Entity> {
   const entities = new Map<string, Entity>();
-  const hasItemAttack = itemAbilities?.some(a => a.kind === "attack") ?? false;
-  const innate = hasItemAttack
-    ? PLAYER_INNATE_ABILITIES.filter(a => a.id !== "punch")
-    : [...PLAYER_INNATE_ABILITIES];
-  const allAbilities = [...innate, ...(itemAbilities ?? [])];
-  const playerTemplate = { ...UNIT_TEMPLATES.player, abilities: allAbilities };
-  const playerEntity = placeEntity("red1", "Player", 120, 300, "red", playerTemplate, grid, equipped, attachments);
-  entities.set("red1", { ...playerEntity, playerAnimSet: animSet ?? "sword" });
 
-  const enemyStartX = 500;
-  const enemySpreadX = 200;
-  const enemyStartY = 150;
-  const enemySpreadY = 350;
+  const formation = playerFormation(seats.length);
+  seats.forEach((seat, i) => {
+    const itemAbilities = getItemAbilities(seat.equipped);
+    const hasItemAttack = itemAbilities.some((a) => a.kind === "attack");
+    const innate = hasItemAttack
+      ? PLAYER_INNATE_ABILITIES.filter((a) => a.id !== "punch")
+      : [...PLAYER_INNATE_ABILITIES];
+    const template = { ...UNIT_TEMPLATES.player, abilities: [...innate, ...itemAbilities] };
+    const spawn = formation[i]!;
+    const hero = placeEntity(seat.heroEntityId, "Player", spawn.x, spawn.y, "red", template, grid, seat.equipped, seat.attachments);
+    entities.set(seat.heroEntityId, { ...hero, playerAnimSet: seat.animSet, controllerId: seat.controllerId });
+  });
 
   for (let i = 0; i < encounter.enemies.length; i++) {
     const template = encounter.enemies[i]!;
@@ -47,6 +51,18 @@ export function placeEncounterEntities(
   }
 
   return entities;
+}
+
+/** Staggered column of spawn points near the left edge, centred vertically. */
+function playerFormation(n: number): Vec2[] {
+  const baseX = 120;
+  const baseY = 300;
+  const spacing = 72;
+  const positions: Vec2[] = [];
+  for (let i = 0; i < n; i++) {
+    positions.push({ x: baseX + (i % 2) * 48, y: baseY + Math.round((i - (n - 1) / 2) * spacing) });
+  }
+  return positions;
 }
 
 function placeEntity(
