@@ -7,6 +7,7 @@ import {
   createMapObjects,
   getBottomY,
 } from "./grid-renderer.js";
+import { assetUrl } from "./asset-url.js";
 import { EntityManager } from "./entity-manager.js";
 import { drawTargetingPreview, drawEffectPreview, drawIncomingAttackPreview } from "./targeting-renderer.js";
 import { drawZones } from "./zone-renderer.js";
@@ -400,8 +401,9 @@ export class GameRenderer {
     if (!state) return;
     const grid = state.grid;
 
+    const mapImage = state.mapDefinition.mapImage;
     this.backgroundLayer = new Container();
-    this.backgroundLayer.addChild(createBackground(grid));
+    this.backgroundLayer.addChild(createBackground(grid, mapImage ? assetUrl(mapImage) : undefined));
     this.worldContainer.addChild(this.backgroundLayer);
 
     // Persistent zone discs sit on the ground, under entities.
@@ -409,7 +411,8 @@ export class GameRenderer {
 
     this.sortableLayer = new Container();
     this.sortableLayer.sortableChildren = true;
-    this.mapObjectSprites = createMapObjects(state.mapDefinition.objects, grid);
+    // Single-image maps carry their structures baked in — skip object compositing.
+    this.mapObjectSprites = mapImage ? [] : createMapObjects(state.mapDefinition.objects, grid);
     for (const sprite of this.mapObjectSprites) {
       sprite.zIndex = getBottomY(sprite);
       this.sortableLayer.addChild(sprite);

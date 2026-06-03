@@ -10,6 +10,11 @@ export interface MapObjectPlacement {
 export interface MapDefinition {
   readonly seed: number;
   readonly objects: readonly MapObjectPlacement[];
+  /** Per-encounter background image (public path). When set, the client renders
+   *  this single image instead of compositing `objects`. */
+  readonly mapImage?: string;
+  /** Collision mask image (public path). Server-side use only. */
+  readonly maskImage?: string;
 }
 
 export interface PlaceableObject {

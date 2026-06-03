@@ -22,6 +22,7 @@ export * from "./combat/movement.js";
 export * from "./encounter/encounter.js";
 export * from "./encounter/encounter-profiles.js";
 export * from "./encounter/dimension.js";
+export * from "./encounter/map-manifest.js";
 export * from "./encounter/entity-factory.js";
 export * from "./encounter/effects.js";
 export * from "./maps/scenarios.js";

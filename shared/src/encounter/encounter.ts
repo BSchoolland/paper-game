@@ -21,9 +21,35 @@ function scoreEnemy(
   return score;
 }
 
+/** The map for an encounter is one of two sources, never both. */
+export type EncounterMapSource =
+  | { readonly kind: "image"; readonly mapImage: string; readonly maskImage?: string }
+  | { readonly kind: "structures"; readonly structures: readonly MapObjectPlacement[] };
+
 export interface GeneratedEncounter {
   readonly enemies: readonly UnitTemplate[];
-  readonly structures: readonly MapObjectPlacement[];
+  readonly map: EncounterMapSource;
+}
+
+/**
+ * Pick a pre-generated map for this encounter type, deterministic per hex.
+ * Returns {} when the dimension has no maps for the type (legacy fallback).
+ */
+export function selectMap(
+  hexType: EncounterType,
+  dimension: Dimension,
+  x: number,
+  y: number
+): { mapImage?: string; maskImage?: string } {
+  const pool = dimension.maps?.[hexType];
+  if (!pool || pool.length === 0) return {};
+  const rng = Rng.seeded(x, y);
+  const mapImage = pool[Math.floor(rng.next() * pool.length)]!;
+  // Only claim a mask when the dimension actually has masks for this type
+  // (maps can be generated without collision via --no-collision).
+  const hasMasks = (dimension.masks?.[hexType]?.length ?? 0) > 0;
+  const maskImage = hasMasks ? mapImage.replace(/\.png$/i, ".mask.png") : undefined;
+  return { mapImage, maskImage };
 }
 
 export function generateEncounter(
@@ -38,9 +64,15 @@ export function generateEncounter(
   const enemyRng = Rng.perRun(runId, x, y);
 
   const enemies = rollEnemies(dimension.enemies, profile, enemyRng);
-  const structures = rollStructures(dimension.structures, profile, layoutRng);
 
-  return { enemies, structures };
+  // One map source, chosen here: a pre-generated single image when the dimension
+  // has maps for this type, otherwise the legacy structure roll.
+  const { mapImage, maskImage } = selectMap(hexType, dimension, x, y);
+  const map: EncounterMapSource = mapImage
+    ? { kind: "image", mapImage, maskImage }
+    : { kind: "structures", structures: rollStructures(dimension.structures, profile, layoutRng) };
+
+  return { enemies, map };
 }
 
 function rollEnemies(

@@ -13,7 +13,7 @@ import {
   findWalkablePosition,
 } from "shared";
 import { loadDimension, loadEnemyTemplateRegistry } from "./db.js";
-import { loadCollisionGrid } from "./collision-loader.js";
+import { loadCollisionGrid, loadMaskCollision } from "./collision-loader.js";
 import {
   buildEncounterMap,
   placeEncounterEntities,
@@ -64,7 +64,14 @@ export class EncounterSession {
       setTemplateRegistry(registry);
       const encounter = generateEncounter(hexType, dimension, hexCoord.q, hexCoord.r, runId);
       const map = buildEncounterMap(encounter);
-      await loadCollisionGrid(map.grid, map.mapDefinition.objects, dimension.structures);
+      if (map.mapDefinition.mapImage) {
+        // Single-image map: collide against its mask if one exists, else open field.
+        if (map.mapDefinition.maskImage) {
+          await loadMaskCollision(map.grid, map.mapDefinition.maskImage);
+        }
+      } else {
+        await loadCollisionGrid(map.grid, map.mapDefinition.objects, dimension.structures);
+      }
       const entities = placeEncounterEntities(encounter, map.grid, itemAbilities, animSet, equipped, attachments);
       return new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
     }

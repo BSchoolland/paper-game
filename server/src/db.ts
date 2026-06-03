@@ -1,6 +1,20 @@
 import { Database } from "bun:sqlite";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { HexCoord, HexStatus, UnitTemplate, ItemDefinition } from "shared";
-import type { StructureEntry, Dimension } from "shared";
+import type { StructureEntry, Dimension, MapManifest } from "shared";
+
+const PUBLIC_DIR = resolve(import.meta.dir, "../../client/public");
+
+function loadMapManifest(dimId: number): MapManifest | null {
+  const p = resolve(PUBLIC_DIR, `sprites/maps/dimension-${dimId}/manifest.json`);
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, "utf-8")) as MapManifest;
+  } catch {
+    return null;
+  }
+}
 
 const db = new Database("hex-discovery.sqlite", { create: true });
 db.exec("PRAGMA busy_timeout = 30000");
@@ -171,6 +185,8 @@ export function loadDimension(dimensionId: number): Dimension | null {
     template_json: string;
   }[];
 
+  const manifest = loadMapManifest(dimensionId);
+
   return {
     id: `dimension-${row.id}`,
     name: row.name,
@@ -178,6 +194,8 @@ export function loadDimension(dimensionId: number): Dimension | null {
     hexDecorationsPath: row.hex_decorations_path,
     enemies: templates.map((t) => JSON.parse(t.template_json) as UnitTemplate),
     structures: JSON.parse(row.structures_json) as StructureEntry[],
+    maps: manifest?.maps,
+    masks: manifest?.masks,
   };
 }
 

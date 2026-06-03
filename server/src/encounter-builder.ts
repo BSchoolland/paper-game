@@ -11,10 +11,10 @@ export interface EncounterMap {
 
 export function buildEncounterMap(encounter: GeneratedEncounter): EncounterMap {
   const grid = createCombatGrid();
-  const mapDefinition: MapDefinition = {
-    seed: 0,
-    objects: encounter.structures,
-  };
+  const m = encounter.map;
+  const mapDefinition: MapDefinition = m.kind === "image"
+    ? { seed: 0, objects: [], mapImage: m.mapImage, maskImage: m.maskImage }
+    : { seed: 0, objects: m.structures };
   return { grid, mapDefinition };
 }
 

@@ -1,7 +1,7 @@
 import sharp from "sharp";
 import { resolve } from "path";
 import type { GridState, MapObjectPlacement, StructureEntry } from "shared";
-import { stampMapObjects } from "shared";
+import { stampMapObjects, CELL_WALL } from "shared";
 import type { AlphaImage } from "shared";
 
 const PUBLIC_DIR = resolve(import.meta.dir, "../../client/public");
@@ -54,4 +54,34 @@ export async function loadCollisionGrid(
   );
 
   stampMapObjects(grid, placements, (name) => imageCache.get(name) ?? null);
+}
+
+/**
+ * Stamp collision from a pre-generated mask image (white = non-walkable). The
+ * mask covers the same world as the grid; each grid cell samples the mask at the
+ * corresponding normalized position. Masked cells become walls.
+ */
+export async function loadMaskCollision(grid: GridState, maskPath: string): Promise<void> {
+  let raw;
+  try {
+    raw = await sharp(resolve(PUBLIC_DIR, maskPath))
+      .greyscale()
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+  } catch {
+    console.warn(`[collision] mask missing, encounter has no walls: ${maskPath}`);
+    return;
+  }
+  const { data, info } = raw;
+  const mw = info.width;
+  const mh = info.height;
+  for (let cy = 0; cy < grid.height; cy++) {
+    const my = Math.min(mh - 1, ((cy / grid.height) * mh) | 0);
+    for (let cx = 0; cx < grid.width; cx++) {
+      const mx = Math.min(mw - 1, ((cx / grid.width) * mw) | 0);
+      if (data[my * mw + mx]! > 127) {
+        grid.walls[cy * grid.width + cx] = CELL_WALL;
+      }
+    }
+  }
 }

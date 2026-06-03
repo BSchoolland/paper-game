@@ -32,3 +32,12 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # Finder (MacOS) folder config
 .DS_Store
+
+# Experiment/probe scratch images (reference/ canonical assets stay tracked)
+test-*.png
+crop-*.png
+collision-*.png
+mask-*.png
+overlay-*.png
+*-small.png
+test-output.png

@@ -52,13 +52,25 @@ export async function loadMapAssets(): Promise<void> {
   await Assets.load(entries);
 }
 
-export function createBackground(grid: GridState): Sprite {
+export function createBackground(grid: GridState, bgUrl?: string): Sprite {
   const worldW = grid.width * grid.cellSize;
   const worldH = grid.height * grid.cellSize;
-  const bgTex: Texture = Assets.get("map-background");
-  const bg = new Sprite(bgTex);
+  const loaded: Texture | undefined = bgUrl ? Assets.get(bgUrl) : Assets.get("map-background");
+  const bg = new Sprite(loaded ?? Texture.EMPTY);
   bg.width = worldW;
   bg.height = worldH;
+  // Fallback when not preloaded (e.g. replay): load async and swap in if the
+  // sprite is still alive (the scene may have rebuilt while loading).
+  if (bgUrl && !loaded) {
+    Assets.load(bgUrl)
+      .then((tex: Texture) => {
+        if (bg.destroyed) return;
+        bg.texture = tex;
+        bg.width = worldW;
+        bg.height = worldH;
+      })
+      .catch(() => {});
+  }
   return bg;
 }
 

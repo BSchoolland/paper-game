@@ -15,4 +15,9 @@ export interface Dimension {
   readonly hexDecorationsPath: string | null;
   readonly enemies: readonly UnitTemplate[];
   readonly structures: readonly StructureEntry[];
+  /** Pre-generated encounter maps, by encounter type. When present for a type,
+   *  the encounter uses a single-image map instead of rolling/placing structures. */
+  readonly maps?: Record<string, readonly string[]>;
+  /** Collision masks parallel to `maps` (same keys/order). */
+  readonly masks?: Record<string, readonly string[]>;
 }
