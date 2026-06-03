@@ -1,7 +1,7 @@
 import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, TeamId, Vec2, ZoneAbility } from "../core/types.js";
 import { distance, add, scale, normalize, length } from "../core/vec2.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
-import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
+import { canEntityOccupy } from "./movement.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { processEffects } from "../encounter/effects.js";
 import { getEffectiveDistance, getEffectiveRegen } from "./status-modifiers.js";
@@ -20,20 +20,6 @@ function checkWinner(state: GameState): TeamId | null {
   if (!hasRed) return "blue";
   if (!hasBlue) return "red";
   return null;
-}
-
-function entitiesOverlap(
-  pos: { x: number; y: number },
-  radius: number,
-  entities: ReadonlyMap<string, Entity>,
-  excludeId: string
-): boolean {
-  for (const e of entities.values()) {
-    if (e.id === excludeId || e.dead) continue;
-    const dist = distance(pos, e.position);
-    if (dist < radius + e.collisionRadius) return true;
-  }
-  return false;
 }
 
 const NO_CHANGE = (state: GameState): ActionResult => ({ state, events: [] });
@@ -60,12 +46,7 @@ function resolveMove(
   const maxDistance = getEffectiveDistance(entity, ability.distance);
   const dist = distance(entity.position, destination);
   if (dist > maxDistance + 0.01) return NO_CHANGE(state);
-  if (!isPositionWalkable(state.grid, destination, entity.collisionRadius))
-    return NO_CHANGE(state);
-  if (!isWithinBounds(state.grid, destination, entity.collisionRadius))
-    return NO_CHANGE(state);
-  if (entitiesOverlap(destination, entity.collisionRadius, state.entities, entityId))
-    return NO_CHANGE(state);
+  if (!canEntityOccupy(state, entity, destination)) return NO_CHANGE(state);
 
   const actualCost = getAbilityCost(ability, { distance: dist });
   if ((actualCost.red ?? 0) > entity.energy.red || (actualCost.blue ?? 0) > entity.energy.blue)

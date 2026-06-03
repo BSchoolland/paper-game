@@ -1,5 +1,5 @@
 import type { AttackAbility, Vec2 } from "shared";
-import { distance, sub, clampToMovementRange } from "shared";
+import { distance, sub, clampToMovementRange, canEntityOccupy } from "shared";
 import type { ClientState } from "../state/client-state.js";
 import type { GameRenderer } from "../renderer/game-renderer.js";
 import { TimingBar } from "../renderer/timing-bar.js";
@@ -70,6 +70,10 @@ export class InputManager {
         const entity = state.entities.get(this.clientState.selectedEntityId);
         if (entity && this.clientState.canSelectAbility(selectedAbility.id)) {
           const clamped = clampToMovementRange(entity, pos);
+          // Don't even activate a move the server would reject (wall / out of bounds / onto
+          // another entity). Ignoring the click keeps the ability selected so the player can
+          // immediately click a valid spot, instead of submitting a no-op that deselects.
+          if (!canEntityOccupy(state, entity, clamped)) return;
           this.clientState.submitAction({
             type: "ability",
             entityId: this.clientState.selectedEntityId,
