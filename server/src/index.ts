@@ -15,8 +15,11 @@ import { loadDimension, loadEnemyTemplateRegistry, loadItems } from "./db.js";
 import {
   startNewRun,
   seedDiscovery,
-  saveExploredHex,
-  saveExploredHexIcon,
+  discoverHex,
+  saveDiscoveredHexIcon,
+  loadDiscoveredHexes,
+  loadDiscoveredHexIcons,
+  markRunCleared,
   saveSeatInventory,
   upsertRunSeat,
   loadRunSeats,
@@ -296,13 +299,21 @@ function handleCreateRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMe
   const code = freshRoomCode((c) => rooms.isTaken(c));
   if (!code) return sendError(ws, "ROOM_CREATE_FAILED", "Could not allocate a room code", true);
 
-  // Durable run-create: run row + origin (cleared) + radius discovery (visible) + origin icon.
+  // Durable run-create: run row + GLOBAL community discovery (radius disc + origin, per dimension) +
+  // origin icon; this run starts cleared only at the origin. seedDiscovery/discoverHex are idempotent
+  // so a returning dimension keeps every previously-discovered hex.
   const runId = startNewRun(dimensionId, clientId, capacity);
-  saveExploredHex(runId, ORIGIN, true);
-  seedDiscovery(runId, DISCOVERY_RADIUS);
-  saveExploredHexIcon(runId, ORIGIN, "town");
+  seedDiscovery(dimensionId, DISCOVERY_RADIUS);
+  discoverHex(dimensionId, ORIGIN);
+  saveDiscoveredHexIcon(dimensionId, ORIGIN, "town");
+  markRunCleared(runId, ORIGIN);
 
   const seats = createOpenSeats(capacity, dimensionId);
+
+  const hexes = loadDiscoveredHexes(dimensionId);
+  hexes[ORIGIN_KEY] = "explored";
+  const icons: Record<string, HexIconType> = { [ORIGIN_KEY]: "town" };
+  for (const [key, icon] of Object.entries(loadDiscoveredHexIcons(dimensionId))) icons[key] = icon as HexIconType;
 
   const room: Room = {
     code,
@@ -315,7 +326,7 @@ function handleCreateRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMe
     aiPlayerBusy: false,
     dimensionId,
     runId,
-    hexMap: { playerPos: ORIGIN, hexes: { [ORIGIN_KEY]: "explored" }, icons: { [ORIGIN_KEY]: "town" } },
+    hexMap: { playerPos: ORIGIN, hexes, icons },
     visitedThisRun: new Set([ORIGIN_KEY]),
     pendingHex: null,
     capacity,

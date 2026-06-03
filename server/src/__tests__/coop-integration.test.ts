@@ -137,6 +137,79 @@ describe("co-op integration lifecycle", () => {
     host.close();
   });
 
+  it("community discovery is GLOBAL per dimension: a hex one run clears is discovered for a later separate room, yet still triggers combat in that new run (per-run cleared gate)", async () => {
+    const TARGET = { q: 1, r: 0 };
+    const tk = `${TARGET.q},${TARGET.r}`;
+
+    // Run A: enter combat at TARGET, win it, return to overworld -> TARGET is community-discovered.
+    const a = await connectClient(server);
+    await hello(a, "Pioneer");
+    const { code: codeA } = await createRoom(a, 2);
+    await startAndReachOverworld(a);
+    a.mark();
+    await enterCombat(a);
+    await a.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    a.send({ type: "debugWin" });
+    await a.nextOf("combatEnd", { fromNow: true, timeoutMs: 8000 });
+    await a.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "overworld",
+      { consumeBuffered: false, timeoutMs: 8000 },
+    );
+    expect(rooms.get(codeA)!.hexMap.hexes[tk]).toBe("explored");
+    a.close();
+    await a.closed;
+
+    // Run B: a brand-new room in the SAME dimension. Its hexMapState already shows TARGET explored
+    // (community-shared), even though run B has fought nothing.
+    const b = await connectClient(server);
+    await hello(b, "Newcomer");
+    const { code: codeB } = await createRoom(b, 2);
+    const overworld = await startAndReachOverworld(b);
+    expect(overworld.room.code).toBe(codeB);
+    const hexMap = await b.nextOf("hexMapState", { timeoutMs: 8000 });
+    expect(hexMap.hexMap.hexes[tk]).toBe("explored"); // discovered by run A, visible to run B
+
+    // ...but TARGET is NOT cleared for run B, so moving onto it still triggers a fresh combat.
+    const roomB = rooms.get(codeB)!;
+    expect(roomB.visitedThisRun.has(tk)).toBe(false);
+    b.mark();
+    b.send({ type: "proposeMove", target: TARGET });
+    const combatStart = await b.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    expect(combatStart.encounterHex).toEqual(TARGET);
+
+    b.send({ type: "debugWin" });
+    await b.waitFor((m): m is ServerMessage => m.type === "combatEnd", { consumeBuffered: false, timeoutMs: 8000 }).catch(() => null);
+    b.close();
+  }, 30000);
+
+  it("winning combat on a never-before-discovered (uncharted) hex broadcasts the hexDiscovered KEY MOMENT", async () => {
+    // The seeded radius-15 disc is already in the community map, so hexes within it are never
+    // first-ever. Enter combat normally, then point the live room's pendingHex at an UNCHARTED hex
+    // (outside the seed disc, untouched by any other test) before debugWin — exercising the real
+    // endCombat -> exploreHex -> commitExplore(firstEver) -> hexDiscovered broadcast path.
+    const UNCHARTED = { q: 99, r: -7 };
+    const host = await connectClient(server);
+    await hello(host, "Cartographer");
+    const { code } = await createRoom(host, 2);
+    await startAndReachOverworld(host);
+    host.mark();
+    await enterCombat(host);
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+
+    const room = rooms.get(code)!;
+    expect(room.phase).toBe("combat");
+    room.pendingHex = UNCHARTED; // redirect the win onto an uncharted tile
+
+    host.mark();
+    host.send({ type: "debugWin" });
+    const discovered = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "hexDiscovered" }> => m.type === "hexDiscovered",
+      { consumeBuffered: false, timeoutMs: 8000 },
+    );
+    expect(discovered.coord).toEqual(UNCHARTED);
+    host.close();
+  }, 30000);
+
   it("shared player phase: human acts + passes, phase ends only when all ready, then enemy phase runs; reach a win", async () => {
     const host = await connectClient(server);
     await hello(host, "Fighter");

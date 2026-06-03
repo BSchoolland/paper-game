@@ -6,24 +6,36 @@ process.env.GAME_DB_PATH = ":memory:";
 process.env.GAME_SKIP_SEED = "1";
 const db = await import("../db.js");
 
-describe("durable run-scoped DB (Phase 3)", () => {
-  it("creates runs and scopes exploration, with monotonic `cleared`", () => {
-    const runId = db.startNewRun(3, "clientA", 4);
-    expect(runId).toBeGreaterThan(0);
+describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => {
+  it("discovery is GLOBAL per dimension; discoverHex reports first-ever vs repeat", () => {
+    // dim 1 discovery is visible in dim 1 but NOT dim 2.
+    expect(db.discoverHex(1, { q: 5, r: 0 })).toBe(true); // first-ever
+    expect(db.discoverHex(1, { q: 5, r: 0 })).toBe(false); // repeat -> no new row
+    expect(db.loadDiscoveredHexes(1)["5,0"]).toBe("explored");
+    expect(db.loadDiscoveredHexes(2)["5,0"]).toBeUndefined();
 
-    db.saveExploredHex(runId, { q: 0, r: 0 }, true);
-    db.saveExploredHex(runId, { q: 1, r: 0 }, false);
-    db.saveExploredHex(runId, { q: 1, r: 0 }, true); // ON CONFLICT MAX => stays cleared
-    db.seedDiscovery(runId, 1);
+    db.seedDiscovery(2, 1); // 7-hex disc into dim 2 only
+    expect(Object.keys(db.loadDiscoveredHexes(2)).length).toBe(7);
+    expect(db.loadDiscoveredHexes(2)["5,0"]).toBeUndefined();
+  });
 
-    const hexes = db.loadExploredHexes(runId);
-    const cleared = db.loadClearedHexes(runId);
-    expect(Object.keys(hexes).length).toBe(7); // origin + (1,0) + radius-1 ring
-    expect([...cleared].sort()).toEqual(["0,0", "1,0"]);
+  it("run_cleared is per-run; a discovery persists across runs in the same dimension", () => {
+    const runA = db.startNewRun(7, "clientA", 4);
+    const runB = db.startNewRun(7, "clientB", 2);
+    expect(runA).toBeGreaterThan(0);
 
-    // a different run is fully isolated
-    const other = db.startNewRun(1, "clientB", 2);
-    expect(Object.keys(db.loadExploredHexes(other)).length).toBe(0);
+    // commitExplore in runA discovers (q,r) globally for dim 7 AND clears it for runA only.
+    expect(db.commitExplore(7, runA, { q: 1, r: 0 }, "wilderness")).toBe(true); // first-ever
+    db.markRunCleared(runA, { q: 0, r: 0 });
+
+    expect([...db.loadRunCleared(runA)].sort()).toEqual(["0,0", "1,0"]);
+    expect(db.loadRunCleared(runB).size).toBe(0); // runB has no cleared hexes
+
+    // The community discovery from runA is visible to the later runB in the same dimension.
+    expect(db.loadDiscoveredHexes(7)["1,0"]).toBe("explored");
+    expect(db.loadDiscoveredHexIcons(7)["1,0"]).toBe("wilderness");
+    // ...but a re-discovery is no longer first-ever (community already revealed it).
+    expect(db.commitExplore(7, runB, { q: 1, r: 0 }, "wilderness")).toBe(false);
   });
 
   it("binds seats, finds the live seat for a client, and stamps them on run end", () => {
@@ -96,29 +108,32 @@ describe("durable run-scoped DB (Phase 3)", () => {
     expect(db.findActiveSeatForClient("guest2")).toBeNull();
   });
 
-  it("commitExplore advances cleared+icon+party position atomically (write point 4 / R13.2)", () => {
-    const runId = db.startNewRun(1, "explorer", 2);
-    db.saveExploredHex(runId, { q: 0, r: 0 }, true);
-    db.commitExplore(runId, { q: 1, r: 0 }, "wilderness");
+  it("commitExplore advances global discovery + icon + per-run cleared + party position atomically (write point 4 / R13.2)", () => {
+    const runId = db.startNewRun(11, "explorer", 2);
+    db.markRunCleared(runId, { q: 0, r: 0 });
+    db.commitExplore(11, runId, { q: 1, r: 0 }, "wilderness");
 
-    expect([...db.loadClearedHexes(runId)].sort()).toEqual(["0,0", "1,0"]);
-    expect(db.loadExploredHexIcons(runId)["1,0"]).toBe("wilderness");
+    expect([...db.loadRunCleared(runId)].sort()).toEqual(["0,0", "1,0"]);
+    expect(db.loadDiscoveredHexes(11)["1,0"]).toBe("explored");
+    expect(db.loadDiscoveredHexIcons(11)["1,0"]).toBe("wilderness");
     const run = db.loadRun(runId)!;
     expect([run.party_q, run.party_r]).toEqual([1, 0]);
   });
 
-  it("eraseClient hard-deletes every durable row for a client's runs (R33)", () => {
-    const runId = db.startNewRun(1, "gdpr", 2);
+  it("eraseClient hard-deletes per-run rows but leaves the GLOBAL community map intact (R33)", () => {
+    const runId = db.startNewRun(12, "gdpr", 2);
     db.upsertRunSeat(runId, 0, { clientId: "gdpr", displayName: "X", controllerKind: "human", tokenSalt: db.newTokenSalt() });
     db.saveSeatInventory(runId, 0, { bag: new Array(16).fill(null), equipped: [], attachments: {} });
-    db.saveExploredHex(runId, { q: 0, r: 0 }, true);
+    db.commitExplore(12, runId, { q: 1, r: 0 }, "wilderness"); // global discovery + this-run cleared
 
     const erased = db.eraseClient("gdpr");
     expect(erased).toBe(1);
     expect(db.loadRun(runId)).toBeNull();
     expect(db.loadRunSeats(runId).length).toBe(0);
-    expect(Object.keys(db.loadExploredHexes(runId)).length).toBe(0);
+    expect(db.loadRunCleared(runId).size).toBe(0); // per-run cleared erased
     expect(db.findActiveSeatForClient("gdpr")).toBeNull();
+    // The community discovery is shared, non-personal world state and survives the erasure.
+    expect(db.loadDiscoveredHexes(12)["1,0"]).toBe("explored");
   });
 
   it("mints HMAC session tokens that verify only for the right client (R29)", () => {

@@ -15,27 +15,29 @@
 
 ## Revised rulings (R13 rev + R29-R36)
 
-## R13 (REWRITTEN) — DB is run-scoped AND the overworld/run/inventory layer is durable across restart
+## R13 (REWRITTEN) — DISCOVERY is GLOBAL-per-dimension; CLEARED-THIS-RUN is per-run; the overworld/run/inventory layer is durable across restart
 
-We adopt `run_id` columns on `explored_hexes` and `runs` (migration via `PRAGMA user_version`). **Every** read/write takes `runId` — no global-read caller remains. Two concurrent rooms are isolated. We accept a one-time wipe of `explored_hexes` (documented in PR).
+> **CORRECTION (schema v3).** Earlier revisions of this doc run-scoped exploration (`explored_hexes(run_id,...)`). That was WRONG: it conflated two distinct concepts. **DISCOVERY** (the community fog-of-war: which hexes *anyone, ever* revealed) is **GLOBAL per dimension**, permanent, append-only, shared by ALL runs/rooms — discovering a never-before-seen hex is a key moment. **CLEARED-THIS-RUN** (the party's combat progress this expedition: the durable `visitedThisRun`) is **PER-RUN** and is the ONLY combat-vs-free-move gate. v3 splits them into `discovered_hexes(dimension_id,q,r)` / `discovered_hex_icons(dimension_id,q,r)` (global) and `run_cleared_hexes(run_id,q,r)` (per-run). The text below is updated to this model; the run/inventory durability is unchanged.
+
+The run/inventory layer is `runId`-scoped (migration via `PRAGMA user_version`). The community discovery map is `dimensionId`-scoped. Two concurrent rooms in the same dimension SHARE the community map but each re-fights its own path. We accept a one-time wipe of the old run-scoped exploration tables (documented in PR).
 
 **This ruling now makes the durable overworld/run/inventory layer survive a server restart** (overrides the prior "in-memory only / fresh run / known follow-up" clause). The unit of durability is the **run**, not the connection and not the room code. A run is a long-lived play session for a fixed party on a fixed dimension. The room code (R20, 6-char, quarantined on reap) stays purely in-memory and is **never** the resume key — codes are ephemeral invites. The resume keys are `clientId` (per-seat, from localStorage) and the durable `runs.id` it is bound to.
 
 ### R13.1 — Durable vs transient boundary (the explicit line)
 
-DURABLE (SQLite, survives restart): the `runs` row (incl. `party_q/party_r`, `host_client_id`, `active`, `capacity`, `dimension_id`, `outcome`); `explored_hexes(run_id,q,r,cleared)` (visibility + the per-hex **cleared/combat-resolved** flag); `explored_hex_icons(run_id,q,r,icon)` (explicitly-set icons only); `run_seats(run_id,seat_index,client_id,display_name,controller_kind,token_salt,joined_at,left_at)`; `run_seat_items(run_id,seat_index,location,slot_order,item_id)`; `run_seat_attachments(run_id,seat_index,item_id,attachment_json)`.
+DURABLE (SQLite, survives restart): the `runs` row (incl. `party_q/party_r`, `host_client_id`, `active`, `capacity`, `dimension_id`, `outcome`); `discovered_hexes(dimension_id,q,r)` + `discovered_hex_icons(dimension_id,q,r,icon)` (the GLOBAL community fog-of-war + explicitly-set icons, shared across runs/rooms in the dimension); `run_cleared_hexes(run_id,q,r)` (the per-hex **cleared/combat-resolved** set = durable `visitedThisRun`); `run_seats(run_id,seat_index,client_id,display_name,controller_kind,token_salt,joined_at,left_at)`; `run_seat_items(run_id,seat_index,location,slot_order,item_id)`; `run_seat_attachments(run_id,seat_index,item_id,attachment_json)`. Right-to-erasure (R33) deletes the per-run rows but NEVER the global community map (shared, non-personal world state).
 
 TRANSIENT (in-memory only, wiped by restart, rebuilt on demand): `EncounterSession`, `GameState`, `heroBrains`, the combat phase machine, `DefendRound`, `MovementVote`, `aiPlayerBusy`/`phaseTransitioning`/`building`/`generation`, all timers (reap/afk/grace/vote/defend), `RoomCode`, `tokenIndex`, `Seat.socket`, `Seat.ready/exhausted/actedThisPhase`. **`room.phase==="combat"` is intentionally NOT durable.** A restart mid-combat reconstructs the room at `overworld` with the party on `runs.party_q/party_r` (the departure tile); the in-progress encounter is discarded and re-proposing the move re-enters it via the R7 atomic build. Hero death/loot inside an encounter are committed only at `combatEnd{won}` (write point 4) / run-swap (write point 9); a mid-combat crash discards them, by design (surface a client "encounter restarted" banner on resume-into-overworld).
 
-### R13.2 — `explored` (visibility) and `cleared` (combat-resolved) are DISTINCT run-scoped sets (resolves Finding "visitedThisRun not persisted", HIGH)
+### R13.2 — DISCOVERY (global visibility) and CLEARED-THIS-RUN (per-run combat-resolved) are DISTINCT sets, keyed differently (resolves Finding "visitedThisRun not persisted", HIGH)
 
-The live combat-vs-free-move gate is `visitedThisRun.has(tk)`, and `visitedThisRun` is **not** `explored_hexes`: `freshVisitedSet()` seeds only the origin, while `seedDiscovery(15)` seeds a radius-15 disc as *visible/explored*. Conflating them breaks the game loop (the whole pre-seeded disc would become combat-free after a restart) or re-triggers combat on already-cleared hexes.
+The live combat-vs-free-move gate is `visitedThisRun.has(tk)` — **per-run**, NOT discovery: `freshVisitedSet()` seeds only the origin, while `seedDiscovery(dimensionId, 15)` seeds a radius-15 disc into the **global community** map as *visible/discovered*. Conflating them breaks the game loop (the whole pre-seeded disc would become combat-free) or re-triggers combat on already-cleared hexes. Crucially, discovery is shared across runs: a hex the community already revealed is still un-cleared for a fresh run, so that run re-fights it.
 
-Therefore: persist BOTH sets, distinctly.
-- `explored_hexes.cleared INTEGER NOT NULL DEFAULT 0` — `0` = visible-but-not-yet-fought, `1` = combat-resolved (the durable `visitedThisRun`). A hex can be visible (`cleared=0`) without being cleared.
-- The **only** gate for re-combat is the cleared set. Reconstruction rebuilds `room.visitedThisRun` strictly from `SELECT q,r FROM explored_hexes WHERE run_id=? AND cleared=1` — **never** from visibility.
-- Origin is seeded `cleared=1` at run-create (matches `freshVisitedSet()` containing ORIGIN_KEY). The radius-15 `seedDiscovery` rows are seeded `cleared=0`.
-- `exploreHex` (write point 4) sets `cleared=1` for the newly-fought hex in the same transaction that advances party position. A YES-vote move onto an already-`cleared=1` hex is a pure party-position move (write point 5), no combat.
+Therefore: persist BOTH sets, distinctly and with different keys.
+- `discovered_hexes(dimension_id,q,r)` — the GLOBAL, append-only community visibility map. `loadDiscoveredHexes(dimensionId)` drives the hex map every room in that dimension sees. `discoverHex(dimensionId,coord)` returns true iff it inserted a NEW row (first-ever discovery → `hexDiscovered` KEY MOMENT).
+- `run_cleared_hexes(run_id,q,r)` — the per-run combat-resolved set. The **only** gate for re-combat. Reconstruction rebuilds `room.visitedThisRun` strictly from `loadRunCleared(runId)` — **never** from visibility.
+- Origin is `markRunCleared(runId, ORIGIN)` at run-create (matches `freshVisitedSet()` containing ORIGIN_KEY) and `discoverHex(dimensionId, ORIGIN)` + radius-15 `seedDiscovery(dimensionId, 15)` for the community map. `resetToOrigin` re-clears only the new run's origin; it does NOT re-seed the (persistent) global map.
+- `exploreHex` (write point 4) calls `commitExplore(dimensionId, runId, coord, icon)`: one transaction that discovers the hex globally (+ icon), `markRunCleared`s it for THIS run, and advances party position; it returns the first-ever flag. A YES-vote move onto an already-cleared (this-run) hex is a pure party-position move (write point 5), no combat.
 
 ### R13.3 — Inventory durability by item ID + ordering (not serialized definitions)
 
@@ -52,7 +54,7 @@ The in-memory model already keys attachments by `item_id` (`Record<string, Attac
 ### R13.5 — Run lifecycle / inactivation matrix (`runs.active` is the single liveness flag)
 
 - **Victory ends the run** (`gameOver outcome="victory"`): one transaction sets `active=0, outcome='victory', completed_at=now` AND `left_at`-stamps EVERY `run_seats` row for that run (see R32). Does NOT auto-create a new run (party returns to lobby/menu; "play again" makes a fresh run via createRoom).
-- **Party wipe / defeat** (today's `resetToOrigin` new-run path): one transaction — old run `active=0, outcome='defeat'`, `left_at`-stamp all its seats, INSERT new `runs` row (same dimension, same human party copied with fresh starter inventory, party at ORIGIN, origin `cleared=1`, `active=1`), and repoint `room.runId` + re-key the transient `Map<runId,Room>` (R30).
+- **Party wipe / defeat** (today's `resetToOrigin` new-run path): one transaction — old run `active=0, outcome='defeat'`, `left_at`-stamp all its seats, INSERT new `runs` row (same dimension, same human party copied with fresh starter inventory, party at ORIGIN, `active=1`), `markRunCleared(newRunId, ORIGIN)`, and repoint `room.runId` + re-key the transient `Map<runId,Room>` (R30). The GLOBAL community discovery map is untouched (it persists across runs); the new run rebuilds `room.hexMap.hexes` from `loadDiscoveredHexes(dimensionId)`.
 - **Explicit host reset in overworld**: same as defeat (`outcome='abandoned'`, new active run). In-combat `reset` only aborts the encounter and returns to overworld of the SAME run (no run swap, no durable change; matches R17).
 - **Abandonment** (all humans leave, no run-end event): the run stays `active=1` so a returning player resumes; a reap timer (R31) eventually disposes the room object. An optional housekeeping job inactivates+deletes runs past N days (R33).
 
@@ -60,10 +62,10 @@ The in-memory model already keys attachments by `item_id` (`Record<string, Attac
 
 Each write fires AFTER the in-memory mutation succeeds (durable is a committed subset of in-memory), **except** equip (R34: write-before-ack). bun:sqlite is synchronous; no async gap.
 
-1. **Run create** (`createRoom`): one transaction — INSERT `runs`(active=1, dimension_id, capacity, host_client_id=creator, party_q/r=ORIGIN, created_at/updated_at=now); seed origin into `explored_hexes(run_id, ORIGIN, cleared=1)` + radius-15 `seedDiscovery(runId, cleared=0)`; insert origin icon; INSERT `run_seats` host row (controller_kind='human', client_id=creator, fresh token_salt) + its starter `run_seat_items`. Before all this, run the R32 prior-run cleanup for the creator's clientId in the SAME transaction.
+1. **Run create** (`createRoom`): INSERT `runs`(active=1, dimension_id, capacity, host_client_id=creator, party_q/r=ORIGIN, created_at/updated_at=now); `seedDiscovery(dimensionId, 15)` + `discoverHex(dimensionId, ORIGIN)` + `saveDiscoveredHexIcon(dimensionId, ORIGIN, 'town')` into the GLOBAL community map (idempotent — a returning dimension keeps prior discoveries); `markRunCleared(runId, ORIGIN)` for this run; INSERT `run_seats` host row (controller_kind='human', client_id=creator, fresh token_salt) + its starter `run_seat_items`. Before all this, run the R32 prior-run cleanup for the creator's clientId.
 2. **Seat bind / join / bot-fill**: one transaction per seat — UPSERT `run_seats`(client_id, display_name, controller_kind, token_salt on first human bind) and (on first human bind) snapshot starter inventory into `run_seat_items`. Bot-fill writes controller_kind='bot', client_id=NULL, token_salt=NULL. Run R32 prior-run cleanup for a joining human's clientId in the same transaction.
 3. **Equip / unequip / updateAttachment** (legal only while `room.phase!=="combat"`, R26): one transaction — gate on R29 identity re-check, then DELETE `run_seat_items` for (run_id,seat_index), re-INSERT bag+equipped rows by item id+order, upsert/delete matching `run_seat_attachments`. Commit BEFORE sending the `inventory` ack (R34).
-4. **Hex explore** (`exploreHex` on `combatEnd{won:true}` with `pendingHex`): one transaction — `INSERT OR REPLACE explored_hexes(run_id,q,r,cleared=1)` (+ icon row), AND `UPDATE runs SET party_q=?, party_r=?, updated_at=?`. Party position, the explored set, and the cleared flag advance atomically.
+4. **Hex explore** (`exploreHex` on `combatEnd{won:true}` with `pendingHex`): one transaction (`commitExplore(dimensionId, runId, coord, icon)`) — `INSERT OR IGNORE discovered_hexes(dimension_id,q,r)` (+ icon row), `INSERT OR IGNORE run_cleared_hexes(run_id,q,r)`, AND `UPDATE runs SET party_q=?, party_r=?, updated_at=?`. Global discovery, the per-run cleared set, and party position advance atomically; the returned first-ever flag drives the `hexDiscovered` KEY-MOMENT broadcast.
 5. **Party move to an already-cleared hex** (vote YES, no combat): single `UPDATE runs SET party_q=?, party_r=?, updated_at=?`. Written **synchronously in the same handler turn as the in-memory move, before yielding to the event loop** (R35), so durable party_q/r never lags in-memory playerPos when the next combat-entry message is processed.
 6. (folded into 4/5 above)
 7. **Run complete (victory)** / **defeat** / **reset** — see R13.5 matrix; transactional.
@@ -74,7 +76,7 @@ NOT write points (transient): combat entry (R7 atomic build), defend, action, vo
 
 ### R13.7 — Migration
 
-Bump `PRAGMA user_version` to a single new version that, in one transaction: creates `run_seats`, `run_seat_items`, `run_seat_attachments`, `explored_hex_icons`; recreates `explored_hexes` run-scoped WITH the `cleared` column; ALTERs `runs` to add `dimension_id, capacity, host_client_id, active, party_q, party_r, created_at, updated_at, completed_at, outcome` (or recreate-via-copy if SQLite ALTER limits bite); creates indices/constraints in R32. Guard each ALTER in try/catch (matching the existing `dimensions` ALTER pattern). The one-time `explored_hexes` wipe is documented in the PR. Test against `:memory:` (R23).
+Bump `PRAGMA user_version` (now `3`) to a single new version that, in one transaction: ALTERs `runs` to add `dimension_id, capacity, host_client_id, active, party_q, party_r, created_at, updated_at, completed_at, outcome` (guarded try/catch, rethrow non-"duplicate column"); DROPs the old run-scoped `explored_hexes`/`explored_hex_icons`; CREATEs `discovered_hexes(dimension_id,q,r)` + `discovered_hex_icons(dimension_id,q,r)` (GLOBAL) and `run_cleared_hexes(run_id,q,r)` (per-run); creates `run_seats`, `run_seat_items`, `run_seat_attachments` and the R32 indices/constraints. Guard each ALTER in try/catch (matching the existing `dimensions` ALTER pattern). The one-time exploration-table wipe is documented in the PR. Test against `:memory:` (R23).
 
 ---
 
@@ -184,7 +186,7 @@ On `hello`/reconnect after a restart (in-memory rooms/tokens gone, durable run e
 2. Fast path: in-memory `tokenIndex`/registry (empty after restart) → fall through (R19).
 3. DB path: `row = findActiveSeatForClient(clientId)` (R32 deterministic). If null → ALWAYS run a dummy constant-time HMAC compare (R29) and return identical-shape welcome-to-lobby (no enumeration signal).
 4. Row found → `{runId, seatIndex, dimensionId, capacity, token_salt}`. Compute `expectedToken = HMAC(SERVER_SECRET, clientId+":"+runId+":s"+seatIndex+":"+token_salt)` (R29). For `controller_kind='human'`: a valid token is REQUIRED — no token or mismatched token → reject (no "treat as fresh"), EXCEPT the run-swap reconciliation: if the mismatch is explained by this same clientId's own run rotation (its prior token bound an inactive predecessor run for the same clientId), do NOT reject — re-derive the new token and issue a fresh `welcome` so the client adopts it (the durable binding is authoritative for the client's own seat after a legitimate defeat/reset; this never relaxes the live-room same-run R6 hijack case). Always return the (re-derived) token in `welcome` so client and server converge.
-5. Reconstruction (idempotent): `room = Map<runId,Room>.get(runId)`. If absent, `reconstructRoomForRun(runId)` synchronously (no await): read `runs`, `run_seats` (ORDER BY seat_index), `loadExploredHexes(runId)` (split visible vs `cleared=1` → `visitedThisRun`, R13.2), icons, per-seat `loadSeatInventory`. Build a fresh Room: `phase='overworld'`, `session=null`, `vote=null`, `defendRound=null`, `generation=0`, `building=false`, `pendingHex=null`, `hexMap.playerPos={party_q,party_r}`. For each seat: `controller_kind='human'` → `state='human-disconnected'`, `socket=null`, transient `sovereignFor(seat)` brain from t0 (R31); `controller_kind='bot'` → `state='bot'`, bot brain. Assign a NEW RoomCode (R36). `registerRoomForRun(runId, room)` check-or-throw (R30); register by code too. Arm the reap timer (R31). If present, reuse it.
+5. Reconstruction (idempotent): `room = Map<runId,Room>.get(runId)`. If absent, `reconstructRoomForRun(runId)` synchronously (no await): read `runs`, `run_seats` (ORDER BY seat_index), `loadDiscoveredHexes(dimensionId)` (GLOBAL visibility) + `loadDiscoveredHexIcons(dimensionId)`, `loadRunCleared(runId)` → `visitedThisRun` (per-run, R13.2), per-seat `loadSeatInventory`. Build a fresh Room: `phase='overworld'`, `session=null`, `vote=null`, `defendRound=null`, `generation=0`, `building=false`, `pendingHex=null`, `hexMap.playerPos={party_q,party_r}`. For each seat: `controller_kind='human'` → `state='human-disconnected'`, `socket=null`, transient `sovereignFor(seat)` brain from t0 (R31); `controller_kind='bot'` → `state='bot'`, bot brain. Assign a NEW RoomCode (R36). `registerRoomForRun(runId, room)` check-or-throw (R30); register by code too. Arm the reap timer (R31). If present, reuse it.
 6. Bind socket: `seat.socket=this`, `seat.state='human-connected'`, drop the seat's bot brain (R31), cancel reap timer, re-derive host (R14).
 7. Re-derive host (R14 stays-migrated): first human to bind → host (lowest-index connected); persisted `host_client_id` is a seed/tiebreak only if it matches a currently-connected seat. Persist (write point 8).
 8. Send `welcome{sessionToken, reconnected:{code,seatId}}`, then `roomState`, `hexMapState` (party on durable tile), `inventory`. Do NOT send combat state/`coopStatus` (phase is overworld).
@@ -279,7 +281,7 @@ Resulting rules, restated for the post-restart case:
 `reconstructRoomForRun(runId)` (server, in-memory, no combat):
 - `SELECT * FROM runs WHERE id=? AND active=1` → dimensionId, capacity, party_q/r, host_client_id.
 - `SELECT * FROM run_seats WHERE run_id=? ORDER BY seat_index` → seat membership, clientIds, controller_kind, displayName.
-- `loadExploredHexes(runId)` + icons → `HexMapState{ playerPos:{q:party_q,r:party_r}, hexes, icons }`.
+- `loadDiscoveredHexes(dimensionId)` + `loadDiscoveredHexIcons(dimensionId)` (GLOBAL) → `HexMapState{ playerPos:{q:party_q,r:party_r}, hexes, icons }`; `loadRunCleared(runId)` → `visitedThisRun` (per-run).
 - per seat: `loadSeatInventory(runId, seatIndex, dimensionId)`.
 - Construct a fresh `Room` with `phase="overworld"`, `building=false`, `generation=0`, `session=null`, `vote=null`, `defendRound=null`, all timers null, all seats `state` set per §3-resume (controller_kind → bot/disconnected), `socket=null`. Assign a **new** RoomCode from the registry (the old code is gone; resumers reach the run via clientId, not code, then can re-share the new code).
 
@@ -358,34 +360,37 @@ CREATE INDEX IF NOT EXISTS idx_runs_active ON runs(active) WHERE active = 1;
 -- (idx_runs_active speeds findActiveSeatForClient's runs.active=1 join filter; housekeeping uses updated_at/completed_at, R33)
 ```
 
-### explored_hexes (RECREATE run-scoped, with cleared flag)
+### discovered_hexes / discovered_hex_icons (GLOBAL community discovery, keyed by dimension) + run_cleared_hexes (per-run)
 ```sql
--- one-time wipe documented in PR; bumped via PRAGMA user_version
+-- v3: the old run-scoped explored_hexes/explored_hex_icons are dropped (one-time wipe, documented
+-- in PR); discovery becomes GLOBAL per dimension, cleared-this-run stays per-run.
 DROP TABLE IF EXISTS explored_hexes;
-CREATE TABLE explored_hexes (
-  run_id  INTEGER NOT NULL,
-  q       INTEGER NOT NULL,
-  r       INTEGER NOT NULL,
-  cleared INTEGER NOT NULL DEFAULT 0,   -- 0 = visible only; 1 = combat-resolved (durable visitedThisRun, R13.2)
-  PRIMARY KEY (run_id, q, r),
-  FOREIGN KEY (run_id) REFERENCES runs(id)
-);
--- origin seeded cleared=1 at run-create; seedDiscovery(15) rows seeded cleared=0;
--- exploreHex sets cleared=1 atomically with runs.party_q/party_r (write point 4)
-```
+DROP TABLE IF EXISTS explored_hex_icons;
 
-### explored_hex_icons (NEW)
-```sql
-CREATE TABLE explored_hex_icons (
+CREATE TABLE discovered_hexes (         -- GLOBAL community fog-of-war, append-only, shared by all runs
+  dimension_id INTEGER NOT NULL,
+  q            INTEGER NOT NULL,
+  r            INTEGER NOT NULL,
+  PRIMARY KEY (dimension_id, q, r)
+);
+CREATE TABLE discovered_hex_icons (     -- GLOBAL explicitly-set icons (e.g. origin 'town')
+  dimension_id INTEGER NOT NULL,
+  q            INTEGER NOT NULL,
+  r            INTEGER NOT NULL,
+  icon         TEXT NOT NULL,
+  PRIMARY KEY (dimension_id, q, r)
+);
+CREATE TABLE run_cleared_hexes (        -- PER-RUN combat-resolved set = durable visitedThisRun (R13.2)
   run_id INTEGER NOT NULL,
   q      INTEGER NOT NULL,
   r      INTEGER NOT NULL,
-  icon   TEXT NOT NULL,
   PRIMARY KEY (run_id, q, r),
   FOREIGN KEY (run_id) REFERENCES runs(id)
 );
--- persists explicitly-set HexMapState.icons (e.g. origin 'town'); derivable structure icons
--- are still recomputed via getHexIcon at reconstruction, so this table holds only the non-derivable ones
+-- seedDiscovery(dimensionId,15) + discoverHex(dimensionId,ORIGIN) seed the community map (idempotent);
+-- markRunCleared(runId,ORIGIN) clears the run's origin; commitExplore (write point 4) discovers globally
+-- AND clears for the run AND advances runs.party_q/party_r atomically. Derivable structure icons are
+-- recomputed via getHexIcon at reconstruction, so discovered_hex_icons holds only the non-derivable ones.
 ```
 
 ### run_seats (NEW)

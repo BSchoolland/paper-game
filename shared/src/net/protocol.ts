@@ -140,6 +140,7 @@ export type ServerMessage =
   | { type: "displaced" }
   | { type: "roomState"; room: RoomStatePayload }
   | { type: "hexMapState"; hexMap: HexMapState }
+  | { type: "hexDiscovered"; coord: HexCoord }
   | { type: "voteState"; vote: VoteStatePayload | null }
   | { type: "moveResolved"; proposalId: string; accepted: boolean; target: HexCoord }
   | { type: "combatStart"; encounterHex: HexCoord }

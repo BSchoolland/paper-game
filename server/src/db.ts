@@ -60,32 +60,16 @@ db.exec(`
 `);
 
 // --- Multiplayer co-op durable schema migration (PERSISTENCE.md; supersedes R13) ---
-// Bumps user_version once: recreates explored_hexes run-scoped (+cleared), extends runs,
-// and adds run_seats / run_seat_items / run_seat_attachments / explored_hex_icons.
-// The legacy global explored_hexes is dropped once (documented one-time wipe). FKs are
-// declarative only (foreign_keys pragma is off, matching the rest of this schema).
-const SCHEMA_VERSION = 2;
+// DISCOVERY (community fog-of-war) is GLOBAL per dimension and permanent; CLEARED-THIS-RUN
+// (the party's combat progress) is PER-RUN. v2 conflated them into run-scoped explored_hexes;
+// v3 splits them: discovered_hexes / discovered_hex_icons keyed by dimension_id (global), and
+// run_cleared_hexes keyed by run_id (the durable visitedThisRun). FKs are declarative only
+// (foreign_keys pragma is off, matching the rest of this schema).
+const SCHEMA_VERSION = 3;
 {
   const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
   if (user_version < SCHEMA_VERSION) {
     const migrate = db.transaction(() => {
-      db.exec("DROP TABLE IF EXISTS explored_hexes");
-      db.exec(`CREATE TABLE explored_hexes (
-        run_id  INTEGER NOT NULL,
-        q       INTEGER NOT NULL,
-        r       INTEGER NOT NULL,
-        cleared INTEGER NOT NULL DEFAULT 0,
-        PRIMARY KEY (run_id, q, r),
-        FOREIGN KEY (run_id) REFERENCES runs(id)
-      )`);
-      db.exec(`CREATE TABLE IF NOT EXISTS explored_hex_icons (
-        run_id INTEGER NOT NULL,
-        q      INTEGER NOT NULL,
-        r      INTEGER NOT NULL,
-        icon   TEXT NOT NULL,
-        PRIMARY KEY (run_id, q, r),
-        FOREIGN KEY (run_id) REFERENCES runs(id)
-      )`);
       for (const sql of [
         "ALTER TABLE runs ADD COLUMN dimension_id   INTEGER NOT NULL DEFAULT 1",
         "ALTER TABLE runs ADD COLUMN capacity       INTEGER NOT NULL DEFAULT 2",
@@ -104,6 +88,29 @@ const SCHEMA_VERSION = 2;
           if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
         }
       }
+      // Drop the run-scoped (v2, WRONG) exploration tables and rebuild under the global/per-run split.
+      db.exec("DROP TABLE IF EXISTS explored_hexes");
+      db.exec("DROP TABLE IF EXISTS explored_hex_icons");
+      db.exec(`CREATE TABLE discovered_hexes (
+        dimension_id INTEGER NOT NULL,
+        q            INTEGER NOT NULL,
+        r            INTEGER NOT NULL,
+        PRIMARY KEY (dimension_id, q, r)
+      )`);
+      db.exec(`CREATE TABLE discovered_hex_icons (
+        dimension_id INTEGER NOT NULL,
+        q            INTEGER NOT NULL,
+        r            INTEGER NOT NULL,
+        icon         TEXT NOT NULL,
+        PRIMARY KEY (dimension_id, q, r)
+      )`);
+      db.exec(`CREATE TABLE run_cleared_hexes (
+        run_id INTEGER NOT NULL,
+        q      INTEGER NOT NULL,
+        r      INTEGER NOT NULL,
+        PRIMARY KEY (run_id, q, r),
+        FOREIGN KEY (run_id) REFERENCES runs(id)
+      )`);
       db.exec(`CREATE TABLE IF NOT EXISTS run_seats (
         run_id          INTEGER NOT NULL,
         seat_index      INTEGER NOT NULL,
@@ -147,76 +154,89 @@ const SCHEMA_VERSION = 2;
   }
 }
 
-// --- Exploration (run-scoped). `cleared` = combat-resolved (durable visitedThisRun). ---
-const insertHexStmt = db.prepare(
-  `INSERT INTO explored_hexes (run_id, q, r, cleared) VALUES (?, ?, ?, ?)
-   ON CONFLICT(run_id, q, r) DO UPDATE SET cleared = MAX(cleared, excluded.cleared)`
+// --- Discovery: GLOBAL community fog-of-war, keyed by dimension, permanent + append-only. ---
+const insertDiscoveredStmt = db.prepare(
+  "INSERT OR IGNORE INTO discovered_hexes (dimension_id, q, r) VALUES (?, ?, ?)"
 );
-const hexesForRunStmt = db.prepare("SELECT q, r, cleared FROM explored_hexes WHERE run_id = ?");
-const clearHexesStmt = db.prepare("DELETE FROM explored_hexes WHERE run_id = ?");
-const insertIconStmt = db.prepare(
-  "INSERT OR REPLACE INTO explored_hex_icons (run_id, q, r, icon) VALUES (?, ?, ?, ?)"
+const discoveredForDimStmt = db.prepare("SELECT q, r FROM discovered_hexes WHERE dimension_id = ?");
+const insertDiscoveredIconStmt = db.prepare(
+  "INSERT OR REPLACE INTO discovered_hex_icons (dimension_id, q, r, icon) VALUES (?, ?, ?, ?)"
 );
-const iconsForRunStmt = db.prepare("SELECT q, r, icon FROM explored_hex_icons WHERE run_id = ?");
+const discoveredIconsForDimStmt = db.prepare("SELECT q, r, icon FROM discovered_hex_icons WHERE dimension_id = ?");
 
-export function saveExploredHex(runId: number, coord: HexCoord, cleared = false): void {
-  insertHexStmt.run(runId, coord.q, coord.r, cleared ? 1 : 0);
+/** Reveal a hex in the community map. Returns true iff this was the FIRST-EVER discovery. */
+export function discoverHex(dimensionId: number, coord: HexCoord): boolean {
+  return insertDiscoveredStmt.run(dimensionId, coord.q, coord.r).changes > 0;
 }
 
-/** Every explored hex for the run, as the client-facing "explored" status map. */
-export function loadExploredHexes(runId: number): Record<string, HexStatus> {
-  const rows = hexesForRunStmt.all(runId) as { q: number; r: number; cleared: number }[];
+/** The whole community-discovered set for a dimension, as the client-facing "explored" status map. */
+export function loadDiscoveredHexes(dimensionId: number): Record<string, HexStatus> {
+  const rows = discoveredForDimStmt.all(dimensionId) as { q: number; r: number }[];
   const hexes: Record<string, HexStatus> = {};
   for (const row of rows) hexes[`${row.q},${row.r}`] = "explored";
   return hexes;
 }
 
-/** The subset of explored hexes that have been combat-cleared (durable `visitedThisRun`). */
-export function loadClearedHexes(runId: number): Set<string> {
-  const rows = hexesForRunStmt.all(runId) as { q: number; r: number; cleared: number }[];
-  const cleared = new Set<string>();
-  for (const row of rows) if (row.cleared) cleared.add(`${row.q},${row.r}`);
-  return cleared;
+export function saveDiscoveredHexIcon(dimensionId: number, coord: HexCoord, icon: string): void {
+  insertDiscoveredIconStmt.run(dimensionId, coord.q, coord.r, icon);
 }
 
-export function clearExploredHexes(runId: number): void {
-  clearHexesStmt.run(runId);
-}
-
-export function saveExploredHexIcon(runId: number, coord: HexCoord, icon: string): void {
-  insertIconStmt.run(runId, coord.q, coord.r, icon);
-}
-
-export function loadExploredHexIcons(runId: number): Record<string, string> {
-  const rows = iconsForRunStmt.all(runId) as { q: number; r: number; icon: string }[];
+export function loadDiscoveredHexIcons(dimensionId: number): Record<string, string> {
+  const rows = discoveredIconsForDimStmt.all(dimensionId) as { q: number; r: number; icon: string }[];
   const icons: Record<string, string> = {};
   for (const row of rows) icons[`${row.q},${row.r}`] = row.icon;
   return icons;
 }
 
-/**
- * Write point 4 (R13.2): atomically mark a hex cleared=1, set its icon (if any), and advance the
- * party position — all in ONE transaction so a crash can never persist cleared without the matching
- * party_q/r (or an icon without the hex).
- */
-export function commitExplore(runId: number, coord: HexCoord, icon: string | null): void {
-  const tx = db.transaction(() => {
-    insertHexStmt.run(runId, coord.q, coord.r, 1);
-    if (icon) insertIconStmt.run(runId, coord.q, coord.r, icon);
-    updatePartyPosStmt.run(coord.q, coord.r, Date.now(), runId);
-  });
-  tx();
-}
-
-export function seedDiscovery(runId: number, radius: number): void {
+/** Seed the starting disc into the community map (idempotent; runs per dimension, not per run). */
+export function seedDiscovery(dimensionId: number, radius: number): void {
   const tx = db.transaction(() => {
     for (let q = -radius; q <= radius; q++) {
       const r1 = Math.max(-radius, -q - radius);
       const r2 = Math.min(radius, -q + radius);
-      for (let r = r1; r <= r2; r++) insertHexStmt.run(runId, q, r, 0);
+      for (let r = r1; r <= r2; r++) insertDiscoveredStmt.run(dimensionId, q, r);
     }
   });
   tx();
+}
+
+// --- Cleared-this-run: PER-RUN combat progress (durable visitedThisRun). ---
+const insertClearedStmt = db.prepare(
+  "INSERT OR IGNORE INTO run_cleared_hexes (run_id, q, r) VALUES (?, ?, ?)"
+);
+const clearedForRunStmt = db.prepare("SELECT q, r FROM run_cleared_hexes WHERE run_id = ?");
+const delClearedForRunStmt = db.prepare("DELETE FROM run_cleared_hexes WHERE run_id = ?");
+
+export function markRunCleared(runId: number, coord: HexCoord): void {
+  insertClearedStmt.run(runId, coord.q, coord.r);
+}
+
+export function loadRunCleared(runId: number): Set<string> {
+  const rows = clearedForRunStmt.all(runId) as { q: number; r: number }[];
+  const cleared = new Set<string>();
+  for (const row of rows) cleared.add(`${row.q},${row.r}`);
+  return cleared;
+}
+
+export function clearRunCleared(runId: number): void {
+  delClearedForRunStmt.run(runId);
+}
+
+/**
+ * Write point 4 (R13.2): atomically discover the hex globally (+ its icon), mark it cleared for THIS
+ * run, and advance the party position — all in ONE transaction so a crash can never persist cleared
+ * without the matching party_q/r. Returns true iff this was the first-ever discovery in the dimension.
+ */
+export function commitExplore(dimensionId: number, runId: number, coord: HexCoord, icon: string | null): boolean {
+  let firstEver = false;
+  const tx = db.transaction(() => {
+    firstEver = insertDiscoveredStmt.run(dimensionId, coord.q, coord.r).changes > 0;
+    if (icon) insertDiscoveredIconStmt.run(dimensionId, coord.q, coord.r, icon);
+    insertClearedStmt.run(runId, coord.q, coord.r);
+    updatePartyPosStmt.run(coord.q, coord.r, Date.now(), runId);
+  });
+  tx();
+  return firstEver;
 }
 
 // --- Runs ---
@@ -292,14 +312,14 @@ const runsForClientStmt = db.prepare("SELECT DISTINCT run_id FROM run_seats WHER
 const delSeatItemsForRunStmt = db.prepare("DELETE FROM run_seat_items WHERE run_id = ?");
 const delSeatAttachForRunStmt = db.prepare("DELETE FROM run_seat_attachments WHERE run_id = ?");
 const delSeatsForRunStmt = db.prepare("DELETE FROM run_seats WHERE run_id = ?");
-const delHexesForRunStmt = db.prepare("DELETE FROM explored_hexes WHERE run_id = ?");
-const delIconsForRunStmt = db.prepare("DELETE FROM explored_hex_icons WHERE run_id = ?");
+const delClearedForRunEraseStmt = db.prepare("DELETE FROM run_cleared_hexes WHERE run_id = ?");
 const delRunStmt = db.prepare("DELETE FROM runs WHERE id = ?");
 
 /**
- * Right-to-erasure (R33): hard-delete every durable row for a client's runs (seats, inventory,
- * attachments, explored hexes/icons, and the run rows themselves). `clientId` is a stable
- * pseudonymous device id and therefore personal data; this is the admin erasure entry point.
+ * Right-to-erasure (R33): hard-delete every per-run durable row for a client's runs (seats,
+ * inventory, attachments, this-run cleared hexes, and the run rows themselves). `clientId` is a
+ * stable pseudonymous device id and therefore personal data; this is the admin erasure entry point.
+ * The GLOBAL community discovery map is NOT touched — it is shared, non-personal world state.
  * Returns the number of runs erased.
  */
 export function eraseClient(clientId: string): number {
@@ -309,8 +329,7 @@ export function eraseClient(clientId: string): number {
       delSeatItemsForRunStmt.run(runId);
       delSeatAttachForRunStmt.run(runId);
       delSeatsForRunStmt.run(runId);
-      delHexesForRunStmt.run(runId);
-      delIconsForRunStmt.run(runId);
+      delClearedForRunEraseStmt.run(runId);
       delRunStmt.run(runId);
     }
   });

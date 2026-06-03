@@ -153,6 +153,12 @@ async function init() {
     ),
   );
 
+  // First-ever community discovery (GLOBAL per dimension) — a celebratory key moment.
+  const discoveryBanner = makeTransientBanner();
+  conn.on("hexDiscovered", () =>
+    discoveryBanner("✨ Uncharted territory — your party discovered a hex no one has ever seen!"),
+  );
+
   // Load the room's dimension sprites (idempotent) so combat renders the right enemies/structures
   // even when the room's dimension differs from the ?dim preload (e.g. a joiner inherits the host's).
   // The combat screen-switch awaits this so the first frame isn't drawn with missing sprites.

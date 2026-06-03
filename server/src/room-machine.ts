@@ -34,21 +34,19 @@ import { seatBuildSpec, sovereignFor } from "./room.js";
 import { EncounterSession } from "./encounter-session.js";
 import type { AiStepResult } from "./ai-turn-runner.js";
 import {
-  saveExploredHex,
-  saveExploredHexIcon,
   saveSeatInventory,
   updateRunPartyPos,
   commitExplore,
-  seedDiscovery,
+  markRunCleared,
   markRunInactive,
   startNewRun,
   setRunHost,
   upsertRunSeat,
   loadRun,
   loadRunSeats,
-  loadExploredHexes,
-  loadExploredHexIcons,
-  loadClearedHexes,
+  loadDiscoveredHexes,
+  loadDiscoveredHexIcons,
+  loadRunCleared,
   loadSeatInventory,
 } from "./db.js";
 import { rooms } from "./room-registry.js";
@@ -75,7 +73,6 @@ export const DISCONNECT_GRACE_MS = 3_000;
 export const REAP_TIMEOUT_MS = 5 * 60_000;
 
 const ORIGIN: HexCoord = { q: 0, r: 0 };
-const DISCOVERY_RADIUS = 15;
 
 /**
  * The only channel through which the machine reaches clients. The WS layer implements it.
@@ -1011,11 +1008,14 @@ export function endCombat(room: Room, io: RoomIO): void {
   room.coopPhase = "player";
 
   if (won && room.pendingHex) {
-    exploreHex(room, room.pendingHex);
+    const firstEver = exploreHex(room, room.pendingHex);
+    const discovered = room.pendingHex;
     room.pendingHex = null;
     room.phase = "overworld";
     broadcastRoomState(room, io);
     broadcastHexMapState(room, io);
+    // First-ever discovery in this dimension is a community KEY MOMENT — celebrate it.
+    if (firstEver) io.broadcast(room, { type: "hexDiscovered", coord: discovered });
   } else {
     // Loss / wipe -> defeat (today's resetToOrigin "fresh run" path).
     room.pendingHex = null;
@@ -1025,10 +1025,11 @@ export function endCombat(room: Room, io: RoomIO): void {
 }
 
 /**
- * Mark a freshly-won hex explored + cleared and advance the party onto it (write point 4, R13.2):
- * durable cleared=1 + party_q/r in the same DB pass, atomic with the in-memory advance.
+ * Mark a freshly-won hex discovered (GLOBAL community map) + cleared-this-run and advance the party
+ * onto it (write point 4, R13.2): durable discovery + run-cleared + party_q/r in the same DB pass,
+ * atomic with the in-memory advance. Returns true iff this was the first-ever discovery (KEY MOMENT).
  */
-function exploreHex(room: Room, target: HexCoord): void {
+function exploreHex(room: Room, target: HexCoord): boolean {
   const tk = hexKey(target);
   room.hexMap = {
     ...room.hexMap,
@@ -1037,8 +1038,8 @@ function exploreHex(room: Room, target: HexCoord): void {
   };
   room.visitedThisRun.add(tk);
   const icon = getHexIcon(target, room.hexMap.icons);
-  // Write point 4 (R13.2): cleared=1 + icon + party_q/r advance atomically in one transaction.
-  commitExplore(room.runId, target, icon ?? null);
+  // Write point 4 (R13.2): global discovery + icon + this-run cleared + party_q/r in one transaction.
+  return commitExplore(room.dimensionId, room.runId, target, icon ?? null);
 }
 
 /**
@@ -1050,18 +1051,20 @@ export function resetToOrigin(room: Room, io: RoomIO, outcome: "defeat" | "aband
   const oldRunId = room.runId;
   markRunInactive(oldRunId, outcome);
   const newRunId = startNewRun(room.dimensionId, hostClientId(room), room.capacity);
-  // Match the createRoom durable contract: seed the radius-15 discovery disc (visible, cleared=0)
-  // and the origin (cleared=1) so a server restart that resumes this run rebuilds the same
-  // visibility instead of a single hex.
-  seedDiscovery(newRunId, DISCOVERY_RADIUS);
-  saveExploredHex(newRunId, ORIGIN, true);
-  saveExploredHexIcon(newRunId, ORIGIN, "town");
+  // Discovery is GLOBAL per dimension and persists across runs — do NOT re-seed it. The fresh run
+  // only re-clears its own origin; the community map (loadDiscoveredHexes) carries forward.
+  markRunCleared(newRunId, ORIGIN);
 
   room.runId = newRunId;
   rooms.rekeyRun(oldRunId, room);
 
-  room.hexMap = { playerPos: ORIGIN, hexes: { [hexKey(ORIGIN)]: "explored" }, icons: { [hexKey(ORIGIN)]: "town" } };
-  room.visitedThisRun = new Set([hexKey(ORIGIN)]);
+  const originKey = hexKey(ORIGIN);
+  const hexes = loadDiscoveredHexes(room.dimensionId);
+  hexes[originKey] = "explored";
+  const icons: Record<string, HexIconType> = { [originKey]: "town" };
+  for (const [key, icon] of Object.entries(loadDiscoveredHexIcons(room.dimensionId))) icons[key] = icon as HexIconType;
+  room.hexMap = { playerPos: ORIGIN, hexes, icons };
+  room.visitedThisRun = new Set([originKey]);
   room.phase = "overworld";
   room.pendingHex = null;
 
@@ -1247,16 +1250,19 @@ export function reconstructRoomForRun(
   const dimensionId = runRow.dimension_id;
   const capacity = runRow.capacity;
 
-  // Hex map: visibility from explored set, icons from persisted + derived, cleared set is the
-  // durable visitedThisRun (R13.2 — NEVER rebuilt from visibility).
-  const hexes = loadExploredHexes(runId);
+  // Hex map: visibility from the GLOBAL community discovery set (per dimension), icons from
+  // persisted + derived, cleared set is the PER-RUN durable visitedThisRun (R13.2 — NEVER rebuilt
+  // from visibility).
+  const hexes = loadDiscoveredHexes(dimensionId);
   const originKey = hexKey(ORIGIN);
   if (!(originKey in hexes)) hexes[originKey] = "explored";
-  const iconRows = loadExploredHexIcons(runId);
+  const iconRows = loadDiscoveredHexIcons(dimensionId);
   const icons: Record<string, HexIconType> = { [originKey]: "town" };
   for (const [key, icon] of Object.entries(iconRows)) icons[key] = icon as HexIconType;
   const playerPos: HexCoord = { q: runRow.party_q, r: runRow.party_r };
-  const visitedThisRun = loadClearedHexes(runId);
+  const visitedThisRun = loadRunCleared(runId);
+  // Empty only for a corrupt row: every run durably clears ORIGIN at creation/reset, so this
+  // fallback re-adds ORIGIN alone and never leaks another run's cleared hexes (no cross-run skip).
   if (visitedThisRun.size === 0) visitedThisRun.add(originKey);
 
   const code = freshRoomCode((c) => rooms.isTaken(c));
