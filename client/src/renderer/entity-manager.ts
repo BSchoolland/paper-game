@@ -72,7 +72,7 @@ export class EntityManager {
   onPerfectBlock: (() => void) | null = null;
   private dispatcher = new VisualEffectDispatcher();
 
-  constructor(private layer: Container) {
+  constructor(private layer: Container, private mySeatId: string | null = null) {
     this.floatingText = new FloatingTextManager(layer);
   }
 
@@ -101,7 +101,7 @@ export class EntityManager {
       }
 
       if (!visual) {
-        visual = new EntityVisual(entity);
+        visual = new EntityVisual(entity, this.mySeatId);
         this.visuals.set(id, visual);
         this.layer.addChild(visual.container);
       }

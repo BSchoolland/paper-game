@@ -40,6 +40,8 @@ export class ReplayStore implements GameStore {
   hasState(): boolean { return this.state !== null; }
   getState(): GameState | null { return this.state; }
   dispatch(_action: PlayerAction) { /* replays are read-only */ }
+  pass() { /* replays are read-only */ }
+  unpass() { /* replays are read-only */ }
   reset() { this.jumpTo(0); }
   subscribe(l: Listener) { this.listeners.push(l); return () => { this.listeners = this.listeners.filter(x => x !== l); }; }
 

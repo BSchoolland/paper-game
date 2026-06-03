@@ -28,7 +28,6 @@ export class AbilityBar {
   private scale = 1;
   private cardWidth = 0;
   private ready = false;
-  private endTurnBtn: HTMLButtonElement;
   private energyEl: HTMLDivElement;
   private variableCostEl: HTMLElement | null = null;
   private variableCostAbility: AbilityDefinition | null = null;
@@ -37,37 +36,6 @@ export class AbilityBar {
     this.container = document.createElement("div");
     this.container.id = "ability-bar";
 
-    this.endTurnBtn = document.createElement("button");
-    this.endTurnBtn.id = "end-turn-btn";
-    this.endTurnBtn.textContent = "End Turn";
-    // Skip the focus ring entirely — the button is mouse-only. Without this, focus follows the
-    // click and space presses re-activate it (which breaks the defense prompt).
-    this.endTurnBtn.tabIndex = -1;
-    this.endTurnBtn.style.cssText = `
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 100;
-      padding: 12px 24px;
-      font-family: monospace;
-      font-size: 16px;
-      font-weight: bold;
-      color: #4a3728;
-      background: #d4c8a0;
-      border: 2px solid #6b5b4a;
-      border-radius: 6px;
-      cursor: pointer;
-      display: none;
-      pointer-events: auto;
-    `;
-    this.endTurnBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      // Drop focus so subsequent space/Enter presses don't re-activate the button. Otherwise
-      // space-to-defend during the enemy turn doubles as an end-turn dispatch.
-      this.endTurnBtn.blur();
-      this.clientState.endTurn();
-    });
-    document.body.appendChild(this.endTurnBtn);
     this.container.style.cssText = `
       position: fixed;
       bottom: 16px;
@@ -122,7 +90,6 @@ export class AbilityBar {
 
   show() {
     this.container.style.display = "block";
-    this.endTurnBtn.style.display = "block";
     this.energyEl.style.display = "block";
     this.unsubscribe = this.clientState.subscribe(() => this.render());
     this.render();
@@ -130,7 +97,6 @@ export class AbilityBar {
 
   hide() {
     this.container.style.display = "none";
-    this.endTurnBtn.style.display = "none";
     this.energyEl.style.display = "none";
     if (this.unsubscribe) {
       this.unsubscribe();
@@ -192,9 +158,6 @@ export class AbilityBar {
       `<span style="color:#8a7a68"> / ${entity.energy.maxBlue}</span>` +
       regenTag(blueRegen, entity.energy.regenBlue);
 
-    this.endTurnBtn.disabled = !this.clientState.canEndTurn();
-    this.endTurnBtn.style.opacity = this.clientState.canEndTurn() ? "1" : "0.5";
-
     this.container.innerHTML = "";
     this.variableCostEl = null;
     this.variableCostAbility = null;
@@ -211,11 +174,9 @@ export class AbilityBar {
     const liftAmount = 30;
     // Step that leaves cards edge-to-edge with no overlap.
     const noOverlapStep = (this.cardWidth / fanRadius) * (180 / Math.PI);
-    // Cap the fan so it never spills past the viewport or covers the End Turn
-    // button: the container origin sits at 62.5% of the window, the End Turn
-    // button is anchored bottom-right, so the right side is the tight constraint.
-    const endTurnWidth = this.endTurnBtn.offsetWidth || 130;
-    const rightRoom = window.innerWidth * 0.375 - 24 - endTurnWidth - 16;
+    // Cap the fan so it never spills past the viewport. The container origin sits at 62.5% of the
+    // window; the bottom-right corner (party HUD / pass button) is the tight right-side constraint.
+    const rightRoom = window.innerWidth * 0.375 - 24 - 160;
     const leftRoom = window.innerWidth * 0.625 - 24;
     const maxHalfWidth = Math.max(this.cardWidth * 0.6, Math.min(rightRoom, leftRoom));
     const maxAngleRad = Math.asin(Math.min(1, Math.max(0, (maxHalfWidth - this.cardWidth / 2) / fanRadius)));

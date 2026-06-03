@@ -1,46 +1,137 @@
-import type { TeamId } from "shared";
+import type { ClientMessage, ServerMessage, ServerMessageType } from "shared";
+import { PROTOCOL_VERSION } from "shared";
+import { getClientId, setStoredSeat } from "./player-token.js";
 
-type MessageHandler = (msg: any) => void;
+/** A handler for one server message variant, narrowed to that variant's shape. */
+type Handler<T extends ServerMessageType> = (msg: Extract<ServerMessage, { type: T }>) => void;
 
-export class Connection {
-  private ws: WebSocket;
-  private handlers = new Map<string, MessageHandler[]>();
-  private _team: TeamId | null = null;
+export type ConnectionStatus = "connecting" | "open" | "reconnecting";
+
+const RECONNECT_BASE_MS = 500;
+const RECONNECT_MAX_MS = 8000;
+
+/**
+ * The single client<->server socket. Sends `hello` on open, resolves `ready()` when the
+ * server's first `welcome` lands, persists the room+seat from a `reconnected` welcome, and
+ * dispatches every incoming {@link ServerMessage} to typed `on(...)` subscribers. On an
+ * unexpected close it reconnects with backoff (a fresh `hello` re-binds via the persisted
+ * clientId; the server auto-reclaims a dead-socket seat).
+ */
+export class RoomConnection {
+  private ws!: WebSocket;
+  private handlers = new Map<ServerMessageType, Array<(msg: ServerMessage) => void>>();
+  private statusListeners: Array<(status: ConnectionStatus) => void> = [];
   private _ready: Promise<void>;
+  private resolveReady!: () => void;
+  private rejectReady!: (err: Error) => void;
+  private _welcomed = false;
+  private _sessionToken: string | null = null;
+  private reconnectAttempts = 0;
+  private closedByUs = false;
 
-  get team(): TeamId | null {
-    return this._team;
-  }
-
-  constructor(url: string) {
-    let resolveReady: () => void;
-    this._ready = new Promise((r) => (resolveReady = r));
-
-    this.ws = new WebSocket(url);
-    this.ws.addEventListener("message", (event) => {
-      const msg = JSON.parse(event.data as string);
-      if (msg.type === "team") {
-        this._team = msg.team;
-        resolveReady!();
-      }
-      const handlers = this.handlers.get(msg.type);
-      if (handlers) {
-        for (const h of handlers) h(msg);
-      }
+  constructor(
+    private url: string,
+    private displayName?: string,
+  ) {
+    this._ready = new Promise((resolve, reject) => {
+      this.resolveReady = resolve;
+      this.rejectReady = reject;
     });
+    this.open();
   }
 
-  on(type: string, handler: MessageHandler) {
+  private open(): void {
+    this.notifyStatus(this._welcomed ? "reconnecting" : "connecting");
+    this.ws = new WebSocket(this.url);
+    this.ws.addEventListener("open", () => this.sendHello());
+    this.ws.addEventListener("message", (event) => this.handleMessage(event));
+    this.ws.addEventListener("close", () => this.handleClose());
+    this.ws.addEventListener("error", () => this.ws.close());
+  }
+
+  private handleClose(): void {
+    if (this.closedByUs) return;
+    if (!this._welcomed) {
+      // Failed before the first welcome: surface the failure rather than hang init().
+      this.rejectReady(new Error("Could not reach the game server."));
+      return;
+    }
+    this.notifyStatus("reconnecting");
+    const delay = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** this.reconnectAttempts);
+    this.reconnectAttempts++;
+    setTimeout(() => {
+      if (!this.closedByUs) this.open();
+    }, delay);
+  }
+
+  get sessionToken(): string | null {
+    return this._sessionToken;
+  }
+
+  private sendHello(): void {
+    this.send({ type: "hello", protocolVersion: PROTOCOL_VERSION, clientId: getClientId(), displayName: this.displayName });
+  }
+
+  private handleMessage(event: MessageEvent): void {
+    const msg = JSON.parse(event.data as string) as ServerMessage;
+    if (msg.type === "displaced") {
+      // Another tab took this seat; do not fight to reconnect — the user must refresh to re-enter.
+      this.closedByUs = true;
+    }
+    if (msg.type === "protocolMismatch") {
+      // Terminal: the server closes after this. Don't reconnect, and reject ready() with a code so
+      // boot doesn't show a misleading "could not reach server" on top of the mismatch banner.
+      this.closedByUs = true;
+      if (!this._welcomed) this.rejectReady(new Error("protocolMismatch"));
+    }
+    if (msg.type === "welcome") {
+      this._sessionToken = msg.sessionToken;
+      if (msg.reconnected) setStoredSeat(msg.reconnected);
+      if (!this._welcomed) {
+        this._welcomed = true;
+        this.resolveReady();
+      }
+      this.reconnectAttempts = 0;
+      this.notifyStatus("open");
+    }
+    const list = this.handlers.get(msg.type);
+    if (list) for (const h of list) h(msg);
+  }
+
+  /** Subscribe to one server message type with a handler narrowed to that variant. */
+  on<T extends ServerMessageType>(type: T, handler: Handler<T>): () => void {
     const list = this.handlers.get(type) ?? [];
-    list.push(handler);
+    const erased = handler as (msg: ServerMessage) => void;
+    list.push(erased);
     this.handlers.set(type, list);
+    return () => {
+      const cur = this.handlers.get(type);
+      if (cur) this.handlers.set(type, cur.filter((h) => h !== erased));
+    };
   }
 
-  send(msg: object) {
+  onStatus(listener: (status: ConnectionStatus) => void): () => void {
+    this.statusListeners.push(listener);
+    return () => {
+      this.statusListeners = this.statusListeners.filter((l) => l !== listener);
+    };
+  }
+
+  private notifyStatus(status: ConnectionStatus): void {
+    for (const l of this.statusListeners) l(status);
+  }
+
+  send(msg: ClientMessage): void {
     this.ws.send(JSON.stringify(msg));
   }
 
+  /** Resolves once the server's first `welcome` arrives; rejects if the first connect fails. */
   ready(): Promise<void> {
     return this._ready;
+  }
+
+  close(): void {
+    this.closedByUs = true;
+    this.ws.close();
   }
 }

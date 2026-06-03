@@ -98,7 +98,11 @@ export class InputManager {
 
     document.addEventListener("keydown", (e) => {
       if (!this.enabled) return;
-      if (e.key === "r" || e.key === "R") this.clientState.reset();
+      // Reset aborts the whole encounter for the party — host-only, and only when it's my turn to
+      // act (so a stray keypress during the enemy phase / another player's animation does nothing).
+      if ((e.key === "r" || e.key === "R") && this.clientState.seat.isHost() && this.clientState.canAcceptPlayerInput()) {
+        this.clientState.reset();
+      }
       if (e.key === "Escape") this.clientState.selectAbility(null);
       if (e.key === "F3") {
         e.preventDefault();

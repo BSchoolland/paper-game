@@ -1,6 +1,6 @@
-import type { AbilityDefinition, AimDirection, AttackAbility, GameState, PlayerAction, Vec2 } from "shared";
+import type { AbilityDefinition, GameState, PlayerAction, Vec2 } from "shared";
 import type { GameStore } from "./game-store.js";
-import { canUseAbility, getAbility, isMyEntity, isPlayerPhase, myHeroEntity } from "./combat-ui-state.js";
+import { canMyHeroAct, canUseAbility, getAbility, isMyEntity, isPlayerPhase, myHeroEntity } from "./combat-ui-state.js";
 import type { IncomingAttackData, InteractionState } from "./combat-ui-state.js";
 import { SeatContext } from "./seat-context.js";
 
@@ -16,7 +16,7 @@ export interface IncomingAttack extends IncomingAttackData {
 export class ClientState {
   private listeners: Listener[] = [];
 
-  ui: InteractionState = { tag: "enemyTurn" };
+  ui: InteractionState = { tag: "watching" };
   selectedEntityId: string | null = null;
   selectedAbilityId: string | null = null;
   showDebugWalls = false;
@@ -49,21 +49,21 @@ export class ClientState {
   }
 
   submitAction(action: PlayerAction) {
-    this.ui = { tag: "submittingAction", action };
+    this.ui = { tag: "submitting", action };
     this.selectedAbilityId = null;
     this.notify();
     this.gameStore.dispatch(action);
   }
 
   canAcceptPlayerInput(): boolean {
-    return isPlayerPhase(this.getState(), this.seat) && ["playerIdle", "abilitySelected", "aiming"].includes(this.ui.tag);
+    return canMyHeroAct(this.getState(), this.seat) && ["idle", "abilitySelected", "aiming"].includes(this.ui.tag);
   }
 
   canSelectAbility(abilityId: string): boolean {
     return this.canAcceptPlayerInput() && canUseAbility(this.getState(), this.selectedEntityId, abilityId, this.seat);
   }
 
-  canEndTurn(): boolean {
+  canPassTurn(): boolean {
     return this.canAcceptPlayerInput();
   }
 
@@ -71,14 +71,14 @@ export class ClientState {
     if (!isPlayerPhase(this.getState(), this.seat)) return;
     this.selectedEntityId = entityId;
     this.selectedAbilityId = null;
-    this.ui = { tag: "playerIdle" };
+    this.ui = { tag: "idle" };
     this.notify();
   }
 
   selectAbility(abilityId: string | null) {
     if (abilityId === null) {
       this.selectedAbilityId = null;
-      this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+      this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
       this.notify();
       return;
     }
@@ -131,16 +131,16 @@ export class ClientState {
     return action;
   }
 
-  setDefensePrompt(input: IncomingAttackData, phase: "windup" | "window", progress: number) {
+  setDefensePrompt(promptId: string, input: IncomingAttackData, phase: "windup" | "window", progress: number) {
     this.selectedAbilityId = null;
     this.incomingAttack = { ...input, phase, phaseProgress: progress };
-    this.ui = { tag: "defensePrompt", phase, progress, incoming: input };
+    this.ui = { tag: "defending", promptId, phase, progress, incoming: input };
     this.notify();
   }
 
   clearDefensePrompt() {
     this.incomingAttack = null;
-    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
     this.notify();
   }
 
@@ -151,7 +151,7 @@ export class ClientState {
   resetSelection() {
     this.selectedEntityId = null;
     this.selectedAbilityId = null;
-    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
   }
 
   toggleDebugWalls() {
@@ -159,18 +159,42 @@ export class ClientState {
     this.notify();
   }
 
-  endTurn() {
-    if (!this.canEndTurn()) return;
-    const action: PlayerAction = { type: "endTurn" };
-    this.submitAction(action);
+  /** Release the submit lock without snapping the board (on actionRejected for my seat, or my own
+   * action resolving in a snapshot). */
+  clearSubmitLock() {
+    if (this.ui.tag !== "submitting") return;
+    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
+    this.notify();
   }
 
-  autoSelectPlayer() {
-    const state = this.getState();
-    const player = myHeroEntity(state, this.seat);
-    if (player) this.selectedEntityId = player.id;
+  /** Mark my hero as done for the player phase (server-side `pass`). */
+  passTurn() {
+    if (!this.canPassTurn()) return;
+    this.gameStore.pass();
+    this.ui = { tag: "watching" };
     this.selectedAbilityId = null;
-    this.ui = isPlayerPhase(state, this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+    this.notify();
+  }
+
+  /** Toggle my hero's player-phase readiness: `pass` marks done, `unpass` reopens it. */
+  setReady(ready: boolean) {
+    if (ready) {
+      this.gameStore.pass();
+      this.ui = { tag: "watching" };
+      this.selectedAbilityId = null;
+    } else {
+      this.gameStore.unpass();
+      this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
+    }
+    this.notify();
+  }
+
+  autoSelectMyHero() {
+    const state = this.getState();
+    const hero = myHeroEntity(state, this.seat);
+    if (hero) this.selectedEntityId = hero.id;
+    this.selectedAbilityId = null;
+    this.ui = isPlayerPhase(state, this.seat) ? { tag: "idle" } : { tag: "watching" };
     this.notify();
   }
 
@@ -180,7 +204,7 @@ export class ClientState {
     this.selectedAbilityId = null;
     this.timingAim = null;
     this.incomingAttack = null;
-    this.ui = { tag: "enemyTurn" };
+    this.ui = { tag: "watching" };
   }
 
   subscribe(listener: Listener) {
@@ -201,7 +225,7 @@ export class ClientState {
       this.selectedAbilityId = null;
       this.timingAim = null;
       this.incomingAttack = null;
-      this.ui = { tag: "enemyTurn" };
+      this.ui = { tag: "watching" };
       return;
     }
     if (this.incomingAttack) return;
@@ -209,7 +233,7 @@ export class ClientState {
       if (!canUseAbility(state, this.ui.entityId, this.ui.abilityId, this.seat)) {
         this.selectedAbilityId = null;
         this.timingAim = null;
-        this.ui = isPlayerPhase(state, this.seat) ? { tag: "playerIdle" } : { tag: "enemyTurn" };
+        this.ui = isPlayerPhase(state, this.seat) ? { tag: "idle" } : { tag: "watching" };
       }
       return;
     }
@@ -219,13 +243,16 @@ export class ClientState {
     }
     if (this.selectedAbilityId && !canUseAbility(state, this.selectedEntityId, this.selectedAbilityId, this.seat)) {
       this.selectedAbilityId = null;
-      if (this.ui.tag === "aiming" || this.ui.tag === "abilitySelected") this.ui = { tag: "playerIdle" };
+      if (this.ui.tag === "aiming" || this.ui.tag === "abilitySelected") this.ui = { tag: "idle" };
     }
     if (!isPlayerPhase(state, this.seat)) {
       this.selectedAbilityId = null;
-      this.ui = { tag: "enemyTurn" };
-    } else if (this.ui.tag === "enemyTurn" || this.ui.tag === "submittingAction") {
-      this.ui = { tag: "playerIdle" };
+      this.ui = { tag: "watching" };
+    } else if (this.ui.tag === "watching") {
+      // `submitting` is NOT cleared here: in co-op a peer's snapshot must not release my lock.
+      // It clears on my own action resolving (clearSubmitLock via subscribeSelfActed) or on
+      // actionRejected for my seat.
+      this.ui = { tag: "idle" };
     }
   }
 }

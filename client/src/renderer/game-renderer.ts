@@ -116,7 +116,7 @@ export class GameRenderer {
       this.entities = null;
     }
     this.rebuildGrid();
-    this.entities = new EntityManager(this.sortableLayer);
+    this.entities = new EntityManager(this.sortableLayer, this.clientState.seat.mySeatId);
     this.entities.onShake = (req) => {
       this.shakeIntensity = req.intensity;
       this.shakeTimer = 0.3;

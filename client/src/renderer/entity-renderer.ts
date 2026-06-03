@@ -77,6 +77,7 @@ export class EntityVisual {
   private readonly hpBg: Graphics;
   private readonly hpPreview: Graphics;
   private readonly selectionRing: Graphics;
+  private readonly ownerRing: Graphics;
   private animState: AnimState = "idle";
   private animTimer = 0;
   readonly entityId: string;
@@ -99,7 +100,7 @@ export class EntityVisual {
   private readonly statusDots: Graphics;
   private lastStatusCount = 0;
 
-  constructor(entity: Entity) {
+  constructor(entity: Entity, mySeatId: string | null = null) {
     this.entityId = entity.id;
     this.entitySprites = entity.sprites;
     this.heightMeters = entity.heightMeters ?? 2;
@@ -151,9 +152,28 @@ export class EntityVisual {
       this.sprites = sprites as Record<AnimState, Sprite>;
     }
 
+    // A persistent ground ring under the hero this client owns (controllerId === mySeatId),
+    // distinct from the transient gold-on-hover selection ring above it.
+    this.ownerRing = new Graphics();
+    this.ownerRing.visible = !!mySeatId && entity.controllerId === mySeatId;
+    if (this.ownerRing.visible) {
+      drawRoughEllipse(
+        this.ownerRing,
+        0,
+        4,
+        entity.collisionRadius + 9,
+        entity.collisionRadius * 0.75,
+        1,
+        24,
+        entity.id.length + 7,
+      );
+      this.ownerRing.stroke({ color: 0x4caf50, width: 2 });
+    }
+    this.container.addChildAt(this.ownerRing, 0);
+
     this.selectionRing = new Graphics();
     this.selectionRing.visible = false;
-    this.container.addChildAt(this.selectionRing, 0);
+    this.container.addChildAt(this.selectionRing, 1);
 
     this.hpBg = new Graphics();
     this.container.addChild(this.hpBg);

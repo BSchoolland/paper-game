@@ -1,5 +1,5 @@
 import type { Screen } from "./screen-manager.js";
-import type { Connection } from "../net/connection.js";
+import type { RoomConnection } from "../net/connection.js";
 import type {
   InventoryState,
   ItemDefinition,
@@ -46,7 +46,10 @@ export class InventoryScreen implements Screen {
   private input!: InventoryInput;
   private characterAnchors: CharacterAnchors | null = null;
 
-  constructor(private conn: Connection) {
+  constructor(
+    private conn: RoomConnection,
+    private canEdit: () => boolean = () => true,
+  ) {
     this.container = document.createElement("div");
     this.container.style.display = "none";
     document.body.appendChild(this.container);
@@ -175,8 +178,8 @@ export class InventoryScreen implements Screen {
       getPositionById: (id) => this.positions.get(id),
       setPosition: (id, pos) => this.positions.set(id, pos),
       loadSprite: (id, dimId) => this.renderer.loadSprite(id, dimId),
-      sendEquip: (bagIndex) => this.conn.send({ type: "equip", bagIndex }),
-      sendUnequip: (idx) => this.conn.send({ type: "unequip", equippedIndex: idx }),
+      sendEquip: (bagIndex) => { if (this.canEdit()) this.conn.send({ type: "equip", bagIndex }); },
+      sendUnequip: (idx) => { if (this.canEdit()) this.conn.send({ type: "unequip", equippedIndex: idx }); },
       deletePosition: (id) => this.positions.delete(id),
       updateAttachment: (id, pos, item) => this.updateAttachment(id, pos, item),
       close: () => this.onCloseCallback?.(),
@@ -185,6 +188,7 @@ export class InventoryScreen implements Screen {
   }
 
   private updateAttachment(itemId: string, panelPos: ItemPosition, item: ItemDefinition) {
+    if (!this.canEdit()) return;
     if (!this.characterAnchors || !this.charImage) return;
 
     const anchors = getFrameAnchors(this.characterAnchors, "inventory-idle");

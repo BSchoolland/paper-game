@@ -24,6 +24,7 @@ const PERFECT_WINDOW_MS = 33;
 const RESULT_HOLD_MS = 250;
 
 export interface DefendPromptInput {
+  promptId: string;
   attackerId: string;
   attackerPosition: Vec2;
   aimDirection: AimDirection;
@@ -52,7 +53,7 @@ export class DefendPrompt {
         aimDirection: input.aimDirection,
         ability: input.ability,
       };
-      this.clientState.setDefensePrompt(incoming, "windup", 0);
+      this.clientState.setDefensePrompt(input.promptId, incoming, "windup", 0);
 
       const startTime = performance.now();
       this.impactTime = startTime + WINDUP_MS;
@@ -113,9 +114,9 @@ export class DefendPrompt {
         const now = performance.now();
         const elapsed = now - startTime;
         if (elapsed < WINDUP_MS) {
-          this.clientState.setDefensePrompt(incoming, "windup", elapsed / WINDUP_MS);
+          this.clientState.setDefensePrompt(input.promptId, incoming, "windup", elapsed / WINDUP_MS);
         } else {
-          this.clientState.setDefensePrompt(incoming, "window", Math.min(1, (elapsed - WINDUP_MS) / WINDOW_MS));
+          this.clientState.setDefensePrompt(input.promptId, incoming, "window", Math.min(1, (elapsed - WINDUP_MS) / WINDOW_MS));
         }
 
         // At the end of the windup, kick off the actual swing + shape-flash visuals so the

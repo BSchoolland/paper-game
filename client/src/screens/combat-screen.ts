@@ -22,7 +22,7 @@ export class CombatScreen implements Screen {
 
   enter() {
     this.combatStore.waitForState().then(async () => {
-      this.clientState.autoSelectPlayer();
+      this.clientState.autoSelectMyHero();
       // Preload the per-encounter map image so the background is ready on the first frame.
       const mapImage = this.clientState.getState()?.mapDefinition.mapImage;
       if (mapImage) {
