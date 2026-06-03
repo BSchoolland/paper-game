@@ -66,6 +66,61 @@ describe("durable run-scoped DB (Phase 3)", () => {
     expect(inv.equipped.length).toBe(0);
   });
 
+  it("abandonPriorSeatForClient frees the client to take a new seat without a UNIQUE crash (R32)", () => {
+    const r1 = db.startNewRun(1, "switcher", 2);
+    db.upsertRunSeat(r1, 0, { clientId: "switcher", displayName: "S", controllerKind: "human", tokenSalt: db.newTokenSalt() });
+    expect(db.findActiveSeatForClient("switcher")).toEqual({ runId: r1, seatIndex: 0 });
+
+    // Abandon the prior seat (solo run -> run inactivated), then a fresh create reuses the clientId.
+    const result = db.abandonPriorSeatForClient("switcher");
+    expect(result).toEqual({ runId: r1, seatIndex: 0, runInactivated: true });
+    expect(db.findActiveSeatForClient("switcher")).toBeNull();
+    expect(db.loadRun(r1)!.active).toBe(0);
+
+    const r2 = db.startNewRun(1, "switcher", 2);
+    expect(() =>
+      db.upsertRunSeat(r2, 0, { clientId: "switcher", displayName: "S", controllerKind: "human", tokenSalt: db.newTokenSalt() }),
+    ).not.toThrow();
+    expect(db.findActiveSeatForClient("switcher")).toEqual({ runId: r2, seatIndex: 0 });
+  });
+
+  it("abandonPriorSeatForClient leaves a multi-human prior run active (only stamps the leaving seat)", () => {
+    const r = db.startNewRun(1, "host2", 2);
+    db.upsertRunSeat(r, 0, { clientId: "host2", displayName: "H", controllerKind: "human", tokenSalt: db.newTokenSalt() });
+    db.upsertRunSeat(r, 1, { clientId: "guest2", displayName: "G", controllerKind: "human", tokenSalt: db.newTokenSalt() });
+
+    const result = db.abandonPriorSeatForClient("guest2");
+    expect(result).toEqual({ runId: r, seatIndex: 1, runInactivated: false });
+    expect(db.loadRun(r)!.active).toBe(1); // host still live -> run stays active
+    expect(db.findActiveSeatForClient("host2")).toEqual({ runId: r, seatIndex: 0 });
+    expect(db.findActiveSeatForClient("guest2")).toBeNull();
+  });
+
+  it("commitExplore advances cleared+icon+party position atomically (write point 4 / R13.2)", () => {
+    const runId = db.startNewRun(1, "explorer", 2);
+    db.saveExploredHex(runId, { q: 0, r: 0 }, true);
+    db.commitExplore(runId, { q: 1, r: 0 }, "wilderness");
+
+    expect([...db.loadClearedHexes(runId)].sort()).toEqual(["0,0", "1,0"]);
+    expect(db.loadExploredHexIcons(runId)["1,0"]).toBe("wilderness");
+    const run = db.loadRun(runId)!;
+    expect([run.party_q, run.party_r]).toEqual([1, 0]);
+  });
+
+  it("eraseClient hard-deletes every durable row for a client's runs (R33)", () => {
+    const runId = db.startNewRun(1, "gdpr", 2);
+    db.upsertRunSeat(runId, 0, { clientId: "gdpr", displayName: "X", controllerKind: "human", tokenSalt: db.newTokenSalt() });
+    db.saveSeatInventory(runId, 0, { bag: new Array(16).fill(null), equipped: [], attachments: {} });
+    db.saveExploredHex(runId, { q: 0, r: 0 }, true);
+
+    const erased = db.eraseClient("gdpr");
+    expect(erased).toBe(1);
+    expect(db.loadRun(runId)).toBeNull();
+    expect(db.loadRunSeats(runId).length).toBe(0);
+    expect(Object.keys(db.loadExploredHexes(runId)).length).toBe(0);
+    expect(db.findActiveSeatForClient("gdpr")).toBeNull();
+  });
+
   it("mints HMAC session tokens that verify only for the right client (R29)", () => {
     const salt = db.newTokenSalt();
     const token = db.mintSessionToken("clientA", salt);

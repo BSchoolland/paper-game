@@ -119,6 +119,9 @@ export interface Room {
 
   reapTimer: Timer | null;
   lastActivityMs: number;
+  /** Set once the room is reaped/disposed so an in-flight async encounter build discards itself
+   *  instead of assigning a session to a zombie room no longer in the registry (ruling R7/R19). */
+  disposed?: boolean;
 }
 
 /** Immutable snapshot of a seat's loadout, taken synchronously before the async encounter build
@@ -220,6 +223,7 @@ export function createOpenSeats(capacity: number, dimensionId: number): Seat[] {
 
 /** Tear down all in-memory timers for a room (ruling R19). Durable rows are NOT deleted (R13.1). */
 export function disposeRoom(room: Room): void {
+  room.disposed = true;
   if (room.reapTimer) clearTimeout(room.reapTimer);
   if (room.vote?.timer) clearTimeout(room.vote.timer);
   if (room.defendRound?.timeout) clearTimeout(room.defendRound.timeout);

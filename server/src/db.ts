@@ -98,7 +98,11 @@ const SCHEMA_VERSION = 2;
         "ALTER TABLE runs ADD COLUMN completed_at   INTEGER",
         "ALTER TABLE runs ADD COLUMN outcome        TEXT",
       ]) {
-        try { db.exec(sql); } catch { /* column already exists */ }
+        try {
+          db.exec(sql);
+        } catch (e) {
+          if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+        }
       }
       db.exec(`CREATE TABLE IF NOT EXISTS run_seats (
         run_id          INTEGER NOT NULL,
@@ -190,6 +194,20 @@ export function loadExploredHexIcons(runId: number): Record<string, string> {
   return icons;
 }
 
+/**
+ * Write point 4 (R13.2): atomically mark a hex cleared=1, set its icon (if any), and advance the
+ * party position — all in ONE transaction so a crash can never persist cleared without the matching
+ * party_q/r (or an icon without the hex).
+ */
+export function commitExplore(runId: number, coord: HexCoord, icon: string | null): void {
+  const tx = db.transaction(() => {
+    insertHexStmt.run(runId, coord.q, coord.r, 1);
+    if (icon) insertIconStmt.run(runId, coord.q, coord.r, icon);
+    updatePartyPosStmt.run(coord.q, coord.r, Date.now(), runId);
+  });
+  tx();
+}
+
 export function seedDiscovery(runId: number, radius: number): void {
   const tx = db.transaction(() => {
     for (let q = -radius; q <= radius; q++) {
@@ -270,6 +288,36 @@ export function deactivateStaleRuns(olderThanMs: number): number {
   return rows.length;
 }
 
+const runsForClientStmt = db.prepare("SELECT DISTINCT run_id FROM run_seats WHERE client_id = ?");
+const delSeatItemsForRunStmt = db.prepare("DELETE FROM run_seat_items WHERE run_id = ?");
+const delSeatAttachForRunStmt = db.prepare("DELETE FROM run_seat_attachments WHERE run_id = ?");
+const delSeatsForRunStmt = db.prepare("DELETE FROM run_seats WHERE run_id = ?");
+const delHexesForRunStmt = db.prepare("DELETE FROM explored_hexes WHERE run_id = ?");
+const delIconsForRunStmt = db.prepare("DELETE FROM explored_hex_icons WHERE run_id = ?");
+const delRunStmt = db.prepare("DELETE FROM runs WHERE id = ?");
+
+/**
+ * Right-to-erasure (R33): hard-delete every durable row for a client's runs (seats, inventory,
+ * attachments, explored hexes/icons, and the run rows themselves). `clientId` is a stable
+ * pseudonymous device id and therefore personal data; this is the admin erasure entry point.
+ * Returns the number of runs erased.
+ */
+export function eraseClient(clientId: string): number {
+  const runIds = (runsForClientStmt.all(clientId) as { run_id: number }[]).map((r) => r.run_id);
+  const tx = db.transaction(() => {
+    for (const runId of runIds) {
+      delSeatItemsForRunStmt.run(runId);
+      delSeatAttachForRunStmt.run(runId);
+      delSeatsForRunStmt.run(runId);
+      delHexesForRunStmt.run(runId);
+      delIconsForRunStmt.run(runId);
+      delRunStmt.run(runId);
+    }
+  });
+  tx();
+  return runIds.length;
+}
+
 // --- Run seats (membership / identity binding; v1 lookup by raw client_id) ---
 export type ControllerKind = "human" | "bot";
 export interface RunSeatRow {
@@ -309,6 +357,37 @@ export function upsertRunSeat(
 
 export function leaveRunSeat(runId: number, seatIndex: number): void {
   leaveSeatStmt.run(Date.now(), runId, seatIndex);
+}
+
+const liveSeatsForRunStmt = db.prepare(
+  "SELECT seat_index FROM run_seats WHERE run_id = ? AND controller_kind = 'human' AND client_id IS NOT NULL AND left_at IS NULL"
+);
+
+/**
+ * R32 prior-run cleanup: before a client takes a new seat, left_at-stamp any prior live human seat
+ * it holds, and if that leaves the prior run with zero live human seats, mark the run abandoned.
+ * Single transaction so the unique-live index (idx_run_seats_client_live) never sees two live rows
+ * for one clientId — this is what prevents the "abandon/win then play again" UNIQUE-constraint crash.
+ * Returns the prior runId that was stamped (and whether it was inactivated), so the caller can tear
+ * down any lingering in-memory Room for that run (cross-Room identity teardown, R32).
+ */
+export function abandonPriorSeatForClient(
+  clientId: string,
+): { runId: number; seatIndex: number; runInactivated: boolean } | null {
+  const prior = findActiveSeatForClient(clientId);
+  if (!prior) return null;
+  const now = Date.now();
+  let runInactivated = false;
+  const tx = db.transaction(() => {
+    leaveSeatStmt.run(now, prior.runId, prior.seatIndex);
+    const remaining = liveSeatsForRunStmt.all(prior.runId) as { seat_index: number }[];
+    if (remaining.length === 0) {
+      markRunInactiveStmt.run(now, "abandoned", prior.runId);
+      runInactivated = true;
+    }
+  });
+  tx();
+  return { runId: prior.runId, seatIndex: prior.seatIndex, runInactivated };
 }
 
 export function loadRunSeats(runId: number): RunSeatRow[] {

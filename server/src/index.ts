@@ -1,36 +1,76 @@
 import type { ServerWebSocket } from "bun";
-import type { GameEvent, TeamId } from "shared";
-import {
-  getVisibleHexes,
-  getHexIcon,
-  hexKey,
-  isAdjacent,
-  parseHexKey,
-  isDecorationHex,
-  createInventory,
-  equipFromBag,
-  unequipItem,
-  getItemAbilities,
-  getAnimSet,
-  shouldAutoEndTurn,
+import type {
+  ClientMessage,
+  ServerMessage,
+  ClientId,
+  SessionToken,
+  RoomCode,
+  SeatId,
+  RoomCapacity,
+  HexIconType,
+  HexCoord,
 } from "shared";
-import type { HexCoord, HexMapState, HexIconType, InventoryState, ItemDefinition } from "shared";
-import { EncounterSession } from "./encounter-session.js";
+import { PROTOCOL_VERSION, getAnimSet, hexKey, getHexIcon, isDecorationHex } from "shared";
+import { loadDimension, loadEnemyTemplateRegistry, loadItems } from "./db.js";
 import {
-  saveExploredHex,
-  loadExploredHexes,
-  clearExploredHexes,
-  seedDiscovery,
   startNewRun,
-  loadDimension,
-  loadEnemyTemplateRegistry,
-  loadItems,
+  seedDiscovery,
+  saveExploredHex,
+  saveExploredHexIcon,
+  saveSeatInventory,
+  upsertRunSeat,
+  loadRunSeats,
+  findActiveSeatForClient,
+  abandonPriorSeatForClient,
+  leaveRunSeat,
+  markRunInactive,
+  deactivateStaleRuns,
+  newTokenSalt,
+  mintSessionToken,
+  verifySessionToken,
 } from "./db.js";
+import { rooms } from "./room-registry.js";
+import {
+  createOpenSeats,
+  buildDefaultInventory,
+  freshRoomCode,
+  seatIdForIndex,
+} from "./room.js";
+import type { Room, Seat, SocketData } from "./room.js";
+import {
+  type RoomIO,
+  disposeRoom,
+  broadcastRoomState,
+  broadcastCoopStatus,
+  broadcastHexMapState,
+  hexMapStatePayload,
+  broadcastState,
+  roomStatePayload,
+  coopStatusPayload,
+  sendInventory,
+  startPlayerPhase,
+  applyHumanAction,
+  setReady,
+  submitDefend,
+  proposeMove,
+  castVote,
+  beginCombatEntry,
+  endCombat,
+  resetToOrigin,
+  reconstructRoomForRun,
+  connectSeat,
+  onSeatDisconnected,
+  abortDefendRound,
+  resendPendingDefendPrompts,
+  armReap,
+  clearReap,
+} from "./room-machine.js";
 import { seedDimension0 } from "./seed.js";
 import { seedDimension1 } from "./seed-dimension-1.js";
 import { seedDimension2 } from "./seed-dimension-2.js";
 import { seedDimension3 } from "./seed-dimension-3.js";
 import { seedDimension501 } from "./seed-dimension-501.js";
+import { equipFromBag, unequipItem } from "shared";
 import { join } from "path";
 import { existsSync } from "fs";
 
@@ -42,182 +82,622 @@ export function initSeeds(): void {
   seedDimension501();
 }
 
-// Auto-seed on normal boot. Tests/harnesses set GAME_SKIP_SEED=1 (with an
-// in-memory GAME_DB_PATH) to import the server without touching disk seeds.
-// Transitional single global run for this pre-Room server (replaced in Phase 6 by
-// per-room runs); exploration is run-scoped now, so the old global map lives under it.
-let GLOBAL_RUN_ID = 0;
+// Auto-seed on normal boot. Tests/harnesses set GAME_SKIP_SEED=1 (with an in-memory
+// GAME_DB_PATH) to import the server without touching disk seeds. There is no global game
+// session anymore (ruling R27): rooms — and their runs — are created on demand via createRoom.
+const RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // R33: deactivate runs idle longer than 7 days.
+const HOUSEKEEPING_INTERVAL_MS = 60 * 60 * 1000; // hourly sweep.
 if (process.env.GAME_SKIP_SEED !== "1") {
   initSeeds();
-  GLOBAL_RUN_ID = startNewRun(0, "local");
-  seedDiscovery(GLOBAL_RUN_ID, 15);
-}
-
-type GameMode = "pvp" | "pve" | "duel";
-type Phase = "map" | "combat";
-
-// Trimmed playtest loadout: the debug Test Rod plus a few familiar items, nothing else.
-const STARTER_ITEM_IDS = [
-  "abilitytest", "short-sword", "bow", "staff", "round-shield",
-  // dimension 1 – The Shallows
-  "barbed-harpoon", "urchin-flail", "crab-claw-gauntlet",
-  // dimension 2 – The Gloom Hollows
-  "stalactite-spear", "fungal-mace", "geode-knuckles",
-  // dimension 3 – The Gilt Barrens
-  "sandhorn-bow", "raiders-twinblade", "mirage-staff",
-];
-
-function buildDefaultInventory(dimensionId: number): InventoryState {
-  const merged = { ...loadItems(0), ...loadItems(1), ...loadItems(2), ...loadItems(3), ...loadItems(dimensionId) };
-
-  const picked: ItemDefinition[] = [];
-  for (const id of STARTER_ITEM_IDS) {
-    const item = merged[id];
-    if (item) picked.push(item);
-  }
-  return createInventory(picked);
-}
-
-interface SocketData {
-  team: TeamId | null;
-  mode: GameMode;
-  dimensionId: number;
-  hexMap: HexMapState;
-  phase: Phase;
-  pendingHex: HexCoord | null;
-  visitedThisRun: Set<string>;
-  runId: number;
-  inventory: InventoryState;
+  // R33 retention housekeeping: periodically inactivate runs untouched past the retention window,
+  // catching abandoned lobby/overworld runs that no run-end event ever closed. Gated off under
+  // GAME_SKIP_SEED (tests) so the in-memory test DB isn't churned by a timer.
+  const sweep = setInterval(() => {
+    try {
+      const n = deactivateStaleRuns(RETENTION_MS);
+      if (n > 0) console.log(`[housekeeping] deactivated ${n} stale run(s)`);
+    } catch (e) {
+      console.error("[housekeeping] sweep failed:", e);
+    }
+  }, HOUSEKEEPING_INTERVAL_MS);
+  sweep.unref?.(); // don't keep the process alive solely for the sweep.
 }
 
 const ORIGIN: HexCoord = { q: 0, r: 0 };
 const ORIGIN_KEY = hexKey(ORIGIN);
+const DISCOVERY_RADIUS = 15;
+const DEFAULT_DIMENSION = 1;
 
-function loadHexMapFromDb(runId: number): HexMapState {
-  const hexes = loadExploredHexes(runId);
-  if (!(ORIGIN_KEY in hexes)) {
-    hexes[ORIGIN_KEY] = "explored";
-    saveExploredHex(runId, ORIGIN, true);
-  }
-  const icons: Record<string, HexIconType> = { [ORIGIN_KEY]: "town" };
-  return { playerPos: ORIGIN, hexes, icons };
-}
+// =====================================================================================
+// RoomIO — the WS transport the machine drives through (it never touches sockets itself).
+// =====================================================================================
 
-function freshVisitedSet(): Set<string> {
-  return new Set([ORIGIN_KEY]);
-}
+const io: RoomIO = {
+  send(seat: Seat, msg: ServerMessage): void {
+    seat.socket?.send(JSON.stringify(msg));
+  },
+  broadcast(room: Room, msg: ServerMessage): void {
+    const json = JSON.stringify(msg);
+    for (const seat of room.seats) {
+      if (seat.socket) seat.socket.send(json);
+    }
+  },
+};
 
-function resetToOrigin(data: SocketData): void {
-  data.hexMap = { ...data.hexMap, playerPos: ORIGIN };
-  data.visitedThisRun = freshVisitedSet();
-  data.runId = startNewRun(data.dimensionId, "local");
-  data.phase = "map";
-  data.pendingHex = null;
-}
-
-function exploreHex(data: SocketData, target: HexCoord): void {
-  const tk = hexKey(target);
-  data.hexMap = {
-    ...data.hexMap,
-    playerPos: target,
-    hexes: { ...data.hexMap.hexes, [tk]: "explored" as const },
-  };
-  data.visitedThisRun.add(tk);
-  saveExploredHex(GLOBAL_RUN_ID, target, true);
-}
-
-let gameMode: GameMode = "pvp";
-let session = await EncounterSession.create(gameMode);
-
-const aiTeam: TeamId = "blue";
-const players = new Map<TeamId, ServerWebSocket<SocketData>>();
-
-function broadcast(msg: object) {
-  const json = JSON.stringify(msg);
-  for (const ws of players.values()) {
-    ws.send(json);
-  }
-}
-
-function broadcastState(events: readonly GameEvent[]) {
-  broadcast({ type: "state", state: session.serialize(), events });
-}
-
-function sendTo(ws: ServerWebSocket<SocketData>, msg: object) {
+function sendTo(ws: ServerWebSocket<SocketData>, msg: ServerMessage): void {
   ws.send(JSON.stringify(msg));
 }
 
-function sendInventory(ws: ServerWebSocket<SocketData>) {
-  sendTo(ws, { type: "inventory", inventory: ws.data.inventory });
+/** Reap callback: tear down a room's timers + registry entry (R19/R31). Durable rows untouched. */
+function reapRoom(room: Room): void {
+  disposeRoom(room);
+  rooms.remove(room);
 }
 
-function sendHexMapState(ws: ServerWebSocket<SocketData>) {
-  const visible = getVisibleHexes(ws.data.hexMap);
-  const icons: Record<string, HexIconType> = {};
-  for (const key of Object.keys(visible)) {
-    const coord = parseHexKey(key);
-    const icon = getHexIcon(coord, ws.data.hexMap.icons);
-    if (icon) icons[key] = icon;
+// =====================================================================================
+// Helpers: seat / room lookup from a bound socket
+// =====================================================================================
+
+function roomFor(ws: ServerWebSocket<SocketData>): Room | null {
+  return ws.data.roomCode ? rooms.get(ws.data.roomCode) : null;
+}
+
+function seatFor(ws: ServerWebSocket<SocketData>): { room: Room; seat: Seat } | null {
+  const room = roomFor(ws);
+  if (!room || !ws.data.seatId) return null;
+  const seat = room.seats.find((s) => s.seatId === ws.data.seatId) ?? null;
+  if (!seat) return null;
+  return { room, seat };
+}
+
+function sendError(
+  ws: ServerWebSocket<SocketData>,
+  code: import("shared").ErrorCode,
+  message: string,
+  recoverable = true,
+): void {
+  sendTo(ws, { type: "error", code, message, recoverable });
+}
+
+// =====================================================================================
+// Connection-scoped handlers (hello / createRoom / joinRoom / reclaimSeat)
+// =====================================================================================
+
+/** Mint + bind a fresh session token for a seat (HMAC over clientId+salt, R29). */
+function mintTokenFor(clientId: ClientId, salt: string): SessionToken {
+  return mintSessionToken(clientId, salt);
+}
+
+/**
+ * R32 prior-run cleanup. Before a client takes a NEW seat (createRoom/joinRoom), durably left_at-
+ * stamp any prior live human seat it holds (and inactivate the prior run if it is thereby empty of
+ * humans), then tear down any in-memory Room for that prior run (cross-Room identity teardown) so
+ * the DB abandonment and the in-memory state stay consistent. Without this, the second upsertRunSeat
+ * for the same clientId hits the UNIQUE-live index and crashes the handler ("abandon/win then play
+ * again"). `keepRoom` lets a reclaim of the SAME room skip tearing down its own room.
+ */
+function cleanupPriorSeat(
+  ws: ServerWebSocket<SocketData>,
+  clientId: ClientId,
+  keepRoom: Room | null = null,
+): void {
+  const prior = abandonPriorSeatForClient(clientId);
+  if (!prior) return;
+  const priorRoom = rooms.getByRun(prior.runId);
+  if (!priorRoom || priorRoom === keepRoom) return;
+
+  const priorSeat = priorRoom.seats.find((s) => s.seatIndex === prior.seatIndex);
+  if (priorSeat?.socket) {
+    const old = priorSeat.socket;
+    priorSeat.socket = null;
+    if (old === ws) {
+      // The client is switching rooms on the SAME socket (still bound to the prior room): unbind it
+      // in-memory but do NOT close it — closing would kill the very request building the new room.
+      old.data.roomCode = null;
+      old.data.seatId = null;
+    } else {
+      // A DIFFERENT stale live socket: displace it so R6's single-live-socket invariant holds.
+      old.data.roomCode = null;
+      old.data.seatId = null;
+      sendTo(old, { type: "displaced" });
+      old.close();
+    }
   }
-  sendTo(ws, {
-    type: "hexMapState",
-    hexMap: { playerPos: ws.data.hexMap.playerPos, hexes: visible, icons },
-  });
-}
-
-function checkCombatEnd(ws: ServerWebSocket<SocketData>) {
-  if (!session.state.winner || ws.data.phase !== "combat") return;
-
-  const won = session.state.winner === "red";
-
-  if (won && ws.data.pendingHex) {
-    exploreHex(ws.data, ws.data.pendingHex);
-    ws.data.phase = "map";
-    ws.data.pendingHex = null;
-  } else {
-    resetToOrigin(ws.data);
+  if (prior.runInactivated) {
+    // The prior run is now inactive: dispose its in-memory Room so it can't be resumed/reaped.
+    reapRoom(priorRoom);
   }
-
-  sendTo(ws, { type: "hexCombatResult", won });
-  sendHexMapState(ws);
 }
 
-function runAiTurn(ws: ServerWebSocket<SocketData>) {
-  if (gameMode !== "pve" && gameMode !== "duel") return;
-  if (session.state.activeTeam !== aiTeam || session.state.winner) {
-    console.log(`[AI] skip runAiTurn — activeTeam=${session.state.activeTeam} aiTeam=${aiTeam} winner=${session.state.winner}`);
+/** Push the post-bind snapshots to a (re)connecting seat (resume step 8 / hello-reclaim). */
+function sendSeatSnapshots(room: Room, seat: Seat): void {
+  io.send(seat, { type: "roomState", room: roomStatePayload(room, seat) });
+  if (room.phase === "overworld") {
+    // Send the visibility-expanded map (same payload as the broadcast), NOT raw room.hexMap, so the
+    // resuming player gets the clickable frontier the server's proposeMove check expects (no desync).
+    io.send(seat, { type: "hexMapState", hexMap: hexMapStatePayload(room) });
+  }
+  sendInventory(room, io, seat);
+  if (room.phase === "combat" && room.session) {
+    io.send(seat, { type: "state", state: room.session.serialize() as import("shared").SerializedGameState, events: [] });
+    io.send(seat, { type: "coopStatus", coop: coopStatusPayload(room) });
+    // After the state + coopStatus are in flight, re-send any defend prompt this seat still owes so
+    // a human who reconnected mid-round can answer it (R11 / DESIGN §5), not just see it pending.
+    resendPendingDefendPrompts(room, io, seat);
+  }
+}
+
+function handleHello(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "hello" }>): void {
+  if (msg.protocolVersion !== PROTOCOL_VERSION) {
+    sendTo(ws, { type: "protocolMismatch", serverVersion: PROTOCOL_VERSION, clientVersion: msg.protocolVersion });
+    ws.close();
     return;
   }
-  console.log(`[AI] startAiTurn team=${aiTeam} turn=${session.state.turnNumber}`);
-  session.startAiTurn(aiTeam);
-  driveAiSteps(ws);
-}
 
-function driveAiSteps(ws: ServerWebSocket<SocketData>) {
-  let safety = 0;
-  while (true) {
-    if (++safety > 200) {
-      console.error("[AI] driveAiSteps safety break — too many iterations");
-      return;
-    }
-    const step = session.stepAi();
-    if (step.type === "done") {
-      console.log(`[AI] step done — activeTeam=${session.state.activeTeam}`);
-      return;
-    }
-    if (step.type === "defendPrompt") {
-      console.log(`[AI] step defendPrompt — attacker=${step.attackerId} targets=${step.targetIds.join(",")}`);
-      sendTo(ws, step);
-      return;
-    }
-    console.log(`[AI] step events=${step.events.map(e => e.type).join(",")} won=${step.won}`);
-    broadcast({ type: "state", state: step.serializedState, events: step.events });
-    if (step.won) {
-      checkCombatEnd(ws);
-      return;
+  const clientId = msg.clientId;
+  ws.data.clientId = clientId;
+
+  // Resume: is this client bound to a live (in-memory) room, or a durable-but-dormant run?
+  const durable = findActiveSeatForClient(clientId);
+  if (durable) {
+    // Get (or reconstruct) the live Room for that run (R30 idempotent).
+    let room = rooms.getByRun(durable.runId);
+    if (!room) room = reconstructRoomForRun(durable.runId, reapRoom);
+
+    if (room) {
+      const seat = room.seats.find((s) => s.seatIndex === durable.seatIndex);
+      if (seat) {
+        // Re-derive THIS seat's token from its durable salt and converge the socket onto it
+        // (PERSISTENCE resume step 4: "always return the re-derived token"). This holds whether
+        // the seat's current socket is live or dead, so a later reclaim/force verifies (R29).
+        const salt = seat.tokenSalt ?? newTokenSalt();
+        seat.tokenSalt = salt;
+        const token = mintTokenFor(clientId, salt);
+        ws.data.sessionToken = token;
+
+        // Auto-reclaim only if the seat's socket is dead (R5/R6); else welcome room-less and the
+        // client must explicitly reclaimSeat{force:true} (R6 single-owner).
+        if (seat.socket === null) {
+          ws.data.roomCode = room.code;
+          ws.data.seatId = seat.seatId;
+          connectSeat(room, io, seat, ws, clientId);
+          sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, reconnected: { code: room.code, seatId: seat.seatId } });
+          sendSeatSnapshots(room, seat);
+          broadcastRoomState(room, io);
+          if (room.phase === "combat") broadcastCoopStatus(room, io);
+        } else {
+          // Seat is live elsewhere: welcome room-less but with the valid token (force-reclaim path).
+          sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token });
+        }
+        return;
+      }
     }
   }
+
+  // No resumable seat (or the seat is still live): welcome to lobby. Token is minted fresh and
+  // re-derived/replaced when the client takes a seat (createRoom / joinRoom).
+  const token = mintTokenFor(clientId, newTokenSalt());
+  ws.data.sessionToken = token;
+  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token });
 }
+
+/** Build a brand-new room + durable run for the host (write point 1, R13.1). */
+function handleCreateRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "createRoom" }>): void {
+  if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
+
+  const capacity: RoomCapacity = msg.capacity;
+  const dimensionId = msg.dimensionId ?? DEFAULT_DIMENSION;
+  const clientId = ws.data.clientId;
+
+  // R32: abandon any prior live seat this client holds BEFORE binding the new one, so the UNIQUE-
+  // live index never sees two live rows for this clientId (the "play again" crash class).
+  cleanupPriorSeat(ws, clientId);
+
+  const code = freshRoomCode((c) => rooms.isTaken(c));
+  if (!code) return sendError(ws, "ROOM_CREATE_FAILED", "Could not allocate a room code", true);
+
+  // Durable run-create: run row + origin (cleared) + radius discovery (visible) + origin icon.
+  const runId = startNewRun(dimensionId, clientId, capacity);
+  saveExploredHex(runId, ORIGIN, true);
+  seedDiscovery(runId, DISCOVERY_RADIUS);
+  saveExploredHexIcon(runId, ORIGIN, "town");
+
+  const seats = createOpenSeats(capacity, dimensionId);
+
+  const room: Room = {
+    code,
+    hostSeatId: null,
+    phase: "lobby",
+    building: false,
+    phaseTransitioning: false,
+    generation: 0,
+    coopPhase: "player",
+    aiPlayerBusy: false,
+    dimensionId,
+    runId,
+    hexMap: { playerPos: ORIGIN, hexes: { [ORIGIN_KEY]: "explored" }, icons: { [ORIGIN_KEY]: "town" } },
+    visitedThisRun: new Set([ORIGIN_KEY]),
+    pendingHex: null,
+    capacity,
+    seats,
+    session: null,
+    defendRound: null,
+    vote: null,
+    reapTimer: null,
+    lastActivityMs: Date.now(),
+  };
+  rooms.add(room);
+
+  // Claim seat 0 as the host (human-connected) and bind the socket.
+  const host = seats[0]!;
+  const salt = newTokenSalt();
+  host.tokenSalt = salt;
+  host.clientId = clientId;
+  host.state = "human-connected";
+  host.socket = ws;
+  room.hostSeatId = host.seatId;
+
+  const token = mintTokenFor(clientId, salt);
+  ws.data.sessionToken = token;
+  ws.data.roomCode = code;
+  ws.data.seatId = host.seatId;
+
+  // Durable: host seat row + starter inventory (write point 2).
+  upsertRunSeat(runId, host.seatIndex, {
+    clientId,
+    displayName: host.displayName,
+    controllerKind: "human",
+    tokenSalt: salt,
+  });
+  saveSeatInventory(runId, host.seatIndex, host.inventory);
+
+  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, reconnected: { code, seatId: host.seatId } });
+  broadcastRoomState(room, io);
+  sendInventory(room, io, host);
+}
+
+function handleJoinRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "joinRoom" }>): void {
+  if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
+  const clientId = ws.data.clientId;
+
+  const room = rooms.get(msg.code);
+  if (!room) return sendError(ws, "ROOM_NOT_FOUND", "No room with that code");
+  if (room.phase !== "lobby") return sendError(ws, "ALREADY_STARTED", "That game has already started");
+
+  // First open seat -> human-connected (synchronous check-then-flip, R21).
+  const seat = room.seats.find((s) => s.state === "open");
+  if (!seat) return sendError(ws, "ROOM_FULL", "That room is full");
+
+  // R32: abandon any prior live seat this client holds before binding this one (avoid the UNIQUE-
+  // live crash). Keep this room in case the client is somehow already seated here.
+  cleanupPriorSeat(ws, clientId, room);
+
+  const salt = newTokenSalt();
+  seat.tokenSalt = salt;
+  seat.clientId = clientId;
+  seat.state = "human-connected";
+  seat.socket = ws;
+  if (msg.displayName) seat.displayName = msg.displayName;
+
+  const token = mintTokenFor(clientId, salt);
+  ws.data.sessionToken = token;
+  ws.data.roomCode = room.code;
+  ws.data.seatId = seat.seatId;
+
+  clearReap(room);
+  if (room.hostSeatId === null) room.hostSeatId = seat.seatId;
+
+  // Durable: seat row + starter inventory (write point 2).
+  upsertRunSeat(room.runId, seat.seatIndex, {
+    clientId,
+    displayName: seat.displayName,
+    controllerKind: "human",
+    tokenSalt: salt,
+  });
+  saveSeatInventory(room.runId, seat.seatIndex, seat.inventory);
+
+  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, reconnected: { code: room.code, seatId: seat.seatId } });
+  broadcastRoomState(room, io);
+  sendInventory(room, io, seat);
+}
+
+function handleReclaimSeat(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "reclaimSeat" }>): void {
+  if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
+  const clientId = ws.data.clientId;
+
+  const room = rooms.get(msg.code);
+  if (!room) return sendError(ws, "ROOM_NOT_FOUND", "No room with that code");
+  const seat = room.seats.find((s) => s.seatId === msg.seatId);
+  if (!seat) return sendError(ws, "NOT_YOUR_SEAT", "No such seat");
+
+  // R5/R29: a human seat is token-gated. Verify the presented identity against the durable salt,
+  // AND assert the seat's bound clientId matches this socket's clientId — defense-in-depth so the
+  // reclaim never rests on token secrecy alone (the token HMAC already binds clientId, but a stale
+  // seat whose clientId was reassigned must not be reclaimable by the old identity).
+  if (
+    !seat.tokenSalt ||
+    !verifySessionToken(ws.data.sessionToken, clientId, seat.tokenSalt) ||
+    (seat.clientId !== null && seat.clientId !== clientId)
+  ) {
+    return sendError(ws, "NOT_YOUR_SEAT", "Not your seat", false);
+  }
+
+  // R6: a live socket is only displaced on an explicit force.
+  if (seat.socket !== null) {
+    if (!msg.force) return sendError(ws, "SEAT_IN_USE", "Seat is currently in use");
+    const old = seat.socket;
+    // Clear the displaced socket's seat binding BEFORE notifying it (R29) so it can no longer
+    // issue seat-scoped writes, then close it.
+    old.data.roomCode = null;
+    old.data.seatId = null;
+    sendTo(old, { type: "displaced" });
+    old.close();
+    seat.socket = null;
+  }
+
+  ws.data.roomCode = room.code;
+  ws.data.seatId = seat.seatId;
+  connectSeat(room, io, seat, ws, clientId);
+
+  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: ws.data.sessionToken, reconnected: { code: room.code, seatId: seat.seatId } });
+  sendSeatSnapshots(room, seat);
+  broadcastRoomState(room, io);
+  if (room.phase === "combat") broadcastCoopStatus(room, io);
+}
+
+// =====================================================================================
+// Host-gated (room-scoped) handlers (startGame / reset / debugWin)
+// =====================================================================================
+
+function isHost(room: Room, seat: Seat): boolean {
+  return room.hostSeatId === seat.seatId;
+}
+
+/** Start the game (R27): bot-fill empty seats, persist them, go to overworld. */
+function handleStartGame(room: Room, seat: Seat): void {
+  if (!isHost(room, seat)) {
+    io.send(seat, { type: "error", code: "NOT_HOST", message: "Only the host can start", recoverable: true });
+    return;
+  }
+  if (room.phase !== "lobby") {
+    io.send(seat, { type: "error", code: "BAD_PHASE", message: "Already started", recoverable: true });
+    return;
+  }
+
+  // Bot-fill every still-open seat (durable controller_kind='bot', write point 2).
+  for (const s of room.seats) {
+    if (s.state === "open") {
+      s.state = "bot";
+      s.clientId = null;
+      s.tokenSalt = null;
+      upsertRunSeat(room.runId, s.seatIndex, {
+        clientId: null,
+        displayName: s.displayName,
+        controllerKind: "bot",
+        tokenSalt: null,
+      });
+      saveSeatInventory(room.runId, s.seatIndex, s.inventory);
+    }
+  }
+
+  room.phase = "overworld";
+  broadcastRoomState(room, io);
+  broadcastHexMapState(room, io);
+}
+
+function handleReset(room: Room, seat: Seat): void {
+  if (!isHost(room, seat)) {
+    io.send(seat, { type: "error", code: "NOT_HOST", message: "Only the host can reset", recoverable: true });
+    return;
+  }
+  if (room.phase === "combat") {
+    // Abort the encounter and return to overworld of the SAME run (no run swap, R17/R13.5).
+    abortDefendRound(room);
+    room.generation++;
+    room.session = null;
+    // Clear building too: if a beginCombatEntry await is in flight, the generation bump already
+    // makes its post-await re-validation discard the build, but it returns BEFORE clearing building
+    // — so reset must clear the flag itself or it leaks stuck-true (otherwise self-heals next build).
+    room.building = false;
+    room.phaseTransitioning = false;
+    room.aiPlayerBusy = false;
+    room.coopPhase = "player";
+    room.pendingHex = null;
+    room.phase = "overworld";
+    broadcastRoomState(room, io);
+    broadcastHexMapState(room, io);
+  } else if (room.phase === "overworld" || room.phase === "gameover") {
+    // Explicit host reset in overworld -> fresh run, recorded as 'abandoned' (R13.5; defeat is the
+    // party-wipe path in endCombat).
+    resetToOrigin(room, io, "abandoned");
+  }
+}
+
+function handleDebugWin(room: Room, seat: Seat): void {
+  if (!isHost(room, seat)) {
+    io.send(seat, { type: "error", code: "NOT_HOST", message: "Only the host can do that", recoverable: true });
+    return;
+  }
+  if (room.phase !== "combat" || !room.session) {
+    io.send(seat, { type: "error", code: "BAD_PHASE", message: "Not in combat", recoverable: true });
+    return;
+  }
+  abortDefendRound(room);
+  room.session.state = { ...room.session.state, winner: "red" };
+  broadcastState(room, io, []);
+  endCombat(room, io);
+}
+
+// =====================================================================================
+// Seat-scoped inventory handlers (only off-combat, R26) — durable write point 3 (R34).
+// =====================================================================================
+
+function applyInventoryChange(room: Room, seat: Seat): void {
+  // R34 write-before-ack: commit the durable rows BEFORE the inventory ack.
+  seat.animSet = getAnimSet(seat.inventory.equipped);
+  saveSeatInventory(room.runId, seat.seatIndex, seat.inventory);
+  sendInventory(room, io, seat);
+  broadcastRoomState(room, io); // loadoutSummary in the roster changed
+}
+
+function handleEquip(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, bagIndex: number): void {
+  if (room.phase === "combat") return sendError(ws, "BAD_PHASE", "Cannot change loadout in combat");
+  seat.inventory = equipFromBag(seat.inventory, bagIndex);
+  applyInventoryChange(room, seat);
+}
+
+function handleUnequip(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, equippedIndex: number): void {
+  if (room.phase === "combat") return sendError(ws, "BAD_PHASE", "Cannot change loadout in combat");
+  seat.inventory = unequipItem(seat.inventory, equippedIndex);
+  applyInventoryChange(room, seat);
+}
+
+function handleUpdateAttachment(
+  room: Room,
+  seat: Seat,
+  ws: ServerWebSocket<SocketData>,
+  itemId: string,
+  attachment: import("shared").AttachmentData,
+): void {
+  if (room.phase === "combat") return sendError(ws, "BAD_PHASE", "Cannot change loadout in combat");
+  seat.inventory = {
+    ...seat.inventory,
+    attachments: { ...seat.inventory.attachments, [itemId]: attachment },
+  };
+  applyInventoryChange(room, seat);
+}
+
+// =====================================================================================
+// Message router
+// =====================================================================================
+
+function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void {
+  switch (msg.type) {
+    // --- connection scope ---
+    case "hello":
+      return handleHello(ws, msg);
+    case "createRoom":
+      return handleCreateRoom(ws, msg);
+    case "joinRoom":
+      return handleJoinRoom(ws, msg);
+    case "reclaimSeat":
+      return handleReclaimSeat(ws, msg);
+  }
+
+  // Everything below requires a bound seat (R22).
+  const bound = seatFor(ws);
+  if (!bound) {
+    sendError(ws, "NOT_YOUR_SEAT", "No bound seat for this connection");
+    return;
+  }
+  const { room, seat } = bound;
+
+  switch (msg.type) {
+    // --- seat-scoped gameplay ---
+    case "action": {
+      if (msg.seatId !== seat.seatId) {
+        sendError(ws, "NOT_YOUR_SEAT", "Action seatId mismatch");
+        return;
+      }
+      // Router rejects the endTurn primitive over the wire (R3); clients pass/unpass.
+      if ((msg.action as { type?: string }).type === "endTurn") {
+        io.send(seat, { type: "actionRejected", seatId: seat.seatId });
+        return;
+      }
+      applyHumanAction(room, io, seat, msg.action);
+      return;
+    }
+    case "pass":
+      return setReady(room, io, seat, true);
+    case "unpass":
+      return setReady(room, io, seat, false);
+    case "defendResult": {
+      if (msg.seatId !== seat.seatId) {
+        io.send(seat, { type: "actionRejected", seatId: seat.seatId });
+        return;
+      }
+      return submitDefend(room, io, seat, msg.promptId, msg.power);
+    }
+    case "setReady": {
+      // Lobby readiness flag (roster-only). In combat, pass/unpass is the path.
+      if (room.phase === "lobby") {
+        seat.ready = msg.ready;
+        broadcastRoomState(room, io);
+      } else {
+        io.send(seat, { type: "actionRejected", seatId: seat.seatId });
+      }
+      return;
+    }
+
+    // --- seat-scoped inventory (off-combat, R26) ---
+    case "equip":
+      return handleEquip(room, seat, ws, msg.bagIndex);
+    case "unequip":
+      return handleUnequip(room, seat, ws, msg.equippedIndex);
+    case "updateAttachment":
+      return handleUpdateAttachment(room, seat, ws, msg.itemId, msg.attachment);
+
+    // --- room-scoped overworld ---
+    case "proposeMove":
+      return proposeMove(room, io, seat, msg.target);
+    case "castVote":
+      return castVote(room, io, seat, msg.proposalId, msg.vote);
+    case "leaveRoom":
+      return handleLeaveRoom(ws, room, seat);
+
+    // --- host-gated ---
+    case "startGame":
+      return handleStartGame(room, seat);
+    case "reset":
+      return handleReset(room, seat);
+    case "debugWin":
+      return handleDebugWin(room, seat);
+  }
+}
+
+function handleLeaveRoom(ws: ServerWebSocket<SocketData>, room: Room, seat: Seat): void {
+  ws.data.roomCode = null;
+  ws.data.seatId = null;
+  // Treat as a disconnect of this seat (frees host / arms grace+reap). Durable rows untouched (R19);
+  // the run stays resumable by the same clientId.
+  detachSeat(room, seat);
+}
+
+/** Shared teardown for a seat's socket going away (close or explicit leave). */
+function detachSeat(room: Room, seat: Seat): void {
+  if (room.phase === "lobby") {
+    // Lobby: free the seat back to open (or host migrates / room reaps if empty).
+    seat.socket = null;
+    if (room.hostSeatId === seat.seatId) {
+      const next = room.seats.find((s) => s.state === "human-connected" && s !== seat);
+      room.hostSeatId = next?.seatId ?? null;
+    }
+    // Durably stamp this seat as left so its clientId is freed for a fresh create/join (R32) — the
+    // in-memory seat going `open` must be mirrored durably or the UNIQUE-live index lingers.
+    const seatIndex = seat.seatIndex;
+    seat.state = "open";
+    seat.clientId = null;
+    seat.tokenSalt = null;
+    seat.ready = false;
+    leaveRunSeat(room.runId, seatIndex);
+    broadcastRoomState(room, io);
+    if (room.seats.every((s) => s.socket === null)) {
+      // A never-started lobby that fully empties is abandoned durably so findActiveSeatForClient no
+      // longer resolves it (else a later hello would resurrect it mid-overworld with bots, #20) and
+      // it cannot linger active=1 forever. Then dispose the in-memory room immediately.
+      markRunInactive(room.runId, "abandoned");
+      reapRoom(room);
+    }
+    return;
+  }
+  // Overworld / combat: machine handles human-disconnected, grace->bot, host migration, reap.
+  onSeatDisconnected(room, io, seat, reapRoom);
+}
+
+// =====================================================================================
+// HTTP + WebSocket server. The fetch() routes are preserved verbatim from the pre-Room
+// server (only the websocket handlers + the globals + the seeding boot changed).
+// =====================================================================================
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -226,7 +706,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, OPTIONS",
 };
 
-Bun.serve({
+export const server = Bun.serve({
   port: PORT,
 
   async fetch(req, server) {
@@ -240,20 +720,10 @@ Bun.serve({
       return Response.json({ status: "ok", uptime: process.uptime() });
     }
     if (url.pathname === "/ws") {
-      const mode = (url.searchParams.get("mode") as GameMode) || "pvp";
-      const dimensionId = parseInt(url.searchParams.get("dim") ?? "0", 10) || 0;
+      // Identity comes from the `hello` message, never from query params (ruling R22). `?dim=` is
+      // tolerated only as an asset-preload hint and ignored for identity here.
       const upgraded = server.upgrade(req, {
-        data: {
-          team: null,
-          mode,
-          dimensionId,
-          hexMap: loadHexMapFromDb(GLOBAL_RUN_ID),
-          phase: (mode === "pve" ? "map" : "combat") as Phase,
-          pendingHex: null,
-          visitedThisRun: freshVisitedSet(),
-          runId: startNewRun(dimensionId, "local"),
-          inventory: buildDefaultInventory(dimensionId),
-        },
+        data: { clientId: "", sessionToken: "", roomCode: null, seatId: null } as SocketData,
       });
       if (!upgraded)
         return new Response("WebSocket upgrade failed", { status: 400 });
@@ -319,210 +789,39 @@ Bun.serve({
   },
 
   websocket: {
-    async open(ws: ServerWebSocket<SocketData>) {
-      const newMode = ws.data.mode;
-
-      if (newMode !== gameMode || ((newMode === "pve" || newMode === "duel") && players.has("red"))) {
-        const old = players.get("red");
-        if (old) {
-          old.close();
-          players.delete("red");
-        }
-        const oldBlue = players.get("blue");
-        if (oldBlue) {
-          oldBlue.close();
-          players.delete("blue");
-        }
-        gameMode = newMode;
-        session = await EncounterSession.create(gameMode);
-      }
-
-      let team: TeamId | null = null;
-      if (!players.has("red")) {
-        team = "red";
-      } else if (!players.has("blue") && gameMode === "pvp") {
-        team = "blue";
-      }
-
-      if (!team) {
-        sendTo(ws, { type: "error", message: "Game is full" });
-        ws.close();
-        return;
-      }
-
-      ws.data.team = team;
-      players.set(team, ws);
-      sendTo(ws, { type: "team", team });
-
-      sendInventory(ws);
-
-      if (gameMode === "pve") {
-        sendHexMapState(ws);
-      } else {
-        sendTo(ws, {
-          type: "state",
-          state: session.serialize(),
-          events: [],
-        });
-      }
-
-      console.log(`${team} connected (${gameMode})`);
+    open(ws: ServerWebSocket<SocketData>) {
+      ws.data = { clientId: "", sessionToken: "", roomCode: null, seatId: null };
     },
 
-    async message(ws: ServerWebSocket<SocketData>, raw: string | Buffer) {
-      const team = ws.data.team;
-      if (!team) return;
-
-      let msg: any;
+    message(ws: ServerWebSocket<SocketData>, raw: string | Buffer) {
+      let msg: ClientMessage;
       try {
-        msg = JSON.parse(typeof raw === "string" ? raw : raw.toString());
+        msg = JSON.parse(typeof raw === "string" ? raw : raw.toString()) as ClientMessage;
       } catch {
+        sendError(ws, "MALFORMED", "Invalid JSON");
         return;
       }
-
-      if (
-        msg.type === "hexMove" &&
-        gameMode === "pve" &&
-        ws.data.phase === "map"
-      ) {
-        const target: HexCoord = msg.target;
-        if (!isAdjacent(ws.data.hexMap.playerPos, target)) return;
-
-        const visible = getVisibleHexes(ws.data.hexMap);
-        const tk = hexKey(target);
-        if (!(tk in visible)) return;
-
-        if (ws.data.visitedThisRun.has(tk)) {
-          ws.data.hexMap = { ...ws.data.hexMap, playerPos: target };
-          sendHexMapState(ws);
-        } else {
-          ws.data.phase = "combat";
-          ws.data.pendingHex = target;
-          const hexType = getHexIcon(target, ws.data.hexMap.icons)
-            ?? (isDecorationHex(target) ? "dense-wilderness" : "wilderness");
-          const itemAbilities = getItemAbilities(ws.data.inventory.equipped);
-          const animSet = getAnimSet(ws.data.inventory.equipped);
-          session = await EncounterSession.create(gameMode, hexType, target, ws.data.runId, itemAbilities, animSet, ws.data.inventory.equipped, ws.data.inventory.attachments, ws.data.dimensionId);
-          console.log(`encounter run=${ws.data.runId} hex=(${target.q},${target.r}) type=${hexType}`);
-          sendTo(ws, { type: "hexCombatStart" });
-          sendTo(ws, {
-            type: "state",
-            state: session.serialize(),
-            events: [],
-          });
-        }
+      if (!msg || typeof (msg as { type?: unknown }).type !== "string") {
+        sendError(ws, "MALFORMED", "Missing message type");
         return;
       }
-
-      if (msg.type === "action") {
-        // Defense in depth: drop player actions when it isn't the player's turn. In PvE/duel
-        // the human is always red; a stray endTurn or ability during the AI turn (e.g. a
-        // focused End Turn button activating on space-press) would otherwise flip the active
-        // team mid-AI-resolution and break the pending-defense state machine.
-        if ((gameMode === "pve" || gameMode === "duel") && session.state.activeTeam !== "red") {
-          console.log(`[ACTION] dropped ${msg.action.type} — activeTeam=${session.state.activeTeam}`);
-          // Ack with the authoritative state so the client reconciles out of its optimistic
-          // "submittingAction" lock instead of freezing on a dropped action.
-          sendTo(ws, { type: "state", state: session.serialize(), events: [] });
-          return;
-        }
-        console.log(`[ACTION] ${msg.action.type} activeTeam=${session.state.activeTeam}`);
-        const { changed, events } = session.applyAction(msg.action);
-        console.log(`[ACTION] result changed=${changed} events=${events.map(e => e.type).join(",")}`);
-        if (changed) {
-          let allEvents = events;
-          if (msg.action.type !== "endTurn" && !session.state.winner && shouldAutoEndTurn(session.state)) {
-            const endResult = session.applyAction({ type: "endTurn" });
-            if (endResult.changed) {
-              allEvents = [...allEvents, ...endResult.events];
-            }
-          }
-          broadcastState(allEvents);
-          if (session.state.winner) {
-            checkCombatEnd(ws);
-          } else {
-            runAiTurn(ws);
-          }
-        } else {
-          // No-op (illegal move into a wall, unaffordable, etc.): the resolver changed nothing
-          // and would otherwise send no reply, stranding the client in "submittingAction". Ack
-          // with the current state so it unlocks.
-          sendTo(ws, { type: "state", state: session.serialize(), events: [] });
-        }
-      }
-
-      if (msg.type === "defendResult" && session.pendingDefend) {
-        console.log(`[DEFEND] result received: ${JSON.stringify(msg.results)}`);
-        const step = session.resolveDefend(msg.results ?? {});
-        if (step.type === "events") {
-          broadcast({ type: "state", state: step.serializedState, events: step.events });
-          if (step.won) {
-            checkCombatEnd(ws);
-          } else {
-            driveAiSteps(ws);
-          }
-        } else if (step.type === "defendPrompt") {
-          sendTo(ws, step);
-        } else {
-          driveAiSteps(ws);
-        }
-      }
-
-      if (msg.type === "debugWin" && ws.data.phase === "combat") {
-        session.state = { ...session.state, winner: "red" };
-        broadcastState([]);
-        checkCombatEnd(ws);
-      }
-
-      if (msg.type === "equip" && typeof msg.bagIndex === "number") {
-        ws.data.inventory = equipFromBag(ws.data.inventory, msg.bagIndex);
-        sendInventory(ws);
-        return;
-      }
-
-      if (msg.type === "unequip" && typeof msg.equippedIndex === "number") {
-        ws.data.inventory = unequipItem(ws.data.inventory, msg.equippedIndex);
-        sendInventory(ws);
-        return;
-      }
-
-      if (msg.type === "updateAttachment" && typeof msg.itemId === "string" && msg.attachment) {
-        ws.data.inventory = {
-          ...ws.data.inventory,
-          attachments: {
-            ...ws.data.inventory.attachments,
-            [msg.itemId]: msg.attachment,
-          },
-        };
-        sendInventory(ws);
-        return;
-      }
-
-      if (msg.type === "reset") {
-        if (gameMode === "pve" && ws.data.phase === "combat") {
-          resetToOrigin(ws.data);
-          sendTo(ws, { type: "hexCombatResult", won: false });
-          sendHexMapState(ws);
-        } else if (gameMode === "pve" && ws.data.phase === "map") {
-          clearExploredHexes(GLOBAL_RUN_ID);
-          ws.data.hexMap = loadHexMapFromDb(GLOBAL_RUN_ID);
-          ws.data.visitedThisRun = freshVisitedSet();
-          ws.data.runId = startNewRun(ws.data.dimensionId, "local");
-          sendHexMapState(ws);
-        } else {
-          session = await EncounterSession.create(gameMode);
-          broadcastState([]);
-          runAiTurn(ws);
-        }
+      try {
+        routeMessage(ws, msg);
+      } catch (e) {
+        console.error(`[ws] handler error for ${msg.type}:`, e);
+        // Surface a recoverable error instead of silently swallowing the throw, so a client whose
+        // request hit an unexpected handler failure is not left hanging with no welcome/no error.
+        sendError(ws, "MALFORMED", "The server could not process that request", true);
       }
     },
 
     close(ws: ServerWebSocket<SocketData>) {
-      const team = ws.data.team;
-      if (team) {
-        players.delete(team);
-        console.log(`${team} disconnected`);
-      }
+      const bound = seatFor(ws);
+      if (!bound) return;
+      const { room, seat } = bound;
+      // Only react if THIS socket still owns the seat (a force-takeover already cleared its binding).
+      if (seat.socket !== ws) return;
+      detachSeat(room, seat);
     },
   },
 });
