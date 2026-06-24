@@ -338,11 +338,8 @@ function handleCreateRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMe
     hostSeatId: null,
     phase: "lobby",
     building: false,
-    phaseTransitioning: false,
     generation: 0,
-    coopPhase: "player",
-    aiPlayerBusy: false,
-    paused: false,
+    combat: null,
     dimensionId,
     runId,
     hexMap: { playerPos: ORIGIN, hexes, icons },
@@ -568,10 +565,7 @@ function handleReset(room: Room, seat: Seat): void {
     // makes its post-await re-validation discard the build, but it returns BEFORE clearing building
     // — so reset must clear the flag itself or it leaks stuck-true (otherwise self-heals next build).
     room.building = false;
-    room.phaseTransitioning = false;
-    room.aiPlayerBusy = false;
-    room.paused = false;
-    room.coopPhase = "player";
+    room.combat = null;
     room.pendingHex = null;
     room.phase = "overworld";
     setRunPhase(room.runId, "overworld"); // back to overworld of the SAME run (durable SSOT)

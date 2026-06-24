@@ -201,7 +201,7 @@ describe("co-op lifecycle redesign", () => {
     const room = rooms.get(code);
     expect(room).toBeTruthy();
     expect(room!.phase).toBe("combat"); // NOT auto-resolved to overworld/gameover
-    expect(room!.paused).toBe(true);
+    expect(room!.combat?.suspended).toBe(true); // the single suspend axis (was room.paused)
     expect(room!.session).not.toBeNull();
 
     // A human reconnects -> combat resumes.
@@ -209,7 +209,7 @@ describe("co-op lifecycle redesign", () => {
     const w2 = await hello(host2, "Solo");
     expect(w2.reconnected).toBeTruthy();
     await host2.nextOf("coopStatus", { timeoutMs: 6000 });
-    expect(rooms.get(code)!.paused).toBe(false);
+    expect(rooms.get(code)!.combat?.suspended).toBe(false);
 
     host2.send({ type: "debugWin" });
     await host2.waitFor((m): m is ServerMessage => m.type === "combatEnd", { consumeBuffered: false, timeoutMs: 8000 });

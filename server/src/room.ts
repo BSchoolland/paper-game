@@ -4,7 +4,6 @@ import type {
   RoomCode,
   SessionToken,
   ClientId,
-  CoopPhase,
   RoomPhase,
   SeatState,
   EntityId,
@@ -18,6 +17,7 @@ import type {
   Vec2,
 } from "shared";
 import { createInventory, getAnimSet } from "shared";
+import type { CombatRuntime } from "./combat-runtime.js";
 import type { EncounterSession } from "./encounter-session.js";
 import type { HeroController } from "../../hero-arena/src/types.js";
 import { makeSovereign, FIGHTER_WEIGHTS, PRESETS } from "../../hero-arena/agents/agent-02/sovereign.js";
@@ -99,11 +99,10 @@ export interface Room {
   hostSeatId: SeatId | null; // mutable (ruling R14)
   phase: RoomPhase;
   building: boolean; // true across the async encounter build (ruling R7)
-  phaseTransitioning: boolean; // player->enemy flip latch (ruling R8)
   generation: number; // bumped on every session teardown/build (ruling R17)
-  coopPhase: CoopPhase; // mirrors activeTeam, server-side only
-  aiPlayerBusy: boolean; // player-bot burst window (ruling R16)
-  paused: boolean; // combat frozen because no human is connected (suppresses the all-bot cascade)
+  /** The single in-combat state value (player/enemy sub-phase, busy/transition, suspend) — null
+   *  off-combat. Replaces the old coopPhase/phaseTransitioning/aiPlayerBusy/paused flag scatter. */
+  combat: CombatRuntime | null;
 
   dimensionId: number;
   runId: number;

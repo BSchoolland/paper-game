@@ -31,6 +31,16 @@ import {
 } from "shared";
 import type { Room, Seat, DefendRound, DefendTarget, MovementVote } from "./room.js";
 import { seatBuildSpec, sovereignFor } from "./room.js";
+import {
+  coopPhaseOf,
+  isPlayerInputOpen,
+  isBusy,
+  enterPlayerOpen,
+  enterPlayerBots,
+  enterEnemy,
+  enterTransition,
+  enterDefend,
+} from "./combat-runtime.js";
 import { EncounterSession } from "./encounter-session.js";
 import type { AiStepResult } from "./ai-turn-runner.js";
 import {
@@ -63,8 +73,9 @@ type Timer = ReturnType<typeof setTimeout>;
  * sockets directly — only through `RoomIO` — so it is pure of WS details and the WS layer
  * (index.ts, Phase 6) supplies the transport. setTimeout / Date.now are fair game (server code).
  *
- * Generation / building / phaseTransitioning / aiPlayerBusy guards are honored throughout
- * (rulings R7, R8, R16, R17). Seat/ready/phase/vote/defend state lives only on the Room (R1).
+ * Generation / building guards plus the single `room.combat` state machine (combat-runtime.ts) are
+ * honored throughout (rulings R7, R8, R16, R17). Seat/ready/phase/vote/defend state lives only on the
+ * Room (R1); the in-combat sub-phase/busy/suspend axis is the one `room.combat` value, not flag scatter.
  */
 
 // --- Tunable timeouts (server-authoritative, R28 / R11). ---
@@ -142,13 +153,13 @@ function pendingDefends(room: Room): PendingDefendInfo[] {
   }));
 }
 
-/** In-combat per-seat status (R1). Sent on every transition. */
+/** In-combat per-seat status (R1). Sent on every transition. Phase + paused derived from room.combat. */
 export function coopStatusPayload(room: Room): CoopStatusPayload {
   return {
-    phase: room.coopPhase,
+    phase: coopPhaseOf(room.combat),
     seats: room.seats.map(seatCombatStatus),
     pendingDefends: pendingDefends(room),
-    paused: room.paused,
+    paused: room.combat?.suspended ?? false,
   };
 }
 
@@ -273,12 +284,12 @@ function clearAfk(seat: Seat): void {
 function armAfk(room: Room, io: RoomIO, seat: Seat): void {
   clearAfk(seat);
   if (seat.state !== "human-connected") return;
-  if (room.phase !== "combat" || room.coopPhase !== "player") return;
+  if (room.phase !== "combat" || coopPhaseOf(room.combat) !== "player") return;
   const gen = room.generation;
   seat.afkTimer = setTimeout(() => {
     seat.afkTimer = null;
     if (room.generation !== gen) return;
-    if (room.phase !== "combat" || room.coopPhase !== "player") return;
+    if (room.phase !== "combat" || coopPhaseOf(room.combat) !== "player") return;
     if (seat.ready || seat.exhausted) return;
     seat.ready = true;
     broadcastCoopStatus(room, io);
@@ -320,7 +331,7 @@ export function armReap(room: Room, onReap: (room: Room) => void): void {
 export function startPlayerPhase(room: Room, io: RoomIO): void {
   const session = room.session;
   if (!session) return;
-  room.coopPhase = "player";
+  room.combat = enterPlayerOpen(); // set at the top so armAfk/etc. observe the open player phase
   rebuildHeroBrains(room);
 
   for (const seat of room.seats) {
@@ -332,21 +343,20 @@ export function startPlayerPhase(room: Room, io: RoomIO): void {
 
   // PAUSE: with no connected human nobody is watching, so freeze the phase rather than letting the
   // player-bot burst + enemy sweep cascade the whole encounter to a win/wipe unobserved. Resumed by
-  // connectSeat when a human (re)joins. (Phase 1 of the lifecycle redesign.)
+  // connectSeat when a human (re)joins.
   if (!hasConnectedHuman(room)) {
-    room.paused = true;
+    room.combat.suspended = true;
     broadcastCoopStatus(room, io);
     return;
   }
-  room.paused = false;
   broadcastCoopStatus(room, io);
 
   // Player-bot burst: drive every bot/disconnected seat synchronously in seat order.
   const botIds = room.seats.filter(isBotSeat).map((s) => s.heroEntityId);
   if (botIds.length > 0) {
-    room.aiPlayerBusy = true;
+    room.combat = enterPlayerBots();
     session.startAiTurn({ kind: "playerBots", entityIds: botIds, humanHeroIds: humanHeroIds(room) });
-    driveAiSteps(room, io);
+    driveCombat(room, io);
   } else {
     maybeEndPlayerPhase(room, io);
   }
@@ -359,25 +369,24 @@ export function startPlayerPhase(room: Room, io: RoomIO): void {
 export function maybeEndPlayerPhase(room: Room, io: RoomIO): void {
   const session = room.session;
   if (!session) return;
-  if (room.phase !== "combat" || room.coopPhase !== "player") return;
+  if (room.phase !== "combat" || coopPhaseOf(room.combat) !== "player") return;
   if (session.state.activeTeam !== "red") return;
-  if (room.phaseTransitioning || room.aiPlayerBusy || room.building) return;
+  if (isBusy(room.combat) || room.building) return; // a burst/sweep/flip is mid-flight
   if (session.pendingDefend) return; // an open defend round is mid-flight
-  // The single load-bearing pause latch: never issue the player->enemy flip without a human present
-  // (this subsumes a guard in startEnemyPhase — the enemy sweep is unreachable human-less from here).
+  // The single load-bearing pause latch: never issue the player->enemy flip without a human present.
   if (!hasConnectedHuman(room)) {
-    room.paused = true;
+    if (room.combat) room.combat.suspended = true;
     return;
   }
 
   const phaseStates = room.seats.map((s) => ({ ready: s.ready, exhausted: s.exhausted }));
   if (!isPlayerPhaseOver(phaseStates)) return;
 
-  room.phaseTransitioning = true;
+  room.combat = enterTransition(); // momentary: applying the player->enemy endTurn
   for (const seat of room.seats) clearAfk(seat);
 
   const result = session.applyAction({ type: "endTurn" });
-  room.coopPhase = "enemy";
+  room.combat = enterEnemy();
   broadcastState(room, io, result.events);
   broadcastCoopStatus(room, io);
 
@@ -389,55 +398,55 @@ export function maybeEndPlayerPhase(room: Room, io: RoomIO): void {
 }
 
 /**
- * Begin the enemy phase (DESIGN §4 startEnemyPhase). The runner sweeps `"blue"` and issues the
- * terminal `endTurn` that flips blue->red, after which we re-open the player phase.
+ * Begin the enemy phase: kick the runner's `"blue"` sweep through `driveCombat`. The enemy->player
+ * flip is now EXPLICIT — the runner's terminal `endedTurn` (handled inside driveCombat) re-opens the
+ * player phase, so there is no after-the-fact activeTeam sniffing here. room.combat is already
+ * `enterEnemy()` (set by maybeEndPlayerPhase or the defend-resume path).
  */
 export function startEnemyPhase(room: Room, io: RoomIO): void {
   const session = room.session;
   if (!session) return;
   rebuildHeroBrains(room);
-  const beforeTeam = session.state.activeTeam;
   session.startAiTurn({ kind: "enemyPhase", team: "blue" });
-  driveAiSteps(room, io);
-  // If the sweep already flipped back to red (no defend prompt is pending), re-open the player phase.
-  if (
-    !session.state.winner &&
-    !session.pendingDefend &&
-    session.state.activeTeam === "red" &&
-    beforeTeam !== "red"
-  ) {
-    room.phaseTransitioning = false;
-    startPlayerPhase(room, io);
-  }
+  driveCombat(room, io);
 }
 
 /**
- * Generation-guarded AI step loop (R17). Drives `session.stepAi()`: broadcasts on events, opens a
- * defend round on a prompt (and returns — resumed by maybeResolveDefendRound), finishes on `done`.
- * A `done` while in the player-bot burst marks bot seats ready and re-latches the phase.
+ * The single combat scheduler (merge of the old driveAiSteps + onAiBurstDone + startEnemyPhase
+ * flip-detection + resumeAfterDefend continuation). Generation-guarded (R17). Loops `session.stepAi()`:
+ *  - `defendPrompt` -> record the resume sub-phase, enter `defend`, open the round, and return.
+ *  - `endedTurn` (enemy sweep finished its terminal endTurn) -> the EXPLICIT enemy->player flip:
+ *    re-open the player phase. No more activeTeam sniffing.
+ *  - `done` (only the player-bot burst reaches this) -> ready the bot seats and re-latch.
+ *  - `events` -> broadcast (+ track player-bot actedThisPhase).
  */
-export function driveAiSteps(room: Room, io: RoomIO): void {
+export function driveCombat(room: Room, io: RoomIO): void {
   const session = room.session;
   if (!session) return;
   const gen = room.generation;
   let safety = 0;
   while (true) {
     if (++safety > 500) {
-      console.error("[room] driveAiSteps safety break");
+      console.error("[room] driveCombat safety break");
       return;
     }
     if (room.generation !== gen) return; // superseded by reset/rebuild (R17)
 
     const step: AiStepResult = session.stepAi();
 
-    if (step.type === "done" || step.type === "endedTurn") {
-      // Step 6 (transitional): treat the new explicit `endedTurn` like `done`; the enemy->player flip
-      // is still detected after-the-fact by startEnemyPhase below. Step 8 makes this the explicit flip.
-      onAiBurstDone(room, io);
+    if (step.type === "defendPrompt") {
+      // Record where to resume AFTER the round (at enterDefend time, so a reclaim mid-round can't move it).
+      const resume = room.combat?.step.kind === "enemy" ? "enemy" : "playerBots";
+      room.combat = enterDefend(resume);
+      openDefendRound(room, io, step);
       return;
     }
-    if (step.type === "defendPrompt") {
-      openDefendRound(room, io, step);
+    if (step.type === "endedTurn") {
+      startPlayerPhase(room, io); // explicit enemy->player flip; re-opens the player phase
+      return;
+    }
+    if (step.type === "done") {
+      onPlayerBurstDone(room, io); // only the player-bot burst reaches `done`
       return;
     }
     // events
@@ -447,7 +456,7 @@ export function driveAiSteps(room: Room, io: RoomIO): void {
       events: step.events,
     });
     // Track per-seat actedThisPhase for player-bot driven heroes.
-    if (room.coopPhase === "player") {
+    if (coopPhaseOf(room.combat) === "player") {
       for (const ev of step.events) markActedFromEvent(room, ev);
     }
     if (step.won) {
@@ -468,22 +477,19 @@ function markActedFromEvent(room: Room, ev: GameEvent): void {
 }
 
 /**
- * The AI runner reported `done`. In the enemy phase the runner already issued `endTurn` (handled by
- * startEnemyPhase's flip check). In the player-bot burst, mark every bot seat ready and re-latch.
+ * The player-bot burst drained (driveCombat saw `done`). Mark every bot seat ready, re-open the
+ * player turn, and re-latch. (The enemy sweep never reaches here — it ends with `endedTurn`.)
  */
-function onAiBurstDone(room: Room, io: RoomIO): void {
-  if (room.coopPhase === "player" && room.aiPlayerBusy) {
-    for (const seat of room.seats) {
-      if (isBotSeat(seat)) {
-        seat.ready = true;
-        seat.actedThisPhase = true;
-      }
+function onPlayerBurstDone(room: Room, io: RoomIO): void {
+  for (const seat of room.seats) {
+    if (isBotSeat(seat)) {
+      seat.ready = true;
+      seat.actedThisPhase = true;
     }
-    room.aiPlayerBusy = false;
-    broadcastCoopStatus(room, io);
-    maybeEndPlayerPhase(room, io);
   }
-  // enemy-phase `done`: the flip back to red is detected by startEnemyPhase's caller.
+  room.combat = enterPlayerOpen();
+  broadcastCoopStatus(room, io);
+  maybeEndPlayerPhase(room, io);
 }
 
 // =====================================================================================
@@ -504,9 +510,8 @@ export function applyHumanAction(
   const session = room.session;
   const reject = () => io.send(seat, { type: "actionRejected", seatId: seat.seatId });
 
-  if (!session || room.phase !== "combat" || room.coopPhase !== "player" || room.building) return reject();
-  if (room.aiPlayerBusy || room.phaseTransitioning) return reject();
-  if (session.pendingDefend) return reject();
+  if (!session || room.phase !== "combat" || room.building) return reject();
+  if (!isPlayerInputOpen(room.combat) || session.pendingDefend) return reject();
   if (seat.ready || seat.exhausted) return reject();
   if ((action as { entityId?: EntityId }).entityId !== seat.heroEntityId) return reject();
 
@@ -528,13 +533,13 @@ export function applyHumanAction(
 
 /** `pass`/`unpass` (DESIGN §4). `unpass` is only valid while the phase is open and not exhausted. */
 export function setReady(room: Room, io: RoomIO, seat: Seat, ready: boolean): void {
-  if (room.phase !== "combat" || room.coopPhase !== "player") {
+  if (room.phase !== "combat" || coopPhaseOf(room.combat) !== "player") {
     io.send(seat, { type: "actionRejected", seatId: seat.seatId });
     return;
   }
   if (!ready) {
     // unpass
-    if (room.phaseTransitioning || room.aiPlayerBusy || seat.exhausted) {
+    if (isBusy(room.combat) || seat.exhausted) {
       io.send(seat, { type: "actionRejected", seatId: seat.seatId });
       return;
     }
@@ -555,14 +560,14 @@ export function setReady(room: Room, io: RoomIO, seat: Seat, ready: boolean): vo
 export function onSeatBecameBotMidPhase(room: Room, io: RoomIO, seat: Seat): void {
   const session = room.session;
   if (!session) return;
-  if (room.phase !== "combat" || room.coopPhase !== "player") return;
-  if (room.phaseTransitioning) return;
+  if (room.phase !== "combat" || coopPhaseOf(room.combat) !== "player") return;
+  if (room.combat?.step.kind === "transition") return; // mid-flip (synchronous; defensive)
 
   // If the seat that just flipped to bot was the LAST connected human, freeze instead of driving the
   // now-all-bot cascade unobserved. This is the load-bearing pause site: both the disconnect-grace
   // expiry and the explicit-leave path reach the bot conversion through here.
   if (!hasConnectedHuman(room)) {
-    room.paused = true;
+    if (room.combat) room.combat.suspended = true;
     broadcastCoopStatus(room, io);
     return;
   }
@@ -570,13 +575,12 @@ export function onSeatBecameBotMidPhase(room: Room, io: RoomIO, seat: Seat): voi
   rebuildHeroBrains(room);
   recomputeSeatExhausted(room, seat);
 
-  // Only drive an open player phase (activeTeam red, not transitioning). If the burst is still
-  // running, the seat will be swept by it; defer.
-  if (session.state.activeTeam === "red" && !room.aiPlayerBusy && !seat.ready && !seat.exhausted) {
-    room.aiPlayerBusy = true;
+  // Only drive an OPEN player phase (activeTeam red, step playerOpen). If a burst is still running the
+  // seat is swept by it; defer. driveCombat's onPlayerBurstDone re-enters playerOpen + readies bots.
+  if (session.state.activeTeam === "red" && room.combat?.step.kind === "playerOpen" && !seat.ready && !seat.exhausted) {
+    room.combat = enterPlayerBots();
     session.runHero(seat.heroEntityId, humanHeroIds(room));
-    driveAiSteps(room, io);
-    room.aiPlayerBusy = false;
+    driveCombat(room, io);
   }
   seat.ready = true;
   seat.actedThisPhase = true;
@@ -585,19 +589,19 @@ export function onSeatBecameBotMidPhase(room: Room, io: RoomIO, seat: Seat): voi
 }
 
 /**
- * Resume a combat frozen by the no-human pause (Phase 1), once a human (re)binds in connectSeat.
- * It CONTINUES the frozen sub-phase, never restarts a turn: an in-flight enemy sweep is continued via
- * resumeAfterDefend (driveAiSteps picks up the runner's remaining queue — re-calling startEnemyPhase
- * would re-sweep already-acted enemies), while a frozen player phase is re-opened fresh.
+ * Resume a combat frozen by the no-human pause, once a human (re)binds in connectSeat. It CONTINUES
+ * the frozen sub-phase, never restarts a turn: a frozen player phase is re-opened fresh; an in-flight
+ * enemy sweep is continued via driveCombat (the runner's entityQueue is intact, so re-entering it
+ * picks up where it left off — it does NOT re-sweep already-acted enemies).
  */
 export function resumeCombat(room: Room, io: RoomIO): void {
-  if (!room.session || room.phase !== "combat" || !room.paused) return;
-  if (!hasConnectedHuman(room)) return; // still nobody back; stay paused
-  room.paused = false;
-  if (room.coopPhase === "enemy") {
-    resumeAfterDefend(room, io);
-  } else {
+  if (!room.session || room.phase !== "combat" || !room.combat?.suspended) return;
+  if (!hasConnectedHuman(room)) return; // still nobody back; stay suspended
+  room.combat.suspended = false;
+  if (room.combat.step.kind === "playerOpen") {
     startPlayerPhase(room, io);
+  } else {
+    driveCombat(room, io);
   }
 }
 
@@ -779,41 +783,33 @@ export function maybeResolveDefendRound(room: Room, io: RoomIO, force: boolean):
       endCombat(room, io);
       return;
     }
-    resumeAfterDefend(room, io);
+    continueAfterDefend(room, io);
   } else if (step.type === "defendPrompt") {
     broadcastCoopStatus(room, io);
     openDefendRound(room, io, step);
   } else {
     broadcastCoopStatus(room, io);
-    resumeAfterDefend(room, io);
+    continueAfterDefend(room, io);
   }
 }
 
-/** After a defend resolves, continue the AI burst then re-evaluate the relevant phase latch. */
-function resumeAfterDefend(room: Room, io: RoomIO): void {
+/**
+ * After a defend round resolves, restore the sub-phase recorded when it opened (enterDefend's
+ * resumeAfterDefend) and re-enter the single scheduler. driveCombat then continues the enemy sweep
+ * (-> endedTurn -> player phase) or the player-bot burst (-> done -> re-latch) — no after-the-fact
+ * flip detection. If the round resolved via timeout after the last human left, freeze instead.
+ */
+function continueAfterDefend(room: Room, io: RoomIO): void {
   const session = room.session;
   if (!session) return;
-  // A defend round can resolve via timeout after the last human left mid enemy-sweep; freeze the
-  // in-flight sweep rather than finishing it unobserved. resumeCombat continues it on reconnect.
+  const resume = room.combat?.resumeAfterDefend ?? "enemy";
+  room.combat = resume === "enemy" ? enterEnemy() : enterPlayerBots();
   if (!hasConnectedHuman(room)) {
-    room.paused = true;
+    room.combat.suspended = true;
     broadcastCoopStatus(room, io);
     return;
   }
-  const beforeTeam = session.state.activeTeam;
-  driveAiSteps(room, io);
-  if (room.coopPhase === "player") {
-    maybeEndPlayerPhase(room, io);
-  } else if (
-    !session.state.winner &&
-    !session.pendingDefend &&
-    session.state.activeTeam === "red" &&
-    beforeTeam === "blue"
-  ) {
-    // Enemy sweep finished and flipped back to red.
-    room.phaseTransitioning = false;
-    startPlayerPhase(room, io);
-  }
+  driveCombat(room, io);
 }
 
 /** Abort any open defend round (reset/debugWin, R17). */
@@ -1000,10 +996,7 @@ export async function beginCombatEntry(room: Room, io: RoomIO, target: HexCoord)
   room.building = true;
   room.vote = null;
   room.pendingHex = target;
-  room.coopPhase = "player";
-  room.phaseTransitioning = false;
-  room.aiPlayerBusy = false;
-  room.paused = false;
+  room.combat = null; // set by startPlayerPhase once the session is built
   room.generation++;
   const gen = room.generation;
   const specs = room.seats.map(seatBuildSpec);
@@ -1067,10 +1060,7 @@ export function endCombat(room: Room, io: RoomIO): void {
 
   room.generation++;
   room.session = null;
-  room.phaseTransitioning = false;
-  room.aiPlayerBusy = false;
-  room.paused = false;
-  room.coopPhase = "player";
+  room.combat = null; // off-combat
 
   if (won && room.pendingHex) {
     const firstEver = exploreHex(room, room.pendingHex);
@@ -1210,7 +1200,7 @@ export function armDisconnectGrace(room: Room, io: RoomIO, seat: Seat): void {
     if (seat.state !== "human-disconnected") return;
     // Keep it reclaim-only in roster terms, but bot-drive it for liveness (R9/R31).
     seat.brain = sovereignFor(seat);
-    if (room.phase === "combat" && room.coopPhase === "player" && room.generation === gen) {
+    if (room.phase === "combat" && coopPhaseOf(room.combat) === "player" && room.generation === gen) {
       onSeatBecameBotMidPhase(room, io, seat);
     } else {
       broadcastCoopStatus(room, io);
@@ -1288,7 +1278,7 @@ export function leaveSeatPermanently(
 
   // Mid open player phase: drive the freshly-botted seat once and re-latch. onSeatBecameBotMidPhase is
   // pause-aware — if the leaver was the LAST human it freezes combat instead of cascading (Phase 1).
-  if (room.phase === "combat" && room.coopPhase === "player") {
+  if (room.phase === "combat" && coopPhaseOf(room.combat) === "player") {
     onSeatBecameBotMidPhase(room, io, seat);
   }
 
@@ -1332,7 +1322,7 @@ export function connectSeat(
   // R10 reclaim ready/exhausted rules (only meaningful in combat).
   if (session && room.phase === "combat") {
     recomputeSeatExhausted(room, seat);
-    const phaseOpen = room.coopPhase === "player" && session.state.activeTeam === "red" && !room.phaseTransitioning;
+    const phaseOpen = coopPhaseOf(room.combat) === "player" && session.state.activeTeam === "red";
     if (phaseOpen && !seat.actedThisPhase && !seat.exhausted) {
       seat.ready = false; // the human inherits an unspent turn
       armAfk(room, io, seat);
@@ -1348,8 +1338,8 @@ export function connectSeat(
     setRunHostSafe(room);
   }
 
-  // If combat was frozen waiting for a human, resume it now that this human has (re)bound (Phase 1).
-  if (room.phase === "combat" && room.paused) resumeCombat(room, io);
+  // If combat was frozen waiting for a human, resume it now that this human has (re)bound.
+  if (room.phase === "combat" && room.combat?.suspended) resumeCombat(room, io);
 }
 
 // =====================================================================================
@@ -1431,11 +1421,8 @@ export function reconstructRoomForRun(
     hostSeatId: null, // re-derived on first bind (R14)
     phase: "overworld",
     building: false,
-    phaseTransitioning: false,
     generation: 0,
-    coopPhase: "player",
-    aiPlayerBusy: false,
-    paused: false,
+    combat: null,
     dimensionId,
     runId,
     hexMap: { playerPos, hexes, icons },
