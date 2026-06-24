@@ -27,9 +27,9 @@ import {
   findActiveSeatForClient,
   abandonPriorSeatForClient,
   leaveRunSeat,
-  markRunInactive,
+  finalizeRun,
   deactivateStaleRuns,
-  markRunStarted,
+  setRunPhase,
   newTokenSalt,
   mintSessionToken,
   verifySessionToken,
@@ -150,7 +150,7 @@ function reapRoom(room: Room): void {
  * boot by the crash-recovery pass. This is the mortal-game spine (graceful => inactive, crash => active).
  */
 function reapEmptyRoom(room: Room): void {
-  markRunInactive(room.runId, "abandoned");
+  finalizeRun(room.runId, "abandoned");
   reapRoom(room);
 }
 
@@ -549,7 +549,7 @@ function handleStartGame(room: Room, seat: Seat): void {
   }
 
   room.phase = "overworld";
-  markRunStarted(room.runId); // durable "started" marker (crash recovery resumes only started runs)
+  setRunPhase(room.runId, "overworld"); // persist the lifecycle SSOT (crash recovery resumes overworld runs)
   broadcastRoomState(room, io);
   broadcastHexMapState(room, io);
 }
@@ -574,6 +574,7 @@ function handleReset(room: Room, seat: Seat): void {
     room.coopPhase = "player";
     room.pendingHex = null;
     room.phase = "overworld";
+    setRunPhase(room.runId, "overworld"); // back to overworld of the SAME run (durable SSOT)
     broadcastRoomState(room, io);
     broadcastHexMapState(room, io);
   } else if (room.phase === "overworld" || room.phase === "gameover") {
@@ -796,7 +797,7 @@ function detachSeat(room: Room, seat: Seat, reason: "leave" | "close"): void {
       // A never-started lobby that fully empties is abandoned durably so findActiveSeatForClient no
       // longer resolves it (else a later hello would resurrect it mid-overworld with bots, #20) and
       // it cannot linger active=1 forever. Then dispose the in-memory room immediately.
-      markRunInactive(room.runId, "abandoned");
+      finalizeRun(room.runId, "abandoned");
       reapRoom(room);
     }
     return;

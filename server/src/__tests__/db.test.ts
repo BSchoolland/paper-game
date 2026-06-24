@@ -48,8 +48,29 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
 
     expect(db.findActiveSeatForClient("owner")).toEqual({ runId, seatIndex: 0 });
 
-    db.markRunInactive(runId, "victory");
+    db.finalizeRun(runId, "victory");
     expect(db.findActiveSeatForClient("owner")).toBeNull(); // run inactive + seat left-stamped
+  });
+
+  it("run.phase is the lifecycle SSOT; finalizeRun is idempotent first-writer-wins", () => {
+    const runId = db.startNewRun(1, "owner2", 2);
+    expect(db.loadRun(runId)?.phase).toBe("lobby"); // INSERT default
+    expect(db.loadRun(runId)?.active).toBe(1);
+
+    db.setRunPhase(runId, "overworld");
+    expect(db.loadRun(runId)?.phase).toBe("overworld");
+
+    // First finalize transitions; a second (different outcome) is a no-op that cannot clobber.
+    expect(db.finalizeRun(runId, "defeat")).toBe(true);
+    expect(db.loadRun(runId)?.active).toBe(0);
+    expect(db.loadRun(runId)?.outcome).toBe("defeat");
+    expect(db.loadRun(runId)?.phase).toBe("gameover"); // finalize persists phase too
+
+    expect(db.finalizeRun(runId, "abandoned")).toBe(false); // already final -> no-op
+    expect(db.loadRun(runId)?.outcome).toBe("defeat"); // outcome NOT clobbered
+
+    db.setRunPhase(runId, "overworld"); // a dead run has no phase -> no-op (AND active=1 guard)
+    expect(db.loadRun(runId)?.phase).toBe("gameover");
   });
 
   it("enforces one live human seat per client across runs (R6/R32)", () => {

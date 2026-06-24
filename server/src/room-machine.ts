@@ -38,9 +38,9 @@ import {
   updateRunPartyPos,
   commitExplore,
   markRunCleared,
-  markRunInactive,
+  finalizeRun,
   startNewRun,
-  markRunStarted,
+  setRunPhase,
   loadActiveRunIds,
   setRunHost,
   upsertRunSeat,
@@ -994,6 +994,7 @@ function encounterTypeFor(room: Room, target: HexCoord): EncounterType {
 export async function beginCombatEntry(room: Room, io: RoomIO, target: HexCoord): Promise<void> {
   // --- synchronous, pre-await ---
   room.phase = "combat";
+  setRunPhase(room.runId, "combat"); // persist the lifecycle SSOT (a crash mid-combat resumes at overworld)
   room.building = true;
   room.vote = null;
   room.pendingHex = target;
@@ -1022,6 +1023,7 @@ export async function beginCombatEntry(room: Room, io: RoomIO, target: HexCoord)
     if (room.generation === gen) {
       room.building = false;
       room.phase = "overworld";
+      setRunPhase(room.runId, "overworld"); // build failed -> stay in overworld (durable SSOT)
       room.pendingHex = null;
       broadcastRoomState(room, io);
     }
@@ -1073,6 +1075,7 @@ export function endCombat(room: Room, io: RoomIO): void {
     const discovered = room.pendingHex;
     room.pendingHex = null;
     room.phase = "overworld";
+    setRunPhase(room.runId, "overworld"); // back to overworld after a win (durable SSOT)
     broadcastRoomState(room, io);
     broadcastHexMapState(room, io);
     // First-ever discovery in this dimension is a community KEY MOMENT — celebrate it.
@@ -1084,7 +1087,7 @@ export function endCombat(room: Room, io: RoomIO): void {
     // player can Play Again (-> a fresh active run via resetToOrigin) or Return to Home (-> leave).
     room.pendingHex = null;
     room.phase = "gameover";
-    markRunInactive(room.runId, "defeat");
+    finalizeRun(room.runId, "defeat"); // the single run-end owner (also persists phase='gameover')
     broadcastRoomState(room, io);
     io.broadcast(room, { type: "gameOver", outcome: "defeat" });
   }
@@ -1115,9 +1118,9 @@ function exploreHex(room: Room, target: HexCoord): boolean {
  */
 export function resetToOrigin(room: Room, io: RoomIO, outcome: "defeat" | "abandoned" = "defeat"): void {
   const oldRunId = room.runId;
-  markRunInactive(oldRunId, outcome);
+  finalizeRun(oldRunId, outcome); // single run-end owner (no-op if already final, e.g. play-again after a wipe)
   const newRunId = startNewRun(room.dimensionId, hostClientId(room), room.capacity);
-  markRunStarted(newRunId); // a play-again / abandon run resumes at the overworld, never a lobby
+  setRunPhase(newRunId, "overworld"); // a play-again / abandon run resumes at the overworld, never a lobby
   // Discovery is GLOBAL per dimension and persists across runs — do NOT re-seed it. The fresh run
   // only re-clears its own origin; the community map (loadDiscoveredHexes) carries forward.
   markRunCleared(newRunId, ORIGIN);
@@ -1451,21 +1454,26 @@ export function reconstructRoomForRun(
     return rooms.getByRun(runId); // lost the race; reuse the winner
   }
 
+  // The room is rebuilt at 'overworld' (combat is volatile); converge the durable SSOT if it was 'combat'.
+  if (runRow.phase !== "overworld") setRunPhase(runId, "overworld");
+
   armReap(room, onReap); // R31: a reconstructed room nobody reconnects to is reaped
   return room;
 }
 
 /**
  * Boot crash-recovery: rebuild every run a process death left active=1 — server-side, not lazily by an
- * arbitrary client's hello. A run the crash caught in the LOBBY (never started, started_at null) is NOT
- * resurrected as an overworld game; it is abandoned so reconnects route HOME. Each reconstructed room
- * arms its own (inactivating) `onReap`, so one nobody reconnects to within the window is finalized.
+ * arbitrary client's hello. The durable run.phase SSOT decides: a run the crash caught in the LOBBY is
+ * NOT resurrected as a game (it is abandoned so reconnects route HOME); an overworld/combat run is rebuilt
+ * (combat is volatile — it resumes at overworld). Each reconstructed room arms its own (inactivating)
+ * `onReap`, so one nobody reconnects to within the window is finalized.
  */
 export function recoverActiveRuns(onReap: (room: Room) => void): void {
   for (const runId of loadActiveRunIds()) {
     const run = loadRun(runId);
-    if (!run || run.started_at == null) {
-      markRunInactive(runId, "abandoned");
+    if (!run) continue;
+    if (run.phase === "lobby") {
+      finalizeRun(runId, "abandoned");
       continue;
     }
     reconstructRoomForRun(runId, onReap);

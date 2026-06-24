@@ -4,7 +4,7 @@ import { startServer, connectClient, hello, sleep, type HarnessServer, type Mock
 import { rooms } from "../room-registry.js";
 import { disposeRoom } from "../room.js";
 import { recoverActiveRuns } from "../room-machine.js";
-import { loadRun, markRunInactive } from "../db.js";
+import { loadRun, finalizeRun } from "../db.js";
 
 /**
  * Lifecycle-redesign coverage: mortal games (wipe -> held Game Over), any-player Play Again, mid-game
@@ -226,9 +226,9 @@ describe("co-op lifecycle redesign", () => {
     await host.closed;
     await sleep(150);
 
-    // Model the 5-min empty-reap timer firing (reapEmptyRoom = markRunInactive + dispose + remove).
+    // Model the 5-min empty-reap timer firing (reapEmptyRoom = finalizeRun + dispose + remove).
     const room = rooms.get(code)!;
-    markRunInactive(room.runId, "abandoned");
+    finalizeRun(room.runId, "abandoned");
     disposeRoom(room);
     rooms.remove(room);
 
@@ -276,9 +276,9 @@ describe("co-op lifecycle redesign", () => {
     const host = await connectClient(server);
     await hello(host, "Lobbyer");
     const { code, runId } = await createRoom(host, 2); // lobby — NOT started
-    expect(loadRun(runId)?.started_at).toBeNull();
+    expect(loadRun(runId)?.phase).toBe("lobby"); // the durable lifecycle SSOT (subsumes the started_at patch)
 
-    // Model a crash caught mid-lobby: in-memory room gone, run still active=1, started_at still null.
+    // Model a crash caught mid-lobby: in-memory room gone, run still active=1, phase still 'lobby'.
     const room = rooms.get(code)!;
     disposeRoom(room);
     rooms.remove(room);
@@ -307,7 +307,7 @@ describe("co-op lifecycle redesign", () => {
     expect(loadRun(runId)?.outcome).toBe("defeat");
 
     // The room is reaped later (all sockets gone); the abandon must NOT clobber the recorded 'defeat'.
-    markRunInactive(runId, "abandoned");
+    finalizeRun(runId, "abandoned");
     expect(loadRun(runId)?.outcome).toBe("defeat");
     expect(rooms.get(code)).toBeTruthy(); // (still in memory until reaped; assertion is on the durable row)
 

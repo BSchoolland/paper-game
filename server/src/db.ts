@@ -169,6 +169,25 @@ const SCHEMA_VERSION = 3;
   }
 }
 
+// v5: durable `runs.phase` — the SINGLE run-lifecycle source of truth, reusing the wire RoomPhase value
+// set. Subsumes the v4 started_at heuristic (which stays as a now-dead column; SQLite can't cheaply DROP).
+// The backfill makes an upgraded in-flight DB correct: finalized -> 'gameover', started -> 'overworld',
+// else 'lobby'.
+{
+  const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
+  if (user_version < 5) {
+    try {
+      db.exec("ALTER TABLE runs ADD COLUMN phase TEXT NOT NULL DEFAULT 'lobby'");
+    } catch (e) {
+      if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+    }
+    db.exec(
+      "UPDATE runs SET phase = CASE WHEN active = 0 THEN 'gameover' WHEN started_at IS NOT NULL THEN 'overworld' ELSE 'lobby' END",
+    );
+    db.exec("PRAGMA user_version = 5");
+  }
+}
+
 // --- Discovery: GLOBAL community fog-of-war, keyed by dimension, permanent + append-only. ---
 const insertDiscoveredStmt = db.prepare(
   "INSERT OR IGNORE INTO discovered_hexes (dimension_id, q, r) VALUES (?, ?, ?)"
@@ -255,19 +274,24 @@ export function commitExplore(dimensionId: number, runId: number, coord: HexCoor
 }
 
 // --- Runs ---
+/** The run's lifecycle phase — the single durable source of truth (same value set as the wire RoomPhase). */
+export type RunPhase = "lobby" | "overworld" | "combat" | "gameover";
+export type RunOutcome = "victory" | "defeat" | "abandoned";
+
 export interface RunRow {
   id: number;
   dimension_id: number;
   capacity: number;
   host_client_id: string | null;
   active: number;
+  phase: RunPhase;
   party_q: number;
   party_r: number;
   created_at: number;
   updated_at: number;
   completed_at: number | null;
   outcome: string | null;
-  started_at: number | null;
+  started_at: number | null; // dead column (subsumed by `phase`); kept because SQLite can't cheaply DROP.
 }
 
 const insertRunStmt = db.prepare(
@@ -277,15 +301,20 @@ const insertRunStmt = db.prepare(
 const runByIdStmt = db.prepare("SELECT * FROM runs WHERE id = ?");
 const updatePartyPosStmt = db.prepare("UPDATE runs SET party_q = ?, party_r = ?, updated_at = ? WHERE id = ?");
 const setHostStmt = db.prepare("UPDATE runs SET host_client_id = ?, updated_at = ? WHERE id = ?");
-const markRunStartedStmt = db.prepare("UPDATE runs SET started_at = ?, updated_at = ? WHERE id = ?");
-// `AND active = 1` makes finalization first-writer-wins: a later reap of an already-final (e.g.
-// 'defeat') run is a no-op instead of clobbering its outcome/completed_at to 'abandoned'.
-const markRunInactiveStmt = db.prepare("UPDATE runs SET active = 0, completed_at = ?, outcome = ? WHERE id = ? AND active = 1");
+const setRunPhaseStmt = db.prepare("UPDATE runs SET phase = ?, updated_at = ? WHERE id = ? AND active = 1");
+// `AND active = 1` makes finalizeRun first-writer-wins: a later abandon of an already-final (e.g.
+// 'defeat') run is a no-op instead of clobbering its outcome/completed_at/phase.
+const markRunInactiveStmt = db.prepare("UPDATE runs SET active = 0, completed_at = ?, outcome = ?, phase = 'gameover' WHERE id = ? AND active = 1");
 const stampSeatsLeftStmt = db.prepare("UPDATE run_seats SET left_at = ? WHERE run_id = ? AND left_at IS NULL");
 const staleRunsStmt = db.prepare("SELECT id FROM runs WHERE active = 1 AND updated_at < ?");
 const activeRunIdsStmt = db.prepare("SELECT id FROM runs WHERE active = 1");
 
-/** Every still-active run id. Drives boot-time crash recovery (a run left active=1 by a crash). */
+/**
+ * Every still-active run id. Drives boot-time crash recovery (a run left active=1 by a crash).
+ * CONTRACT: the DB `active` flag means "was-ever-finalized"; the in-memory RoomRegistry is the
+ * authority for "is-live-now". This and deactivateStaleRuns are the only DB-as-set readers, and both
+ * defer to the registry (boot recovery dedupes via getByRun; the sweep filters via the isLive predicate).
+ */
 export function loadActiveRunIds(): number[] {
   return (activeRunIdsStmt.all() as { id: number }[]).map((r) => r.id);
 }
@@ -308,20 +337,27 @@ export function setRunHost(runId: number, hostClientId: string | null): void {
   setHostStmt.run(hostClientId, Date.now(), runId);
 }
 
-/** Stamp a run as started (entered the overworld). Crash-recovery only resumes started runs. */
-export function markRunStarted(runId: number): void {
-  const now = Date.now();
-  markRunStartedStmt.run(now, now, runId);
+/** Persist the run's lifecycle phase — the single durable truth, written wherever room.phase changes.
+ *  `AND active = 1` (in the stmt) makes a stray write after finalization a no-op: a dead run has no phase. */
+export function setRunPhase(runId: number, phase: RunPhase): void {
+  setRunPhaseStmt.run(phase, Date.now(), runId);
 }
 
-/** Mark a run finished and stamp every still-present seat as left (R32/R13.5), atomically. */
-export function markRunInactive(runId: number, outcome: "victory" | "defeat" | "abandoned"): void {
+/**
+ * THE single idempotent run-end: finish the run ('gameover' phase + active=0 + outcome) and stamp every
+ * still-present seat as left — atomically. Returns true iff THIS call performed the transition
+ * (first-writer-wins): a later abandon over an already-final run is a no-op that cannot clobber its
+ * recorded outcome, and the seat-stamp runs only on the transition so a re-finalize never re-stamps.
+ */
+export function finalizeRun(runId: number, outcome: RunOutcome): boolean {
   const now = Date.now();
+  let changed = false;
   const tx = db.transaction(() => {
-    markRunInactiveStmt.run(now, outcome, runId);
-    stampSeatsLeftStmt.run(now, runId);
+    changed = markRunInactiveStmt.run(now, outcome, runId).changes > 0;
+    if (changed) stampSeatsLeftStmt.run(now, runId);
   });
   tx();
+  return changed;
 }
 
 /**
@@ -332,14 +368,7 @@ export function markRunInactive(runId: number, outcome: "victory" | "defeat" | "
 export function deactivateStaleRuns(olderThanMs: number, isLive?: (runId: number) => boolean): number {
   const cutoff = Date.now() - olderThanMs;
   const rows = (staleRunsStmt.all(cutoff) as { id: number }[]).filter((r) => !isLive || !isLive(r.id));
-  const tx = db.transaction(() => {
-    const now = Date.now();
-    for (const row of rows) {
-      markRunInactiveStmt.run(now, "abandoned", row.id);
-      stampSeatsLeftStmt.run(now, row.id);
-    }
-  });
-  tx();
+  for (const row of rows) finalizeRun(row.id, "abandoned"); // route through the single run-end owner
   return rows.length;
 }
 
@@ -430,17 +459,12 @@ export function abandonPriorSeatForClient(
 ): { runId: number; seatIndex: number; runInactivated: boolean } | null {
   const prior = findActiveSeatForClient(clientId);
   if (!prior) return null;
-  const now = Date.now();
-  let runInactivated = false;
-  const tx = db.transaction(() => {
-    leaveSeatStmt.run(now, prior.runId, prior.seatIndex);
-    const remaining = liveSeatsForRunStmt.all(prior.runId) as { seat_index: number }[];
-    if (remaining.length === 0) {
-      markRunInactiveStmt.run(now, "abandoned", prior.runId);
-      runInactivated = true;
-    }
-  });
-  tx();
+  // Stamp the prior seat left FIRST (frees the unique-live index immediately), then — if that left the
+  // run with no live human — finalize it through the single run-end owner. The boolean return replaces
+  // the old recount-driven flag (equivalent: findActiveSeatForClient already gated on an active run).
+  leaveSeatStmt.run(Date.now(), prior.runId, prior.seatIndex);
+  const remaining = liveSeatsForRunStmt.all(prior.runId) as { seat_index: number }[];
+  const runInactivated = remaining.length === 0 ? finalizeRun(prior.runId, "abandoned") : false;
   return { runId: prior.runId, seatIndex: prior.seatIndex, runInactivated };
 }
 
