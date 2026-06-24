@@ -3,17 +3,22 @@ import type { ServerMessage } from "shared";
 import { startServer, connectClient, hello, sleep, type HarnessServer, type MockClient } from "./coop-harness.js";
 import { rooms } from "../room-registry.js";
 import { disposeRoom } from "../room.js";
+import { reconstructRoomForRun } from "../room-machine.js";
 
 /**
- * Force the durable resume path: drop the live in-memory Room for a run (timers + registry entry,
- * NOT durable rows, R19) so the next reconnect by clientId reconstructs the Room from SQLite
- * (run_seats / run_seat_items) instead of finding the still-live in-memory inventory.
+ * Simulate a server RESTART for a run: drop the live in-memory Room (timers + registry, NOT durable
+ * rows, R19), then rebuild it from SQLite via the boot crash-recovery primitive. The next reconnect by
+ * clientId resumes the reconstructed Room (inventory rehydrated from run_seats / run_seat_items)
+ * instead of the still-live in-memory inventory. (hello no longer lazily reconstructs — crash recovery
+ * is boot-driven, so a test must reconstruct explicitly to model the restart.)
  */
-function evictLiveRoom(code: string): void {
+function restartRoom(code: string): void {
   const room = rooms.get(code);
   if (!room) return;
+  const runId = room.runId;
   disposeRoom(room);
   rooms.remove(room);
+  reconstructRoomForRun(runId, () => {});
 }
 
 const DIM = 0;
@@ -117,15 +122,15 @@ describe("per-seat inventory", () => {
       { consumeBuffered: false, timeoutMs: 4000 },
     );
 
-    // Disconnect AND evict the live Room (simulating a restart / reap) so the reconnect must
-    // rehydrate the bag from SQLite (run_seat_items), not from a surviving in-memory inventory.
+    // Disconnect AND restart the run (drop the live Room, rebuild from SQLite — simulating a crash +
+    // boot recovery) so the reconnect must rehydrate the bag from run_seat_items, not in-memory state.
     owner.close();
     await owner.closed;
     await sleep(200);
-    evictLiveRoom(code);
+    restartRoom(code);
 
-    // Reconnect with the SAME clientId. hello -> reconstructRoomForRun -> the seat's persisted bag
-    // is rehydrated from run_seat_items and pushed back as `inventory`.
+    // Reconnect with the SAME clientId. hello finds the reconstructed live room (boot recovery rebuilt
+    // it) and auto-reclaims; the seat's persisted bag was rehydrated from run_seat_items.
     const owner2 = await connectClient(server, owner.clientId);
     const w2 = await hello(owner2, "Owner");
     expect(w2.reconnected).toBeTruthy();
@@ -164,7 +169,7 @@ describe("per-seat inventory", () => {
     owner.close();
     await owner.closed;
     await sleep(200);
-    evictLiveRoom(code);
+    restartRoom(code);
 
     const owner2 = await connectClient(server, owner.clientId);
     await hello(owner2, "Owner2");

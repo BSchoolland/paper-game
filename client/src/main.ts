@@ -13,12 +13,15 @@ import { InputManager } from "./input/input-manager.js";
 import { loadSpriteAssets, loadDimensionSprites } from "./renderer/sprite-assets.js";
 import { loadMapAssets } from "./renderer/grid-renderer.js";
 import { ScreenManager } from "./screens/screen-manager.js";
+import { HomeScreen } from "./screens/home-screen.js";
 import { LobbyScreen } from "./screens/lobby-screen.js";
+import { GameOverScreen } from "./screens/game-over-screen.js";
 import { MapScreen } from "./screens/map-screen.js";
 import { CombatScreen } from "./screens/combat-screen.js";
 import { InventoryScreen } from "./screens/inventory-screen.js";
 import { ReplayScreen } from "./screens/replay-screen.js";
 import { ReplayStore } from "./state/replay-store.js";
+import { clearStoredSeat } from "./net/player-token.js";
 import type { HexMapState, RoomPhase } from "shared";
 import { getAnimSet } from "shared";
 
@@ -89,6 +92,22 @@ function makeToast(): (text: string) => void {
   };
 }
 
+/** A fixed "Leave game" button for a started game (overworld/combat). Returns a visibility setter. */
+function makeLeaveButton(onLeave: () => void): (visible: boolean) => void {
+  const b = document.createElement("button");
+  b.textContent = "Leave game";
+  b.tabIndex = -1;
+  b.style.cssText = `
+    position: fixed; top: 10px; right: 10px; z-index: 1000; display: none;
+    padding: 7px 12px; font-family: monospace; font-size: 12px; font-weight: bold;
+    color: #fffaf0; background: rgba(139, 58, 58, 0.92); border: 1px solid #6b3030;
+    border-radius: 6px; cursor: pointer;
+  `;
+  b.addEventListener("click", onLeave);
+  document.body.appendChild(b);
+  return (visible) => { b.style.display = visible ? "block" : "none"; };
+}
+
 async function init() {
   const app = new Application();
   await app.init({
@@ -142,16 +161,8 @@ async function init() {
     toast(msg.message);
   });
 
-  // The party-wipe / victory run-end banner. The server sends `gameOver` alongside the roomState
-  // that swaps back to the overworld; surface it so a defeat isn't a silent teleport to town.
-  const runEndBanner = makeTransientBanner();
-  conn.on("gameOver", (msg) =>
-    runEndBanner(
-      msg.outcome === "defeat"
-        ? "Your party was defeated — a new expedition begins at the town."
-        : "Victory! The expedition prevails.",
-    ),
-  );
+  // A party wipe now lands on the held Game Over end state (GameOverScreen), so no transient banner is
+  // needed; the `gameOver` message is informational and the `gameover` roomState phase drives the screen.
 
   // First-ever community discovery (GLOBAL per dimension) — a celebratory key moment.
   const discoveryBanner = makeTransientBanner();
@@ -226,12 +237,17 @@ async function init() {
 
   // Screen manager + registration
   const screens = new ScreenManager();
-  screens.register("lobby", new LobbyScreen(conn, seat, () => screens.switchTo("inventory"), dim));
+  const homeScreen = new HomeScreen(conn, seat, dim);
+  screens.register("home", homeScreen);
+  screens.register("lobby", new LobbyScreen(conn, seat, () => screens.switchTo("inventory")));
+  screens.register("gameover", new GameOverScreen(conn));
   screens.register("map", new MapScreen(hexRenderer, conn, () => hexMapState));
   screens.register("combat", new CombatScreen(combatRenderer, clientState, combatStore, input), true);
   screens.register("inventory", inventoryScreen, true);
 
-  inventoryScreen.onClose(() => switchForPhase(seat.room?.phase ?? "lobby"));
+  conn.on("roomList", (msg) => homeScreen.setRooms(msg.rooms));
+
+  inventoryScreen.onClose(() => route());
 
   conn.on("inventory", (msg) => {
     hexRenderer.setPlayerAnimSet(getAnimSet(msg.inventory.equipped));
@@ -252,19 +268,38 @@ async function init() {
     else partyHud.hide();
   };
 
-  // `roomState.phase` is the authoritative screen selector. Leaving combat waits for the renderer
-  // to finish playing the final events before swapping to the overworld.
-  let pendingPhase: RoomPhase | null = null;
+  // Always-on "Leave game" control, shown only in a started game (overworld/combat). The staging
+  // lobby and the Game Over screen carry their own leave/return buttons.
+  const setLeaveVisible = makeLeaveButton(() => conn.send({ type: "leaveRoom" }));
+
+  // Room presence + `roomState.phase` is the authoritative screen selector. Leaving combat waits for
+  // the renderer to finish the final events before swapping to the overworld OR the Game Over screen.
+  let leavingCombat = false;
   conn.on("combatEnd", () => {
-    pendingPhase = "overworld";
+    leavingCombat = true;
   });
 
+  // The single screen-selection entry point: HOME when room-less, else the room's current phase.
+  function route(): void {
+    if (!seat.room) {
+      setCombatActive(false);
+      setLeaveVisible(false);
+      screens.switchTo("home");
+      return;
+    }
+    switchForPhase(seat.room.phase);
+  }
+
   function switchForPhase(phase: RoomPhase): void {
+    setLeaveVisible(phase === "overworld" || phase === "combat");
     switch (phase) {
       case "lobby":
-      case "gameover":
         setCombatActive(false);
         screens.switchTo("lobby");
+        return;
+      case "gameover":
+        setCombatActive(false);
+        screens.switchTo("gameover");
         return;
       case "overworld":
         setCombatActive(false);
@@ -281,20 +316,27 @@ async function init() {
     }
   }
 
+  // The server confirms a voluntary leave / finalized run by telling this client it is now room-less.
+  conn.on("leftRoom", () => {
+    seat.setRoom(null);
+    clearStoredSeat();
+    route();
+  });
+
   conn.on("roomState", (msg) => {
     const phase = msg.room.phase;
-    // While the inventory overlay is open, stay on it; the base screen still tracks the phase and
-    // is revealed on close. Otherwise follow the phase, deferring a combat->overworld swap until
-    // the combat animation queue drains (combatEnd gate).
+    // While the inventory overlay is open, stay on it; the base screen still tracks the phase and is
+    // revealed on close. Otherwise follow the phase, deferring a combat->overworld/gameover swap until
+    // the combat animation queue drains (combatEnd gate) so the final death/clear animation plays out.
     if (screens.isActive("inventory")) return;
-    if (phase === "overworld" && pendingPhase === "overworld" && combatActive) {
+    if (combatActive && leavingCombat && (phase === "overworld" || phase === "gameover")) {
       waitForIdle(combatRenderer).then(() => {
-        pendingPhase = null;
-        switchForPhase("overworld");
+        leavingCombat = false;
+        switchForPhase(phase);
       });
       return;
     }
-    pendingPhase = null;
+    leavingCombat = false;
     switchForPhase(phase);
   });
 
@@ -327,10 +369,9 @@ async function init() {
     return;
   }
 
-  // A stored clientId means hello may auto-reconnect into a live/durable run; the resulting
-  // roomState drives the screen. Until a roomState arrives, the lobby is the entry point.
-  screens.switchTo("lobby");
-  if (seat.room) switchForPhase(seat.room.phase);
+  // hello may auto-rejoin a still-live game (the resulting roomState drives the screen); otherwise the
+  // client is room-less and lands on HOME. route() picks correctly either way.
+  route();
 }
 
 function waitForIdle(renderer: GameRenderer): Promise<void> {

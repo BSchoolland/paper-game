@@ -1,26 +1,23 @@
 import type { Screen } from "./screen-manager.js";
 import type { RoomConnection } from "../net/connection.js";
 import type { SeatContext } from "../state/seat-context.js";
-import { clearStoredSeat, getStoredSeat } from "../net/player-token.js";
-import type { RoomCapacity, RoomStatePayload, SeatInfo } from "shared";
+import type { RoomStatePayload, SeatInfo } from "shared";
+import { panelCard, btn } from "./ui-kit.js";
 
 /**
- * The lobby (first screen). Before a room exists it shows create (capacity 2-4) / join-by-code
- * entry; once seated it shows the room code, the seat roster, a per-seat ready toggle for the
- * local seat, a loadout button (opens the inventory in loadout mode pre-Start), and a host-only
- * Start that bot-fills empty seats server-side. All roster data comes from `roomState` via the
- * SeatContext; readiness/start are server-authoritative (ready is informational, not a start gate).
+ * The in-room STAGING screen (RoomPhase "lobby"): room code, seat roster, a per-seat ready toggle,
+ * a loadout button (opens the inventory in loadout mode pre-Start), a host-only Start that bot-fills
+ * empty seats server-side, and Leave. The out-of-room entry + matchmaking lives in HomeScreen. All
+ * roster data comes from `roomState` via the SeatContext; readiness/start are server-authoritative.
  */
 export class LobbyScreen implements Screen {
   private container: HTMLDivElement;
   private unsub: (() => void) | null = null;
-  private joinError = "";
 
   constructor(
     private conn: RoomConnection,
     private seat: SeatContext,
     private onOpenLoadout: () => void,
-    private dimensionId: number,
   ) {
     this.container = document.createElement("div");
     this.container.id = "lobby-screen";
@@ -36,33 +33,6 @@ export class LobbyScreen implements Screen {
       background: rgba(26, 20, 14, 0.55);
     `;
     document.body.appendChild(this.container);
-    this.conn.on("error", (msg) => {
-      switch (msg.code) {
-        case "ROOM_NOT_FOUND":
-        case "NOT_YOUR_SEAT":
-          // A join/reclaim against a stale seat or reaped room: forget it so the entry screen stops
-          // offering the reclaim and shows why.
-          clearStoredSeat();
-          this.joinError = msg.message;
-          this.rerenderIfVisible();
-          return;
-        case "ROOM_FULL":
-        case "ALREADY_STARTED":
-        case "ROOM_CREATE_FAILED":
-          this.joinError = msg.message;
-          this.rerenderIfVisible();
-          return;
-        case "SEAT_IN_USE":
-          // The stored seat is live (e.g. another tab); a force-reclaim is required to take it back.
-          this.joinError = "Your seat is open in another tab. Use 'Take over my seat' to reclaim it.";
-          this.rerenderIfVisible();
-          return;
-      }
-    });
-  }
-
-  private rerenderIfVisible(): void {
-    if (this.container.style.display !== "none") this.render();
   }
 
   enter() {
@@ -79,124 +49,8 @@ export class LobbyScreen implements Screen {
 
   private render() {
     const room = this.seat.room;
-    if (room && room.phase === "lobby") {
-      this.renderRoster(room);
-    } else if (!room) {
-      this.renderEntry();
-    } else {
-      // Room exists but is past lobby (overworld/combat/gameover) — the screen manager will switch
-      // away; render nothing meaningful here.
-      this.container.innerHTML = "";
-    }
-  }
-
-  private renderEntry() {
-    this.container.innerHTML = "";
-    const card = panelCard();
-
-    const heading = document.createElement("div");
-    heading.style.cssText = "font-size:22px; font-weight:bold; margin-bottom:4px;";
-    heading.textContent = "Co-op Expedition";
-    card.appendChild(heading);
-
-    // Reclaim: a seat from a prior session that the server welcomed us room-less for (live elsewhere,
-    // e.g. another tab). Force-reclaim closes the old socket and rebinds this one.
-    const stored = getStoredSeat();
-    if (stored) {
-      const reclaimBtn = btn("Take over my seat", true);
-      reclaimBtn.addEventListener("click", () => {
-        this.joinError = "";
-        this.conn.send({ type: "reclaimSeat", code: stored.code, seatId: stored.seatId, force: true });
-      });
-      card.appendChild(reclaimBtn);
-
-      const forget = document.createElement("button");
-      forget.tabIndex = -1;
-      forget.textContent = "(start fresh instead)";
-      forget.style.cssText = "background:none; border:none; color:#8a7a68; font-family:monospace; font-size:11px; cursor:pointer;";
-      forget.addEventListener("click", () => {
-        clearStoredSeat();
-        this.render();
-      });
-      card.appendChild(forget);
-
-      const divider = document.createElement("div");
-      divider.style.cssText = "height:1px; background:rgba(74,55,40,0.3); margin:6px 0;";
-      card.appendChild(divider);
-    }
-
-    // Create
-    const createLabel = document.createElement("div");
-    createLabel.style.cssText = "font-size:13px; margin-top:8px;";
-    createLabel.textContent = "Party size";
-    card.appendChild(createLabel);
-
-    const capRow = document.createElement("div");
-    capRow.style.cssText = "display:flex; gap:8px;";
-    let capacity: RoomCapacity = 2;
-    const capButtons: HTMLButtonElement[] = [];
-    for (const n of [2, 3, 4] as RoomCapacity[]) {
-      const b = btn(`${n}`);
-      b.style.flex = "1";
-      b.addEventListener("click", () => {
-        capacity = n;
-        for (const cb of capButtons) cb.style.outline = "none";
-        b.style.outline = "2px solid #4a3728";
-      });
-      if (n === capacity) b.style.outline = "2px solid #4a3728";
-      capButtons.push(b);
-      capRow.appendChild(b);
-    }
-    card.appendChild(capRow);
-
-    const createBtn = btn("Create room", true);
-    createBtn.addEventListener("click", () => {
-      this.joinError = "";
-      this.conn.send({ type: "createRoom", capacity, dimensionId: this.dimensionId });
-    });
-    card.appendChild(createBtn);
-
-    const divider = document.createElement("div");
-    divider.style.cssText = "height:1px; background:rgba(74,55,40,0.3); margin:6px 0;";
-    card.appendChild(divider);
-
-    // Join
-    const codeInput = document.createElement("input");
-    codeInput.placeholder = "ROOM CODE";
-    codeInput.maxLength = 6;
-    codeInput.style.cssText = `
-      text-transform: uppercase;
-      letter-spacing: 3px;
-      padding: 10px;
-      font-family: monospace;
-      font-size: 16px;
-      text-align: center;
-      border: 2px solid #6b5b4a;
-      border-radius: 6px;
-      background: #fffaf0;
-      color: #4a3728;
-    `;
-    card.appendChild(codeInput);
-
-    const joinBtn = btn("Join room");
-    const doJoin = () => {
-      const code = codeInput.value.trim().toUpperCase();
-      if (code.length === 0) return;
-      this.joinError = "";
-      this.conn.send({ type: "joinRoom", code });
-    };
-    joinBtn.addEventListener("click", doJoin);
-    codeInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doJoin(); });
-    card.appendChild(joinBtn);
-
-    if (this.joinError) {
-      const err = document.createElement("div");
-      err.style.cssText = "color:#8b3a3a; font-size:12px; text-align:center;";
-      err.textContent = this.joinError;
-      card.appendChild(err);
-    }
-
-    this.container.appendChild(card);
+    if (room && room.phase === "lobby") this.renderRoster(room);
+    else this.container.innerHTML = ""; // room-less / past-lobby: the screen manager switches away
   }
 
   private renderRoster(room: RoomStatePayload) {
@@ -245,14 +99,9 @@ export class LobbyScreen implements Screen {
       card.appendChild(note);
     }
 
+    // Leave -> the server frees the seat and replies `leftRoom`, which routes this client HOME.
     const leaveBtn = btn("Leave room");
-    leaveBtn.addEventListener("click", () => {
-      this.conn.send({ type: "leaveRoom" });
-      this.seat.setRoom(null);
-      clearStoredSeat();
-      this.joinError = "";
-      this.render();
-    });
+    leaveBtn.addEventListener("click", () => this.conn.send({ type: "leaveRoom" }));
     card.appendChild(leaveBtn);
 
     this.container.appendChild(card);
@@ -289,38 +138,4 @@ export class LobbyScreen implements Screen {
 
     return row;
   }
-}
-
-function panelCard(): HTMLDivElement {
-  const card = document.createElement("div");
-  card.style.cssText = `
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    min-width: 280px;
-    padding: 24px;
-    background: rgba(245, 235, 215, 0.97);
-    border: 2px solid #6b5b4a;
-    border-radius: 10px;
-    box-shadow: 0 6px 24px rgba(35, 24, 14, 0.3);
-  `;
-  return card;
-}
-
-function btn(label: string, primary = false): HTMLButtonElement {
-  const b = document.createElement("button");
-  b.textContent = label;
-  b.tabIndex = -1;
-  b.style.cssText = `
-    padding: 10px 16px;
-    font-family: monospace;
-    font-size: 14px;
-    font-weight: bold;
-    color: ${primary ? "#fffaf0" : "#4a3728"};
-    background: ${primary ? "#6b5b4a" : "#d4c8a0"};
-    border: 2px solid #6b5b4a;
-    border-radius: 6px;
-    cursor: pointer;
-  `;
-  return b;
 }

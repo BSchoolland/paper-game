@@ -7,6 +7,7 @@ import type {
   RoomCode,
   SeatId,
   RoomCapacity,
+  RoomBrowserEntry,
   HexIconType,
   HexCoord,
 } from "shared";
@@ -28,6 +29,7 @@ import {
   leaveRunSeat,
   markRunInactive,
   deactivateStaleRuns,
+  markRunStarted,
   newTokenSalt,
   mintSessionToken,
   verifySessionToken,
@@ -60,9 +62,10 @@ import {
   beginCombatEntry,
   endCombat,
   resetToOrigin,
-  reconstructRoomForRun,
+  recoverActiveRuns,
   connectSeat,
   onSeatDisconnected,
+  leaveSeatPermanently,
   abortDefendRound,
   resendPendingDefendPrompts,
   armReap,
@@ -92,12 +95,13 @@ const RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // R33: deactivate runs idle longe
 const HOUSEKEEPING_INTERVAL_MS = 60 * 60 * 1000; // hourly sweep.
 if (process.env.GAME_SKIP_SEED !== "1") {
   initSeeds();
+  recoverActiveRuns(reapEmptyRoom);
   // R33 retention housekeeping: periodically inactivate runs untouched past the retention window,
   // catching abandoned lobby/overworld runs that no run-end event ever closed. Gated off under
   // GAME_SKIP_SEED (tests) so the in-memory test DB isn't churned by a timer.
   const sweep = setInterval(() => {
     try {
-      const n = deactivateStaleRuns(RETENTION_MS);
+      const n = deactivateStaleRuns(RETENTION_MS, (runId) => rooms.getByRun(runId) !== null);
       if (n > 0) console.log(`[housekeeping] deactivated ${n} stale run(s)`);
     } catch (e) {
       console.error("[housekeeping] sweep failed:", e);
@@ -110,6 +114,7 @@ const ORIGIN: HexCoord = { q: 0, r: 0 };
 const ORIGIN_KEY = hexKey(ORIGIN);
 const DISCOVERY_RADIUS = 15;
 const DEFAULT_DIMENSION = 1;
+const QUICKMATCH_CAPACITY: RoomCapacity = 4; // quick-match creates a 4-seat room when none are open
 
 // =====================================================================================
 // RoomIO — the WS transport the machine drives through (it never touches sockets itself).
@@ -131,10 +136,22 @@ function sendTo(ws: ServerWebSocket<SocketData>, msg: ServerMessage): void {
   ws.send(JSON.stringify(msg));
 }
 
-/** Reap callback: tear down a room's timers + registry entry (R19/R31). Durable rows untouched. */
+/** Reap callback: tear down a room's timers + registry entry (R19/R31). Durable rows untouched.
+ *  Used for prior-seat / zombie / race-loser disposal where the run must STAY active. */
 function reapRoom(room: Room): void {
   disposeRoom(room);
   rooms.remove(room);
+}
+
+/**
+ * Graceful empty-reap callback (5-min no-humans / abandon): finalize the run as abandoned BEFORE
+ * disposing the in-memory room, so a later hello finds no active seat and lands the client on HOME
+ * instead of resurrecting the room. Only a true process crash leaves a run active=1 — recovered at
+ * boot by the crash-recovery pass. This is the mortal-game spine (graceful => inactive, crash => active).
+ */
+function reapEmptyRoom(room: Room): void {
+  markRunInactive(room.runId, "abandoned");
+  reapRoom(room);
 }
 
 // =====================================================================================
@@ -240,12 +257,13 @@ function handleHello(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage
   const clientId = msg.clientId;
   ws.data.clientId = clientId;
 
-  // Resume: is this client bound to a live (in-memory) room, or a durable-but-dormant run?
+  // Resume into a STILL-LIVE in-memory room only (a recent drop, or a crash-recovered run rebuilt at
+  // boot). We do NOT lazily reconstruct on hello: a gracefully-reaped run is marked inactive, so
+  // findActiveSeatForClient returns nothing and the client lands on HOME below — that is the mortal-
+  // game behavior (no "first person back rebuilds the abandoned room and becomes host").
   const durable = findActiveSeatForClient(clientId);
   if (durable) {
-    // Get (or reconstruct) the live Room for that run (R30 idempotent).
-    let room = rooms.getByRun(durable.runId);
-    if (!room) room = reconstructRoomForRun(durable.runId, reapRoom);
+    const room = rooms.getByRun(durable.runId);
 
     if (room) {
       const seat = room.seats.find((s) => s.seatIndex === durable.seatIndex);
@@ -324,6 +342,7 @@ function handleCreateRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMe
     generation: 0,
     coopPhase: "player",
     aiPlayerBusy: false,
+    paused: false,
     dimensionId,
     runId,
     hexMap: { playerPos: ORIGIN, hexes, icons },
@@ -457,6 +476,44 @@ function handleReclaimSeat(ws: ServerWebSocket<SocketData>, msg: Extract<ClientM
 }
 
 // =====================================================================================
+// Matchmaking (connection-scoped: issued from a room-less HOME socket)
+// =====================================================================================
+
+/** A minimal browser row (no runId / seat identities / tokens reach an unseated socket). */
+function toBrowserEntry(room: Room): RoomBrowserEntry {
+  const hostSeat = room.hostSeatId ? room.seats.find((s) => s.seatId === room.hostSeatId) : undefined;
+  const hostName =
+    hostSeat?.displayName ??
+    room.seats.find((s) => s.state === "human-connected")?.displayName ??
+    "";
+  return {
+    code: room.code,
+    hostDisplayName: hostName,
+    openSeats: room.seats.filter((s) => s.state === "open").length,
+    totalSeats: room.capacity,
+    dimensionId: room.dimensionId,
+    phase: room.phase,
+  };
+}
+
+function handleListRooms(ws: ServerWebSocket<SocketData>): void {
+  if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
+  sendTo(ws, { type: "roomList", rooms: rooms.joinableRooms().map(toBrowserEntry) });
+}
+
+/** Join the first open lobby room, else create a fresh one. Delegates to the existing handlers so the
+ *  resulting welcome + roomState (seat binding, token, cleanup) is identical to a manual join/create. */
+function handleQuickMatch(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "quickMatch" }>): void {
+  if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
+  const target = rooms.firstJoinable();
+  if (target) {
+    handleJoinRoom(ws, { type: "joinRoom", code: target.code, displayName: msg.displayName });
+  } else {
+    handleCreateRoom(ws, { type: "createRoom", capacity: QUICKMATCH_CAPACITY, dimensionId: msg.dimensionId });
+  }
+}
+
+// =====================================================================================
 // Host-gated (room-scoped) handlers (startGame / reset / debugWin)
 // =====================================================================================
 
@@ -492,6 +549,7 @@ function handleStartGame(room: Room, seat: Seat): void {
   }
 
   room.phase = "overworld";
+  markRunStarted(room.runId); // durable "started" marker (crash recovery resumes only started runs)
   broadcastRoomState(room, io);
   broadcastHexMapState(room, io);
 }
@@ -512,6 +570,7 @@ function handleReset(room: Room, seat: Seat): void {
     room.building = false;
     room.phaseTransitioning = false;
     room.aiPlayerBusy = false;
+    room.paused = false;
     room.coopPhase = "player";
     room.pendingHex = null;
     room.phase = "overworld";
@@ -522,6 +581,18 @@ function handleReset(room: Room, seat: Seat): void {
     // party-wipe path in endCombat).
     resetToOrigin(room, io, "abandoned");
   }
+}
+
+/**
+ * "Play again" from the Game Over end state. ANY player may trigger it (locked decision — not host-
+ * gated). The `phase === "gameover"` guard is what closes the double-click race: the first call's
+ * resetToOrigin flips the phase to "overworld", so every subsequent concurrent click is a clean no-op
+ * (single-threaded event loop — no interleaving between the guard and the flip). Host is re-derived by
+ * resetToOrigin's startNewRun(hostClientId) over the currently-connected humans.
+ */
+function handlePlayAgain(room: Room, seat: Seat): void {
+  if (room.phase !== "gameover") return; // not in the end state, or someone already restarted
+  resetToOrigin(room, io);
 }
 
 function handleDebugWin(room: Room, seat: Seat): void {
@@ -535,6 +606,22 @@ function handleDebugWin(room: Room, seat: Seat): void {
   }
   abortDefendRound(room);
   room.session.state = { ...room.session.state, winner: "red" };
+  broadcastState(room, io, []);
+  endCombat(room, io);
+}
+
+/** Dev/test hook: force a party wipe so the held Game Over end state can be exercised deterministically. */
+function handleDebugLose(room: Room, seat: Seat): void {
+  if (!isHost(room, seat)) {
+    io.send(seat, { type: "error", code: "NOT_HOST", message: "Only the host can do that", recoverable: true });
+    return;
+  }
+  if (room.phase !== "combat" || !room.session) {
+    io.send(seat, { type: "error", code: "BAD_PHASE", message: "Not in combat", recoverable: true });
+    return;
+  }
+  abortDefendRound(room);
+  room.session.state = { ...room.session.state, winner: "blue" };
   broadcastState(room, io, []);
   endCombat(room, io);
 }
@@ -593,6 +680,10 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
       return handleJoinRoom(ws, msg);
     case "reclaimSeat":
       return handleReclaimSeat(ws, msg);
+    case "listRooms":
+      return handleListRooms(ws);
+    case "quickMatch":
+      return handleQuickMatch(ws, msg);
   }
 
   // Everything below requires a bound seat (R22).
@@ -653,6 +744,8 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
       return proposeMove(room, io, seat, msg.target);
     case "castVote":
       return castVote(room, io, seat, msg.proposalId, msg.vote);
+    case "playAgain":
+      return handlePlayAgain(room, seat);
     case "leaveRoom":
       return handleLeaveRoom(ws, room, seat);
 
@@ -663,19 +756,26 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
       return handleReset(room, seat);
     case "debugWin":
       return handleDebugWin(room, seat);
+    case "debugLose":
+      return handleDebugLose(room, seat);
   }
 }
 
 function handleLeaveRoom(ws: ServerWebSocket<SocketData>, room: Room, seat: Seat): void {
   ws.data.roomCode = null;
   ws.data.seatId = null;
-  // Treat as a disconnect of this seat (frees host / arms grace+reap). Durable rows untouched (R19);
-  // the run stays resumable by the same clientId.
-  detachSeat(room, seat);
+  // An explicit, voluntary leave: a started seat becomes a PERMANENT bot (not a reclaimable drop).
+  detachSeat(room, seat, "leave");
+  // Tell the now-room-less socket to show HOME; the ws stays open for matchmaking/create/join.
+  sendTo(ws, { type: "leftRoom" });
 }
 
-/** Shared teardown for a seat's socket going away (close or explicit leave). */
-function detachSeat(room: Room, seat: Seat): void {
+/**
+ * Teardown for a seat's socket going away. `reason` splits voluntary LEAVE (a started seat becomes a
+ * permanent bot; the party plays on) from an involuntary socket CLOSE (a reclaimable drop, today's
+ * grace->bot behavior). The lobby branch is identical either way — the seat just frees to `open`.
+ */
+function detachSeat(room: Room, seat: Seat, reason: "leave" | "close"): void {
   if (room.phase === "lobby") {
     // Lobby: free the seat back to open (or host migrates / room reaps if empty).
     seat.socket = null;
@@ -701,8 +801,14 @@ function detachSeat(room: Room, seat: Seat): void {
     }
     return;
   }
-  // Overworld / combat: machine handles human-disconnected, grace->bot, host migration, reap.
-  onSeatDisconnected(room, io, seat, reapRoom);
+  // Overworld / combat / gameover. A voluntary leave permanently bots the seat; an involuntary close
+  // is a reclaimable disconnect (grace->bot). Either way the empty-reap finalizes the run (inactive)
+  // so a reconnect after the window lands on HOME (mortal game).
+  if (reason === "leave") {
+    leaveSeatPermanently(room, io, seat, reapEmptyRoom);
+  } else {
+    onSeatDisconnected(room, io, seat, reapEmptyRoom);
+  }
 }
 
 // =====================================================================================
@@ -832,7 +938,7 @@ export const server = Bun.serve({
       const { room, seat } = bound;
       // Only react if THIS socket still owns the seat (a force-takeover already cleared its binding).
       if (seat.socket !== ws) return;
-      detachSeat(room, seat);
+      detachSeat(room, seat, "close");
     },
   },
 });

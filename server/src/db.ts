@@ -154,6 +154,21 @@ const SCHEMA_VERSION = 3;
   }
 }
 
+// v4: a durable "started" marker. Boot crash-recovery uses it to distinguish a never-started lobby run
+// (a crash left it active=1; treat as abandoned so reconnects route HOME) from an in-progress overworld
+// run (resume it). NULL until startGame flips to overworld (or a fresh play-again/abandon run is minted).
+{
+  const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
+  if (user_version < 4) {
+    try {
+      db.exec("ALTER TABLE runs ADD COLUMN started_at INTEGER");
+    } catch (e) {
+      if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+    }
+    db.exec("PRAGMA user_version = 4");
+  }
+}
+
 // --- Discovery: GLOBAL community fog-of-war, keyed by dimension, permanent + append-only. ---
 const insertDiscoveredStmt = db.prepare(
   "INSERT OR IGNORE INTO discovered_hexes (dimension_id, q, r) VALUES (?, ?, ?)"
@@ -252,6 +267,7 @@ export interface RunRow {
   updated_at: number;
   completed_at: number | null;
   outcome: string | null;
+  started_at: number | null;
 }
 
 const insertRunStmt = db.prepare(
@@ -261,9 +277,18 @@ const insertRunStmt = db.prepare(
 const runByIdStmt = db.prepare("SELECT * FROM runs WHERE id = ?");
 const updatePartyPosStmt = db.prepare("UPDATE runs SET party_q = ?, party_r = ?, updated_at = ? WHERE id = ?");
 const setHostStmt = db.prepare("UPDATE runs SET host_client_id = ?, updated_at = ? WHERE id = ?");
-const markRunInactiveStmt = db.prepare("UPDATE runs SET active = 0, completed_at = ?, outcome = ? WHERE id = ?");
+const markRunStartedStmt = db.prepare("UPDATE runs SET started_at = ?, updated_at = ? WHERE id = ?");
+// `AND active = 1` makes finalization first-writer-wins: a later reap of an already-final (e.g.
+// 'defeat') run is a no-op instead of clobbering its outcome/completed_at to 'abandoned'.
+const markRunInactiveStmt = db.prepare("UPDATE runs SET active = 0, completed_at = ?, outcome = ? WHERE id = ? AND active = 1");
 const stampSeatsLeftStmt = db.prepare("UPDATE run_seats SET left_at = ? WHERE run_id = ? AND left_at IS NULL");
 const staleRunsStmt = db.prepare("SELECT id FROM runs WHERE active = 1 AND updated_at < ?");
+const activeRunIdsStmt = db.prepare("SELECT id FROM runs WHERE active = 1");
+
+/** Every still-active run id. Drives boot-time crash recovery (a run left active=1 by a crash). */
+export function loadActiveRunIds(): number[] {
+  return (activeRunIdsStmt.all() as { id: number }[]).map((r) => r.id);
+}
 
 export function startNewRun(dimensionId: number, hostClientId: string | null, capacity = 2): number {
   const now = Date.now();
@@ -283,6 +308,12 @@ export function setRunHost(runId: number, hostClientId: string | null): void {
   setHostStmt.run(hostClientId, Date.now(), runId);
 }
 
+/** Stamp a run as started (entered the overworld). Crash-recovery only resumes started runs. */
+export function markRunStarted(runId: number): void {
+  const now = Date.now();
+  markRunStartedStmt.run(now, now, runId);
+}
+
 /** Mark a run finished and stamp every still-present seat as left (R32/R13.5), atomically. */
 export function markRunInactive(runId: number, outcome: "victory" | "defeat" | "abandoned"): void {
   const now = Date.now();
@@ -293,10 +324,14 @@ export function markRunInactive(runId: number, outcome: "victory" | "defeat" | "
   tx();
 }
 
-/** Housekeeping (R33): abandon runs untouched for longer than `olderThanMs`. */
-export function deactivateStaleRuns(olderThanMs: number): number {
+/**
+ * Housekeeping (R33): abandon runs untouched for longer than `olderThanMs`. `isLive` (the in-memory
+ * registry check) excludes runs whose Room is still live — a long-occupied overworld party that simply
+ * hasn't moved must NOT be inactivated out from under its live Room (durable/in-memory divergence).
+ */
+export function deactivateStaleRuns(olderThanMs: number, isLive?: (runId: number) => boolean): number {
   const cutoff = Date.now() - olderThanMs;
-  const rows = staleRunsStmt.all(cutoff) as { id: number }[];
+  const rows = (staleRunsStmt.all(cutoff) as { id: number }[]).filter((r) => !isLive || !isLive(r.id));
   const tx = db.transaction(() => {
     const now = Date.now();
     for (const row of rows) {

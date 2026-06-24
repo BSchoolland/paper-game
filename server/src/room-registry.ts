@@ -61,6 +61,23 @@ export class RoomRegistry {
     this.quarantine.set(room.code, Date.now() + this.quarantineMs);
   }
 
+  /** Rooms a HOME socket may join: still in the lobby with at least one open seat (matchmaking). */
+  joinableRooms(): Room[] {
+    const out: Room[] = [];
+    for (const room of this.byCode.values()) {
+      if (room.phase === "lobby" && room.seats.some((s) => s.state === "open")) out.push(room);
+    }
+    return out;
+  }
+
+  /** The first joinable room — the quick-match target — or null if none exist. */
+  firstJoinable(): Room | null {
+    for (const room of this.byCode.values()) {
+      if (room.phase === "lobby" && room.seats.some((s) => s.state === "open")) return room;
+    }
+    return null;
+  }
+
   /** Find the live room currently hosting a given client's seat, if any (in-memory fast path). */
   findRoomForClient(clientId: ClientId): { room: Room; seatId: string } | null {
     for (const room of this.byCode.values()) {

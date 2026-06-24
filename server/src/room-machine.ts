@@ -40,6 +40,8 @@ import {
   markRunCleared,
   markRunInactive,
   startNewRun,
+  markRunStarted,
+  loadActiveRunIds,
   setRunHost,
   upsertRunSeat,
   loadRun,
@@ -69,8 +71,9 @@ type Timer = ReturnType<typeof setTimeout>;
 export const DEFEND_TIMEOUT_MS = 6_000;
 export const VOTE_TIMEOUT_MS = 15_000;
 export const AFK_TIMEOUT_MS = 90_000;
-export const DISCONNECT_GRACE_MS = 3_000;
-export const REAP_TIMEOUT_MS = 5 * 60_000;
+export const DISCONNECT_GRACE_MS = Number(process.env.GAME_DISCONNECT_GRACE_MS) || 3_000;
+// Env-overridable so integration tests can drive the empty-reap -> HOME path without a real 5-min wait.
+export const REAP_TIMEOUT_MS = Number(process.env.GAME_REAP_TIMEOUT_MS) || 5 * 60_000;
 
 const ORIGIN: HexCoord = { q: 0, r: 0 };
 
@@ -145,6 +148,7 @@ export function coopStatusPayload(room: Room): CoopStatusPayload {
     phase: room.coopPhase,
     seats: room.seats.map(seatCombatStatus),
     pendingDefends: pendingDefends(room),
+    paused: room.paused,
   };
 }
 
@@ -219,6 +223,11 @@ function humanHeroIds(room: Room): Set<EntityId> {
   return ids;
 }
 
+/** True iff at least one seat is a live connected human. The combat machine pauses without one. */
+export function hasConnectedHuman(room: Room): boolean {
+  return room.seats.some((s) => s.state === "human-connected");
+}
+
 /** Recompute one seat's exhausted flag from its live hero (R8 input). */
 function recomputeSeatExhausted(room: Room, seat: Seat): void {
   seat.exhausted = heroExhausted(heroEntity(room, seat));
@@ -285,8 +294,10 @@ export function clearReap(room: Room): void {
 }
 
 /**
- * Arm the idle reaper. A room with no connected humans is disposed after the timeout (R19/R31).
- * The durable run row is NOT touched — the run stays resumable (R13.1).
+ * Arm the idle reaper. A room with no connected humans is disposed after the timeout (R19/R31). The
+ * `onReap` callback decides whether the durable run is finalized: the graceful empty-reap passes
+ * `reapEmptyRoom` (marks the run inactive -> reconnect goes HOME), while prior-seat/zombie disposal
+ * passes plain `reapRoom` (run stays active). Crash recovery relies on a crashed run staying active.
  */
 export function armReap(room: Room, onReap: (room: Room) => void): void {
   clearReap(room);
@@ -319,6 +330,15 @@ export function startPlayerPhase(room: Room, io: RoomIO): void {
     armAfk(room, io, seat);
   }
 
+  // PAUSE: with no connected human nobody is watching, so freeze the phase rather than letting the
+  // player-bot burst + enemy sweep cascade the whole encounter to a win/wipe unobserved. Resumed by
+  // connectSeat when a human (re)joins. (Phase 1 of the lifecycle redesign.)
+  if (!hasConnectedHuman(room)) {
+    room.paused = true;
+    broadcastCoopStatus(room, io);
+    return;
+  }
+  room.paused = false;
   broadcastCoopStatus(room, io);
 
   // Player-bot burst: drive every bot/disconnected seat synchronously in seat order.
@@ -343,6 +363,12 @@ export function maybeEndPlayerPhase(room: Room, io: RoomIO): void {
   if (session.state.activeTeam !== "red") return;
   if (room.phaseTransitioning || room.aiPlayerBusy || room.building) return;
   if (session.pendingDefend) return; // an open defend round is mid-flight
+  // The single load-bearing pause latch: never issue the player->enemy flip without a human present
+  // (this subsumes a guard in startEnemyPhase — the enemy sweep is unreachable human-less from here).
+  if (!hasConnectedHuman(room)) {
+    room.paused = true;
+    return;
+  }
 
   const phaseStates = room.seats.map((s) => ({ ready: s.ready, exhausted: s.exhausted }));
   if (!isPlayerPhaseOver(phaseStates)) return;
@@ -530,6 +556,15 @@ export function onSeatBecameBotMidPhase(room: Room, io: RoomIO, seat: Seat): voi
   if (room.phase !== "combat" || room.coopPhase !== "player") return;
   if (room.phaseTransitioning) return;
 
+  // If the seat that just flipped to bot was the LAST connected human, freeze instead of driving the
+  // now-all-bot cascade unobserved. This is the load-bearing pause site: both the disconnect-grace
+  // expiry and the explicit-leave path reach the bot conversion through here.
+  if (!hasConnectedHuman(room)) {
+    room.paused = true;
+    broadcastCoopStatus(room, io);
+    return;
+  }
+
   rebuildHeroBrains(room);
   recomputeSeatExhausted(room, seat);
 
@@ -545,6 +580,23 @@ export function onSeatBecameBotMidPhase(room: Room, io: RoomIO, seat: Seat): voi
   seat.actedThisPhase = true;
   broadcastCoopStatus(room, io);
   maybeEndPlayerPhase(room, io);
+}
+
+/**
+ * Resume a combat frozen by the no-human pause (Phase 1), once a human (re)binds in connectSeat.
+ * It CONTINUES the frozen sub-phase, never restarts a turn: an in-flight enemy sweep is continued via
+ * resumeAfterDefend (driveAiSteps picks up the runner's remaining queue — re-calling startEnemyPhase
+ * would re-sweep already-acted enemies), while a frozen player phase is re-opened fresh.
+ */
+export function resumeCombat(room: Room, io: RoomIO): void {
+  if (!room.session || room.phase !== "combat" || !room.paused) return;
+  if (!hasConnectedHuman(room)) return; // still nobody back; stay paused
+  room.paused = false;
+  if (room.coopPhase === "enemy") {
+    resumeAfterDefend(room, io);
+  } else {
+    startPlayerPhase(room, io);
+  }
 }
 
 // =====================================================================================
@@ -739,6 +791,13 @@ export function maybeResolveDefendRound(room: Room, io: RoomIO, force: boolean):
 function resumeAfterDefend(room: Room, io: RoomIO): void {
   const session = room.session;
   if (!session) return;
+  // A defend round can resolve via timeout after the last human left mid enemy-sweep; freeze the
+  // in-flight sweep rather than finishing it unobserved. resumeCombat continues it on reconnect.
+  if (!hasConnectedHuman(room)) {
+    room.paused = true;
+    broadcastCoopStatus(room, io);
+    return;
+  }
   const beforeTeam = session.state.activeTeam;
   driveAiSteps(room, io);
   if (room.coopPhase === "player") {
@@ -941,6 +1000,7 @@ export async function beginCombatEntry(room: Room, io: RoomIO, target: HexCoord)
   room.coopPhase = "player";
   room.phaseTransitioning = false;
   room.aiPlayerBusy = false;
+  room.paused = false;
   room.generation++;
   const gen = room.generation;
   const specs = room.seats.map(seatBuildSpec);
@@ -1005,6 +1065,7 @@ export function endCombat(room: Room, io: RoomIO): void {
   room.session = null;
   room.phaseTransitioning = false;
   room.aiPlayerBusy = false;
+  room.paused = false;
   room.coopPhase = "player";
 
   if (won && room.pendingHex) {
@@ -1017,9 +1078,14 @@ export function endCombat(room: Room, io: RoomIO): void {
     // First-ever discovery in this dimension is a community KEY MOMENT — celebrate it.
     if (firstEver) io.broadcast(room, { type: "hexDiscovered", coord: discovered });
   } else {
-    // Loss / wipe -> defeat (today's resetToOrigin "fresh run" path).
+    // Party wipe -> a HELD Game Over end state (the previously-dead `gameover` RoomPhase, now used).
+    // Finalize the run immediately (locked decision): a disconnect from Game Over lands on HOME and a
+    // crash can never resurrect a wiped party. The in-memory room stays live at `gameover` so any
+    // player can Play Again (-> a fresh active run via resetToOrigin) or Return to Home (-> leave).
     room.pendingHex = null;
-    resetToOrigin(room, io);
+    room.phase = "gameover";
+    markRunInactive(room.runId, "defeat");
+    broadcastRoomState(room, io);
     io.broadcast(room, { type: "gameOver", outcome: "defeat" });
   }
 }
@@ -1051,6 +1117,7 @@ export function resetToOrigin(room: Room, io: RoomIO, outcome: "defeat" | "aband
   const oldRunId = room.runId;
   markRunInactive(oldRunId, outcome);
   const newRunId = startNewRun(room.dimensionId, hostClientId(room), room.capacity);
+  markRunStarted(newRunId); // a play-again / abandon run resumes at the overworld, never a lobby
   // Discovery is GLOBAL per dimension and persists across runs — do NOT re-seed it. The fresh run
   // only re-clears its own origin; the community map (loadDiscoveredHexes) carries forward.
   markRunCleared(newRunId, ORIGIN);
@@ -1175,6 +1242,58 @@ export function onSeatDisconnected(
 }
 
 /**
+ * Explicit voluntary LEAVE of a started game (overworld/combat/gameover): the seat becomes a
+ * PERMANENT bot and the party plays on — distinct from the reclaimable `onSeatDisconnected` (a
+ * transport drop). Ordering is load-bearing (per review):
+ *  - memory first: drop the socket, flip `state="bot"` (so migrateHost excludes the leaver), null the
+ *    identity, install a brain;
+ *  - durable: `upsertRunSeat(controllerKind:"bot", clientId:null)` — IDENTICAL to start-game bot-fill,
+ *    NOT `leaveRunSeat`. The null client_id frees the UNIQUE-live index for the leaver's next match;
+ *    a left `human`+clientId row would instead be rehydrated by crash-recovery as a reclaimable human.
+ *  - then migrate host, drive the now-bot seat once if mid player phase (pause-aware), broadcast, and
+ *    arm the (inactivating) reap if no humans remain.
+ */
+export function leaveSeatPermanently(
+  room: Room,
+  io: RoomIO,
+  seat: Seat,
+  onReap: (room: Room) => void,
+): void {
+  clearAfk(seat);
+  if (seat.disconnectGraceTimer) {
+    clearTimeout(seat.disconnectGraceTimer);
+    seat.disconnectGraceTimer = null;
+  }
+  if (room.vote && room.vote.proposerSeatId === seat.seatId) cancelVote(room, io);
+
+  seat.socket = null;
+  seat.state = "bot";
+  seat.clientId = null;
+  seat.tokenSalt = null;
+  seat.brain = sovereignFor(seat);
+
+  upsertRunSeat(room.runId, seat.seatIndex, {
+    clientId: null,
+    displayName: seat.displayName,
+    controllerKind: "bot",
+    tokenSalt: null,
+  });
+
+  migrateHost(room);
+
+  // Mid open player phase: drive the freshly-botted seat once and re-latch. onSeatBecameBotMidPhase is
+  // pause-aware — if the leaver was the LAST human it freezes combat instead of cascading (Phase 1).
+  if (room.phase === "combat" && room.coopPhase === "player") {
+    onSeatBecameBotMidPhase(room, io, seat);
+  }
+
+  broadcastRoomState(room, io);
+  if (room.phase === "combat") broadcastCoopStatus(room, io);
+
+  if (room.seats.every((s) => s.socket === null)) armReap(room, onReap);
+}
+
+/**
  * Bind a connecting socket to a seat (connect / reclaim / resume). Drops the bot brain (R12/R31),
  * marks human-connected, cancels grace + reap, applies the R10 ready/exhausted reclaim rules when
  * landing in an open player phase, and re-derives host (R14).
@@ -1223,6 +1342,9 @@ export function connectSeat(
     room.hostSeatId = room.seats.find((s) => s.state === "human-connected")?.seatId ?? null;
     setRunHostSafe(room);
   }
+
+  // If combat was frozen waiting for a human, resume it now that this human has (re)bound (Phase 1).
+  if (room.phase === "combat" && room.paused) resumeCombat(room, io);
 }
 
 // =====================================================================================
@@ -1308,6 +1430,7 @@ export function reconstructRoomForRun(
     generation: 0,
     coopPhase: "player",
     aiPlayerBusy: false,
+    paused: false,
     dimensionId,
     runId,
     hexMap: { playerPos, hexes, icons },
@@ -1330,6 +1453,23 @@ export function reconstructRoomForRun(
 
   armReap(room, onReap); // R31: a reconstructed room nobody reconnects to is reaped
   return room;
+}
+
+/**
+ * Boot crash-recovery: rebuild every run a process death left active=1 — server-side, not lazily by an
+ * arbitrary client's hello. A run the crash caught in the LOBBY (never started, started_at null) is NOT
+ * resurrected as an overworld game; it is abandoned so reconnects route HOME. Each reconstructed room
+ * arms its own (inactivating) `onReap`, so one nobody reconnects to within the window is finalized.
+ */
+export function recoverActiveRuns(onReap: (room: Room) => void): void {
+  for (const runId of loadActiveRunIds()) {
+    const run = loadRun(runId);
+    if (!run || run.started_at == null) {
+      markRunInactive(runId, "abandoned");
+      continue;
+    }
+    reconstructRoomForRun(runId, onReap);
+  }
 }
 
 /** Dispose passthrough (R19): the WS layer calls this; durable rows are not touched (R13.1). */

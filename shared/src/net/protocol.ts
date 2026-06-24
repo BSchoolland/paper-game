@@ -75,6 +75,22 @@ export interface CoopStatusPayload {
   readonly phase: CoopPhase;
   readonly seats: readonly SeatCombatStatus[];
   readonly pendingDefends: readonly PendingDefendInfo[];
+  /** True while combat is frozen because no human is connected (the bot cascade is suppressed). */
+  readonly paused?: boolean;
+}
+
+/**
+ * A single joinable room as seen from the HOME room browser. Deliberately a strict subset of
+ * RoomStatePayload — no runId, seat identities, clientIds, tokens, or loadouts ever reach an
+ * unseated socket.
+ */
+export interface RoomBrowserEntry {
+  readonly code: RoomCode;
+  readonly hostDisplayName: string;
+  readonly openSeats: number;
+  readonly totalSeats: number;
+  readonly dimensionId: number;
+  readonly phase: RoomPhase;
 }
 
 export type VoteChoice = "yes" | "no";
@@ -116,7 +132,10 @@ export type ClientMessage =
   | { type: "createRoom"; capacity: RoomCapacity; dimensionId?: number }
   | { type: "joinRoom"; code: RoomCode; displayName?: string }
   | { type: "reclaimSeat"; code: RoomCode; seatId: SeatId; force?: boolean }
+  | { type: "listRooms" }
+  | { type: "quickMatch"; displayName?: string; dimensionId?: number }
   | { type: "leaveRoom" }
+  | { type: "playAgain" }
   | { type: "setReady"; ready: boolean }
   | { type: "startGame" }
   | { type: "proposeMove"; target: HexCoord }
@@ -129,7 +148,8 @@ export type ClientMessage =
   | { type: "unequip"; equippedIndex: number }
   | { type: "updateAttachment"; itemId: string; attachment: AttachmentData }
   | { type: "reset" }
-  | { type: "debugWin" };
+  | { type: "debugWin" }
+  | { type: "debugLose" };
 
 export type ClientMessageType = ClientMessage["type"];
 
@@ -138,6 +158,8 @@ export type ServerMessage =
   | { type: "welcome"; protocolVersion: number; sessionToken: SessionToken; reconnected?: { code: RoomCode; seatId: SeatId } }
   | { type: "protocolMismatch"; serverVersion: number; clientVersion: number }
   | { type: "displaced" }
+  | { type: "leftRoom" }
+  | { type: "roomList"; rooms: readonly RoomBrowserEntry[] }
   | { type: "roomState"; room: RoomStatePayload }
   | { type: "hexMapState"; hexMap: HexMapState }
   | { type: "hexDiscovered"; coord: HexCoord }

@@ -103,6 +103,7 @@ export interface Room {
   generation: number; // bumped on every session teardown/build (ruling R17)
   coopPhase: CoopPhase; // mirrors activeTeam, server-side only
   aiPlayerBusy: boolean; // player-bot burst window (ruling R16)
+  paused: boolean; // combat frozen because no human is connected (suppresses the all-bot cascade)
 
   dimensionId: number;
   runId: number;
