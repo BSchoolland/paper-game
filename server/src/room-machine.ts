@@ -598,7 +598,12 @@ export function resumeCombat(room: Room, io: RoomIO): void {
   if (!room.session || room.phase !== "combat" || !room.combat?.suspended) return;
   if (!hasConnectedHuman(room)) return; // still nobody back; stay suspended
   room.combat.suspended = false;
-  if (room.combat.step.kind === "playerOpen") {
+  // playerOpen -> re-open a fresh player phase. An in-flight enemy sweep -> continue it (the runner's
+  // entityQueue is intact, so already-acted enemies are not re-swept). A suspended `playerBots` step can
+  // only arise from a player-bot-burst friendly-fire defend, which cannot happen today (the resolver
+  // drops same-team targets, so a player bot never prompts a defend); we restart it exactly as the
+  // pre-SSOT machine did, keeping resume strictly behavior-preserving if that path is ever enabled.
+  if (room.combat.step.kind === "playerOpen" || room.combat.step.kind === "playerBots") {
     startPlayerPhase(room, io);
   } else {
     driveCombat(room, io);
