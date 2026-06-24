@@ -13,6 +13,10 @@ export type AiStepResult =
       ability: AttackAbility;
       targetIds: EntityId[];
     }
+  // An enemy-phase sweep finished and issued its terminal endTurn (the explicit enemy->player flip
+  // signal — the orchestrator no longer infers it from activeTeam). A playerBots burst finishing
+  // returns `done` (the Room decides when the shared player phase ends).
+  | { type: "endedTurn" }
   | { type: "done" };
 
 /**
@@ -100,7 +104,8 @@ export class AiTurnRunner {
   step(): AiStepResult {
     const state = this.deps.getState();
     if (state.winner) return { type: "done" };
-    if (this.complete) return { type: "done" };
+    // Once complete, an enemy sweep reports its explicit terminal endTurn; a playerBots burst is done.
+    if (this.complete) return this.mode.kind === "enemyPhase" ? { type: "endedTurn" } : { type: "done" };
 
     while (true) {
       const next = this.tryNextAction();
@@ -227,6 +232,8 @@ export class AiTurnRunner {
     const endResult = resolveAction(state, { type: "endTurn" });
     if (endResult.state !== state) {
       this.deps.setState(endResult.state);
+      // Emit the terminal endTurn's flip/turnStart/regen events FIRST; the next stepAi() returns
+      // `endedTurn` (complete is set), so the broadcast always precedes the player phase re-opening.
       return {
         type: "events",
         serializedState: serializeGameState(endResult.state),
@@ -234,6 +241,6 @@ export class AiTurnRunner {
         won: !!endResult.state.winner,
       };
     }
-    return { type: "done" };
+    return { type: "endedTurn" };
   }
 }

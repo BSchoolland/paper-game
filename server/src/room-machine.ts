@@ -430,7 +430,9 @@ export function driveAiSteps(room: Room, io: RoomIO): void {
 
     const step: AiStepResult = session.stepAi();
 
-    if (step.type === "done") {
+    if (step.type === "done" || step.type === "endedTurn") {
+      // Step 6 (transitional): treat the new explicit `endedTurn` like `done`; the enemy->player flip
+      // is still detected after-the-fact by startEnemyPhase below. Step 8 makes this the explicit flip.
       onAiBurstDone(room, io);
       return;
     }

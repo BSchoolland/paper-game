@@ -24,7 +24,7 @@ const fixedBrain = (actions: PlayerAction[]): HeroController => (() => actions) 
 
 function drainToDone(runner: AiTurnRunner, max = 12) {
   let r = runner.step();
-  for (let i = 0; i < max && r.type !== "done"; i++) r = runner.step();
+  for (let i = 0; i < max && r.type !== "done" && r.type !== "endedTurn"; i++) r = runner.step();
   return r;
 }
 
@@ -71,13 +71,19 @@ describe("AiTurnRunner (generalized modes)", () => {
     }
   });
 
-  it("ends the enemy phase with an endTurn (active team flips back)", () => {
+  it("ends the enemy phase with an explicit endedTurn, emitting the flip events first", () => {
     const hero = makeEntity("s0-hero", 40, 0, "red", { controllerId: "s0" });
     const enemy = makeEntity("e0", 0, 0, "blue");
     const { runner, state } = harness(makeState([hero, enemy], { activeTeam: "blue" }), new Map([["e0", fixedBrain([])]]));
     runner.start({ kind: "enemyPhase", team: "blue" }, 1);
 
-    drainToDone(runner);
+    // The terminal endTurn's flip/turnStart events are emitted as an `events` step BEFORE `endedTurn`,
+    // so the broadcast always precedes the player phase re-opening (the events-ordering risk).
+    const types: string[] = [];
+    let r = runner.step();
+    for (let i = 0; i < 12 && r.type !== "endedTurn"; i++) { types.push(r.type); r = runner.step(); }
+    expect(r.type).toBe("endedTurn"); // explicit enemy->player signal (was inferred from activeTeam)
+    expect(types).toContain("events");
     expect(state().activeTeam).toBe("red"); // finish() issued endTurn: blue -> red
   });
 
