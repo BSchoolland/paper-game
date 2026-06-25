@@ -23,6 +23,17 @@ export type { AiStepResult } from "./ai-turn-runner.js";
 // via their own softBudgetMs, so this only matters for the heaviest brain.
 const HERO_TURN_BUDGET_MS = 10000;
 
+/** A move request is the only action carrying a `destination`. If the server denies one, the client
+ *  predicted a move the authoritative resolver rejected — i.e. client/server drift — so surface it
+ *  loudly rather than letting the move silently no-op. */
+function logDeniedMove(state: GameState, action: PlayerAction, reason: string): void {
+  if (action.type !== "ability" || !action.destination) return;
+  const from = state.entities.get(action.entityId)?.position;
+  const fromStr = from ? `(${from.x.toFixed(1)},${from.y.toFixed(1)})` : "?";
+  const { x, y } = action.destination;
+  console.error(`[move] denied: ${action.entityId} ${fromStr} -> (${x.toFixed(1)},${y.toFixed(1)}): ${reason}`);
+}
+
 export class EncounterSession {
   state: GameState;
   readonly heroBrains = new Map<EntityId, HeroController>();
@@ -69,7 +80,10 @@ export class EncounterSession {
   }
 
   applyAction(action: PlayerAction): { changed: boolean; events: readonly GameEvent[] } {
-    if (!isActionLegal(this.state, action)) return { changed: false, events: [] };
+    if (!isActionLegal(this.state, action)) {
+      logDeniedMove(this.state, action, "illegal (out of turn, dead, or game over)");
+      return { changed: false, events: [] };
+    }
     // Player moves are path-based (cost = the route around obstacles); the AI keeps the cheap
     // straight-line check via its own resolve call sites (ai-turn-runner). Server-trusted: the flag
     // isn't part of the action, so a client can't ask for the cheaper rule.
@@ -78,6 +92,7 @@ export class EncounterSession {
       this.state = result.state;
       return { changed: true, events: result.events };
     }
+    logDeniedMove(this.state, action, "no legal path within move budget");
     return { changed: false, events: [] };
   }
 
