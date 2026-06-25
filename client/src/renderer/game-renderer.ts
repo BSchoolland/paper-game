@@ -13,7 +13,7 @@ import { drawTargetingPreview, drawEffectPreview, drawIncomingAttackPreview } fr
 import { drawZones } from "./zone-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
 import { ScreenFlash, type FlashOptions } from "./screen-flash.js";
-import type { FramePacer, PacerToken } from "./frame-pacer.js";
+import type { FramePacer } from "./frame-pacer.js";
 
 const PADDING = 75;
 const DIM_ALPHA = 0.4;
@@ -58,9 +58,7 @@ export class GameRenderer {
   private debugLayer = new Container();
   private debugVisible = false;
   private tickerActive = false;
-  private wasAnimating = false;
-  private animToken: PacerToken | null = null;
-  private selectionToken: PacerToken | null = null;
+  private unregisterPacer: (() => void) | null = null;
   private shakeIntensity = 0;
   private shakeTimer = 0;
   private playbackSpeed = 1;
@@ -134,6 +132,10 @@ export class GameRenderer {
     this.bringToFront();
     this.outerContainer.visible = true;
 
+    if (!this.unregisterPacer) {
+      this.unregisterPacer = this.pacer.register(() => this.desiredFps());
+    }
+
     if (!this.tickerActive) {
       this.tickerActive = true;
       this.app.ticker.add((ticker) => {
@@ -141,16 +143,6 @@ export class GameRenderer {
         const dt = (ticker.deltaTime / 60) * this.playbackSpeed;
         const shaking = this.shakeTimer > 0;
         const flashing = this.screenFlash.active;
-        const animating = this.entities.isAnimating() || shaking || flashing;
-        if (animating !== this.wasAnimating) {
-          if (animating) {
-            this.animToken = this.pacer.request(60);
-          } else {
-            this.pacer.release(this.animToken!);
-            this.animToken = null;
-          }
-          this.wasAnimating = animating;
-        }
 
         if (flashing) {
           this.screenFlash.tick(dt);
@@ -199,15 +191,17 @@ export class GameRenderer {
       this.entities.destroy();
       this.entities = null;
     }
-    if (this.selectionToken !== null) {
-      this.pacer.release(this.selectionToken);
-      this.selectionToken = null;
-    }
-    if (this.animToken !== null) {
-      this.pacer.release(this.animToken);
-      this.animToken = null;
-      this.wasAnimating = false;
-    }
+    this.unregisterPacer?.();
+    this.unregisterPacer = null;
+  }
+
+  /** FPS this renderer needs this instant — pulled by the pacer every frame. 60 while anything
+   *  animates, 45 to keep the move-aim preview easing smooth while a unit is selected, else 0. */
+  private desiredFps(): number {
+    if (!this.outerContainer.visible || !this.entities) return 0;
+    if (this.entities.isAnimating() || this.shakeTimer > 0 || this.screenFlash.active) return 60;
+    if (this.clientState.selectedEntityId) return 45;
+    return 0;
   }
 
   getCombatRect(): { x: number; y: number; w: number; h: number } {
@@ -258,14 +252,6 @@ export class GameRenderer {
     drawZones(this.zonesGfx, renderState.zones);
     this.renderOverlay(this.lastMouseWorld);
     this.debugLayer.visible = this.clientState.showDebugWalls;
-
-    const hasSelection = !!this.clientState.selectedEntityId;
-    if (hasSelection && this.selectionToken === null) {
-      this.selectionToken = this.pacer.request(45);
-    } else if (!hasSelection && this.selectionToken !== null) {
-      this.pacer.release(this.selectionToken);
-      this.selectionToken = null;
-    }
   }
 
   renderOverlay(mouseWorld: Vec2) {

@@ -12,7 +12,7 @@ import { PENCIL, PENCIL_LIGHT } from "./sketch-utils.js";
 import { HexCamera } from "./hex-camera.js";
 import { HexPathTrail } from "./hex-path-trail.js";
 import { HexPlayerTween } from "./hex-player-tween.js";
-import type { FramePacer, PacerToken } from "./frame-pacer.js";
+import type { FramePacer } from "./frame-pacer.js";
 import { assetUrl } from "./asset-url.js";
 
 const HEX_SIZE = 48;
@@ -93,16 +93,9 @@ export class HexMapRenderer {
     this.worldContainer.addChild(this.hoverGfx);
     this.worldContainer.addChild(this.playerTween.charSprite.container);
 
-    let tweenToken: PacerToken | null = null;
+    this.pacer.register(() => (this.playerTween.animating ? 60 : 0));
     this.app.ticker.add((ticker) => {
-      if (!this.playerTween.animating) {
-        if (tweenToken !== null) {
-          this.pacer.release(tweenToken);
-          tweenToken = null;
-        }
-        return;
-      }
-      if (tweenToken === null) tweenToken = this.pacer.request(60);
+      if (!this.playerTween.animating) return;
       const dt = ticker.deltaTime / 60;
       const pos = this.playerTween.tick(dt);
       if (pos) this.pathTrail.drawLive(pos.x, pos.y);
