@@ -16,7 +16,7 @@ import type {
   AimDirection,
   Vec2,
 } from "shared";
-import { createInventory, getAnimSet } from "shared";
+import { BAG_SIZE, getAnimSet, getPreset, DEFAULT_PRESET_ID } from "shared";
 import type { CombatRuntime } from "./combat-runtime.js";
 import type { EncounterSession } from "./encounter-session.js";
 import type { HeroController } from "../../hero-arena/src/types.js";
@@ -54,6 +54,7 @@ export interface Seat {
   tokenSalt: string | null; // per-seat HMAC salt for the session token
   brain: HeroController | null; // present iff AI-driven (bot or disconnected)
   inventory: InventoryState; // per-seat bag
+  presetId: string | null; // the starter preset last chosen in the lobby (null once hand-edited/unknown)
   animSet: AnimSet;
   displayName: string;
   // --- combat orchestration (player phase); driven by the Phase 5 machine ---
@@ -114,6 +115,12 @@ export interface Room {
   capacity: number; // 2..4, fixed at create
   seats: Seat[]; // length === capacity, index-stable
 
+  /** Listed in the public room browser + eligible for quickMatch. Private rematch rooms set false. */
+  listed: boolean;
+  /** Set on a finished room when its first Play-Again click spawns the shared rematch lobby; later
+   *  clickers from the same room funnel into this code. Null until then. */
+  rematchCode: RoomCode | null;
+
   session: EncounterSession | null; // null off-combat
   defendRound: DefendRound | null;
   vote: MovementVote | null;
@@ -169,22 +176,36 @@ export function freshRoomCode(taken: (code: RoomCode) => boolean, maxTries = 50)
   return null; // exhausted -> ROOM_CREATE_FAILED
 }
 
-// --- Default loadout (the starter bag). Single source of truth for the co-op path. ---
-export const STARTER_ITEM_IDS = [
-  "abilitytest", "short-sword", "bow", "staff", "round-shield",
-  "barbed-harpoon", "urchin-flail", "crab-claw-gauntlet",
-  "stalactite-spear", "fungal-mace", "geode-knuckles",
-  "sandhorn-bow", "raiders-twinblade", "mirage-staff",
-];
+/** Build a seat's inventory from a starter preset: bag + auto-equipped kit + baked attachments. The
+ *  single source of truth for a fresh seat's loadout (co-op path). An unknown preset id falls back to
+ *  the default so a seat is never left unarmed. */
+export function buildPresetInventory(presetId: string, dimensionId: number): InventoryState {
+  const merged = { ...loadItems(0), ...loadItems(1), ...loadItems(2), ...loadItems(3), ...loadItems(dimensionId) };
+  const preset = getPreset(presetId) ?? getPreset(DEFAULT_PRESET_ID)!;
+
+  const bag: (ItemDefinition | null)[] = new Array(BAG_SIZE).fill(null);
+  preset.bagIds.forEach((id, i) => {
+    const item = merged[id];
+    if (item && i < BAG_SIZE) bag[i] = item;
+  });
+
+  const equipped: ItemDefinition[] = [];
+  for (const id of preset.equippedIds) {
+    const item = merged[id];
+    if (item) equipped.push(item);
+  }
+
+  // Keep only attachments for items the seat actually owns (mirrors loadSeatInventory's guard).
+  const attachments: InventoryState["attachments"] = {};
+  for (const [itemId, att] of Object.entries(preset.attachments)) {
+    if (equipped.some((e) => e.id === itemId)) attachments[itemId] = att;
+  }
+
+  return { bag, equipped, attachments };
+}
 
 export function buildDefaultInventory(dimensionId: number): InventoryState {
-  const merged = { ...loadItems(0), ...loadItems(1), ...loadItems(2), ...loadItems(3), ...loadItems(dimensionId) };
-  const picked: ItemDefinition[] = [];
-  for (const id of STARTER_ITEM_IDS) {
-    const item = merged[id];
-    if (item) picked.push(item);
-  }
-  return createInventory(picked);
+  return buildPresetInventory(DEFAULT_PRESET_ID, dimensionId);
 }
 
 /** AI brain for a bot or disconnected seat — fixed `crafty` preset (the v1 difficulty). */
@@ -199,7 +220,7 @@ export function createOpenSeats(capacity: number, dimensionId: number): Seat[] {
   const seats: Seat[] = [];
   for (let i = 0; i < capacity; i++) {
     const seatId = seatIdForIndex(i);
-    const inventory = buildDefaultInventory(dimensionId);
+    const inventory = buildPresetInventory(DEFAULT_PRESET_ID, dimensionId);
     seats.push({
       seatId,
       seatIndex: i,
@@ -210,6 +231,7 @@ export function createOpenSeats(capacity: number, dimensionId: number): Seat[] {
       tokenSalt: null,
       brain: null,
       inventory,
+      presetId: DEFAULT_PRESET_ID,
       animSet: getAnimSet(inventory.equipped),
       displayName: `Player ${i + 1}`,
       ready: false,

@@ -39,6 +39,8 @@ export interface SeatInfo {
   /** Lobby: ready-to-start. Combat: this seat has passed the player phase. */
   readonly ready: boolean;
   readonly loadoutSummary?: LoadoutSummary;
+  /** Lobby: the starter preset this seat last chose (drives the picker highlight); null if unknown. */
+  readonly presetId?: string | null;
 }
 
 export interface RoomStatePayload {
@@ -136,6 +138,7 @@ export type ClientMessage =
   | { type: "quickMatch"; displayName?: string; dimensionId?: number }
   | { type: "leaveRoom" }
   | { type: "playAgain" }
+  | { type: "choosePreset"; presetId: string }
   | { type: "setReady"; ready: boolean }
   | { type: "startGame" }
   | { type: "proposeMove"; target: HexCoord }

@@ -29,6 +29,7 @@ import {
   heroExhausted,
   resolveVote,
   PROTOCOL_VERSION,
+  DEFAULT_PRESET_ID,
 } from "shared";
 import type { Room, Seat, DefendRound, DefendTarget, MovementVote } from "./room.js";
 import { seatBuildSpec, sovereignFor } from "./room.js";
@@ -63,7 +64,7 @@ import {
   loadSeatInventory,
 } from "./db.js";
 import { rooms } from "./room-registry.js";
-import { buildDefaultInventory, freshRoomCode, heroEntityIdFor, seatIdForIndex } from "./room.js";
+import { buildPresetInventory, freshRoomCode, heroEntityIdFor, seatIdForIndex } from "./room.js";
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -112,6 +113,7 @@ function seatInfo(room: Room, seat: Seat): SeatInfo {
     heroEntityId: seat.heroEntityId,
     ready: seat.ready,
     loadoutSummary: { equippedIds: seat.inventory.equipped.map((i) => i.id) },
+    presetId: seat.presetId,
   };
 }
 
@@ -1143,7 +1145,8 @@ export function resetToOrigin(room: Room, io: RoomIO, outcome: "defeat" | "aband
 
   // Persist seats + fresh starter inventory for the new run.
   for (const seat of room.seats) {
-    seat.inventory = buildDefaultInventory(room.dimensionId);
+    seat.inventory = buildPresetInventory(DEFAULT_PRESET_ID, room.dimensionId);
+    seat.presetId = DEFAULT_PRESET_ID;
     seat.animSet = getAnimSet(seat.inventory.equipped);
     persistSeat(room, seat);
   }
@@ -1403,7 +1406,7 @@ export function reconstructRoomForRun(
     const row = seatRows.find((r) => r.seat_index === i);
     const isHuman = row?.controller_kind === "human" && !!row.client_id;
     // Durable rows rehydrate the bag (R13.3); a seat with no row falls back to a starter loadout.
-    const inventory = row ? loadSeatInventory(runId, i, dimensionId) : buildDefaultInventory(dimensionId);
+    const inventory = row ? loadSeatInventory(runId, i, dimensionId) : buildPresetInventory(DEFAULT_PRESET_ID, dimensionId);
     const seat: Seat = {
       seatId,
       seatIndex: i,
@@ -1415,6 +1418,7 @@ export function reconstructRoomForRun(
       tokenSalt: row?.token_salt ?? null,
       brain: null, // sovereignFor installed below for liveness
       inventory,
+      presetId: null, // rehydrated from durable rows; the original preset choice isn't persisted
       animSet: getAnimSet(inventory.equipped),
       displayName: row?.display_name || `Player ${i + 1}`,
       ready: false,
@@ -1441,6 +1445,8 @@ export function reconstructRoomForRun(
     pendingHex: null,
     capacity,
     seats,
+    listed: true,
+    rematchCode: null,
     session: null,
     defendRound: null,
     vote: null,

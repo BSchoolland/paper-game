@@ -65,7 +65,7 @@ export class RoomRegistry {
   joinableRooms(): Room[] {
     const out: Room[] = [];
     for (const room of this.byCode.values()) {
-      if (room.phase === "lobby" && room.seats.some((s) => s.state === "open")) out.push(room);
+      if (room.listed && room.phase === "lobby" && room.seats.some((s) => s.state === "open")) out.push(room);
     }
     return out;
   }
@@ -73,7 +73,7 @@ export class RoomRegistry {
   /** The first joinable room — the quick-match target — or null if none exist. */
   firstJoinable(): Room | null {
     for (const room of this.byCode.values()) {
-      if (room.phase === "lobby" && room.seats.some((s) => s.state === "open")) return room;
+      if (room.listed && room.phase === "lobby" && room.seats.some((s) => s.state === "open")) return room;
     }
     return null;
   }

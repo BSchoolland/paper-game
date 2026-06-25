@@ -72,11 +72,11 @@ describe("per-seat inventory", () => {
     await guest.waitFor(isRoomState);
     const guestInv = await guest.waitFor(isInventory);
 
-    // Both start with the same default loadout (nothing equipped).
-    expect(hostInv.inventory.equipped.length).toBe(0);
-    expect(guestInv.inventory.equipped.length).toBe(0);
+    // Both start with the same default preset loadout.
+    const guestBaseline = guestInv.inventory.equipped.map((i) => i.id);
+    expect(hostInv.inventory.equipped.map((i) => i.id)).toEqual(guestBaseline);
 
-    // Host equips its first bag item.
+    // Host equips its first bag item (on top of the preset kit).
     const bagIdx = firstBagIndex(hostInv);
     const equippedId = hostInv.inventory.bag[bagIdx]!.id;
     host.mark();
@@ -85,14 +85,14 @@ describe("per-seat inventory", () => {
     expect(hostAfter.inventory.equipped.map((i) => i.id)).toContain(equippedId);
     expect(hostAfter.inventory.bag[bagIdx]).toBeNull();
 
-    // The roster's loadoutSummary updates for s0 only; s1 stays empty.
+    // The roster's loadoutSummary picks up the new item for s0 only; s1 stays at its preset baseline.
     const roster = await host.waitFor(
       (m): m is Extract<ServerMessage, { type: "roomState" }> =>
-        m.type === "roomState" && (m.room.seats[0]!.loadoutSummary?.equippedIds.length ?? 0) > 0,
+        m.type === "roomState" && (m.room.seats[0]!.loadoutSummary?.equippedIds.includes(equippedId) ?? false),
       { consumeBuffered: false, timeoutMs: 4000 },
     );
     expect(roster.room.seats[0]!.loadoutSummary!.equippedIds).toContain(equippedId);
-    expect(roster.room.seats[1]!.loadoutSummary!.equippedIds.length).toBe(0);
+    expect(roster.room.seats[1]!.loadoutSummary!.equippedIds).toEqual(guestBaseline);
 
     // The guest never received a new `inventory` message (its bag is untouched).
     expect(guest.inbox.filter(isInventory).length).toBe(1);
@@ -152,9 +152,10 @@ describe("per-seat inventory", () => {
     const itemId = inv.inventory.bag[bagIdx]!.id;
     owner.mark();
     owner.send({ type: "equip", bagIndex: bagIdx });
-    await owner.nextOf("inventory", { fromNow: true, timeoutMs: 4000 });
+    const afterEquip = await owner.nextOf("inventory", { fromNow: true, timeoutMs: 4000 });
+    const eqIdx = afterEquip.inventory.equipped.findIndex((i) => i.id === itemId);
     owner.mark();
-    owner.send({ type: "unequip", equippedIndex: 0 });
+    owner.send({ type: "unequip", equippedIndex: eqIdx });
     const afterUnequip = await owner.nextOf("inventory", { fromNow: true, timeoutMs: 4000 });
     expect(afterUnequip.inventory.equipped.map((i) => i.id)).not.toContain(itemId);
     expect(afterUnequip.inventory.bag.some((it) => it?.id === itemId)).toBe(true);

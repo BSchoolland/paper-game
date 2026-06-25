@@ -2,6 +2,7 @@ import type { Screen } from "./screen-manager.js";
 import type { RoomConnection } from "../net/connection.js";
 import type { SeatContext } from "../state/seat-context.js";
 import type { RoomStatePayload, SeatInfo } from "shared";
+import { STARTER_PRESETS } from "shared";
 import { panelCard, btn } from "./ui-kit.js";
 
 /**
@@ -74,6 +75,8 @@ export class LobbyScreen implements Screen {
     const amHost = this.seat.isHost();
     const myInfo = room.seats.find((s) => s.seatId === room.yourSeatId);
 
+    if (myInfo) card.appendChild(this.presetPicker(myInfo.presetId ?? null));
+
     const readyBtn = btn(myInfo?.ready ? "Not ready" : "Ready");
     readyBtn.addEventListener("click", () => {
       this.conn.send({ type: "setReady", ready: !(myInfo?.ready ?? false) });
@@ -105,6 +108,35 @@ export class LobbyScreen implements Screen {
     card.appendChild(leaveBtn);
 
     this.container.appendChild(card);
+  }
+
+  /** The starter-preset chooser: one selectable card per preset, sending `choosePreset` on click. The
+   *  selected preset auto-equips a kit the player can still tweak via "Edit loadout". */
+  private presetPicker(selectedId: string | null): HTMLDivElement {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex; flex-direction:column; gap:6px;";
+
+    const heading = document.createElement("div");
+    heading.style.cssText = "font-size:12px; color:#8a7a68; text-align:center;";
+    heading.textContent = "STARTER KIT";
+    wrap.appendChild(heading);
+
+    for (const preset of STARTER_PRESETS) {
+      const selected = preset.id === selectedId;
+      const card = document.createElement("button");
+      card.style.cssText = `
+        text-align:left; padding:8px 10px; cursor:pointer; font-family:monospace;
+        background: rgba(255, 250, 238, ${selected ? "0.98" : "0.78"});
+        border: ${selected ? "2px solid #4caf50" : "1px solid rgba(74,55,40,0.3)"};
+        border-radius:6px; color:#4a3728;
+      `;
+      card.innerHTML =
+        `<div style="font-size:13px; font-weight:bold;">${preset.name}${selected ? "  ✓" : ""}</div>` +
+        `<div style="font-size:11px; color:#8a7a68;">${preset.description}</div>`;
+      card.addEventListener("click", () => this.conn.send({ type: "choosePreset", presetId: preset.id }));
+      wrap.appendChild(card);
+    }
+    return wrap;
   }
 
   private seatRow(s: SeatInfo, room: RoomStatePayload): HTMLDivElement {

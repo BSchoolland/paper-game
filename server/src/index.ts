@@ -37,7 +37,7 @@ import {
 import { rooms } from "./room-registry.js";
 import {
   createOpenSeats,
-  buildDefaultInventory,
+  buildPresetInventory,
   freshRoomCode,
   seatIdForIndex,
 } from "./room.js";
@@ -75,7 +75,7 @@ import { seedDimension1 } from "./seed-dimension-1.js";
 import { seedDimension2 } from "./seed-dimension-2.js";
 import { seedDimension3 } from "./seed-dimension-3.js";
 import { seedDimension501 } from "./seed-dimension-501.js";
-import { equipFromBag, unequipItem } from "shared";
+import { equipFromBag, unequipItem, getPreset } from "shared";
 import { join } from "path";
 import { existsSync } from "fs";
 import { eventLog } from "./event-log.js";
@@ -286,17 +286,26 @@ function handleHello(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage
 /** Build a brand-new room + durable run for the host (write point 1, R13.1). */
 function handleCreateRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "createRoom" }>): void {
   if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
+  createRoomFor(ws, msg.capacity, msg.dimensionId ?? DEFAULT_DIMENSION, true);
+}
 
-  const capacity: RoomCapacity = msg.capacity;
-  const dimensionId = msg.dimensionId ?? DEFAULT_DIMENSION;
-  const clientId = ws.data.clientId;
+/** Allocate a room + run, seat this socket as host, send welcome/roomState. `listed` controls whether
+ *  the room shows in the public browser / quickMatch (false for private rematch rooms). Returns the
+ *  created Room, or null if allocation failed (an error was already sent). */
+function createRoomFor(
+  ws: ServerWebSocket<SocketData>,
+  capacity: RoomCapacity,
+  dimensionId: number,
+  listed: boolean,
+): Room | null {
+  const clientId = ws.data.clientId!;
 
   // R32: abandon any prior live seat this client holds BEFORE binding the new one, so the UNIQUE-
   // live index never sees two live rows for this clientId (the "play again" crash class).
   cleanupPriorSeat(ws, clientId);
 
   const code = freshRoomCode((c) => rooms.isTaken(c));
-  if (!code) return sendError(ws, "ROOM_CREATE_FAILED", "Could not allocate a room code", true);
+  if (!code) { sendError(ws, "ROOM_CREATE_FAILED", "Could not allocate a room code", true); return null; }
 
   // Durable run-create: run row + GLOBAL community discovery (radius disc + origin, per dimension) +
   // origin icon; this run starts cleared only at the origin. seedDiscovery/discoverHex are idempotent
@@ -328,6 +337,8 @@ function handleCreateRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMe
     pendingHex: null,
     capacity,
     seats,
+    listed,
+    rematchCode: null,
     session: null,
     defendRound: null,
     vote: null,
@@ -362,6 +373,7 @@ function handleCreateRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMe
   sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, reconnected: { code, seatId: host.seatId } });
   broadcastRoomState(room, io);
   sendInventory(room, io, host);
+  return room;
 }
 
 function handleJoinRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "joinRoom" }>): void {
@@ -560,15 +572,28 @@ function handleReset(room: Room, seat: Seat): void {
 }
 
 /**
- * "Play again" from the Game Over end state. ANY player may trigger it (locked decision — not host-
- * gated). The `phase === "gameover"` guard is what closes the double-click race: the first call's
- * resetToOrigin flips the phase to "overworld", so every subsequent concurrent click is a clean no-op
- * (single-threaded event loop — no interleaving between the guard and the flip). Host is re-derived by
- * resetToOrigin's startNewRun(hostClientId) over the currently-connected humans.
+ * "Play again" from the Game Over end state. Each player who clicks is funneled into ONE shared, fresh
+ * PRIVATE lobby (the rematch room) — no run state carries over. The finished room records that lobby's
+ * code in `rematchCode`: the first clicker creates it (becomes host); later clickers join the same code.
+ * The finished room itself is left in `gameover` and reaps once its last human departs (R32 stamps each
+ * leaver; the run only finalizes when no live human remains), so concurrent clicks from other seats
+ * still resolve. Non-clickers Return-to-Home as before.
  */
 function handlePlayAgain(room: Room, seat: Seat): void {
-  if (room.phase !== "gameover") return; // not in the end state, or someone already restarted
-  resetToOrigin(room, io);
+  if (room.phase !== "gameover") return; // not in the end state
+  const ws = seat.socket;
+  if (!ws) return;
+
+  const existing = room.rematchCode ? rooms.get(room.rematchCode) : null;
+  const joinable = existing && existing.phase === "lobby" && existing.seats.some((s) => s.state === "open");
+  if (joinable) {
+    handleJoinRoom(ws, { type: "joinRoom", code: existing!.code, displayName: seat.displayName });
+    return;
+  }
+  // No live rematch room yet (or it filled / already started) — spin up a fresh private one. This
+  // clicker hosts it; subsequent clickers from this finished room follow into the same code.
+  const rematch = createRoomFor(ws, room.capacity as RoomCapacity, room.dimensionId, false);
+  if (rematch) room.rematchCode = rematch.code;
 }
 
 function handleDebugWin(room: Room, seat: Seat): void {
@@ -614,15 +639,27 @@ function applyInventoryChange(room: Room, seat: Seat): void {
   broadcastRoomState(room, io); // loadoutSummary in the roster changed
 }
 
+/** Re-seed a seat's whole loadout from a starter preset (lobby only, before Start). Auto-equips the
+ *  preset kit + baked attachments; the player may then hand-edit it in the loadout editor. */
+function handleChoosePreset(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, presetId: string): void {
+  if (room.phase !== "lobby") return sendError(ws, "BAD_PHASE", "Presets can only be chosen in the lobby");
+  if (!getPreset(presetId)) return sendError(ws, "BAD_PHASE", `Unknown preset "${presetId}"`);
+  seat.inventory = buildPresetInventory(presetId, room.dimensionId);
+  seat.presetId = presetId;
+  applyInventoryChange(room, seat);
+}
+
 function handleEquip(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, bagIndex: number): void {
   if (room.phase === "combat") return sendError(ws, "BAD_PHASE", "Cannot change loadout in combat");
   seat.inventory = equipFromBag(seat.inventory, bagIndex);
+  seat.presetId = null; // hand-edited: no longer a pristine preset
   applyInventoryChange(room, seat);
 }
 
 function handleUnequip(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, equippedIndex: number): void {
   if (room.phase === "combat") return sendError(ws, "BAD_PHASE", "Cannot change loadout in combat");
   seat.inventory = unequipItem(seat.inventory, equippedIndex);
+  seat.presetId = null; // hand-edited: no longer a pristine preset
   applyInventoryChange(room, seat);
 }
 
@@ -708,6 +745,8 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
     }
 
     // --- seat-scoped inventory (off-combat, R26) ---
+    case "choosePreset":
+      return handleChoosePreset(room, seat, ws, msg.presetId);
     case "equip":
       return handleEquip(room, seat, ws, msg.bagIndex);
     case "unequip":

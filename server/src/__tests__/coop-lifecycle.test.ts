@@ -84,7 +84,7 @@ describe("co-op lifecycle redesign", () => {
     host.close();
   });
 
-  it("any player (not just host) can Play Again -> a fresh active run on the same room", async () => {
+  it("Play Again funnels each clicker into one shared, fresh PRIVATE rematch lobby", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
     await hello(host, "Host");
@@ -109,18 +109,32 @@ describe("co-op lifecycle redesign", () => {
       { consumeBuffered: false, timeoutMs: 8000 },
     );
 
-    // The NON-host guest restarts.
+    // The NON-host guest clicks Play Again first -> a brand-new PRIVATE lobby, with the guest as host.
     guest.mark();
     guest.send({ type: "playAgain" });
-    const back = await guest.waitFor(
-      (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "overworld",
+    await guest.nextOf("welcome", { fromNow: true, timeoutMs: 6000 });
+    const guestLobby = await guest.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "lobby",
       { consumeBuffered: false, timeoutMs: 6000 },
     );
-    expect(back.room.code).toBe(code); // same room/party
-    expect(back.room.runId).not.toBe(wipedRun); // a fresh run
-    expect(loadRun(back.room.runId)?.active).toBe(1);
-    expect(loadRun(wipedRun)?.active).toBe(0);
-    expect(back.room.hostSeatId).toBe("s0"); // both still connected; host unchanged
+    const rematchCode = guestLobby.room.code;
+    expect(rematchCode).not.toBe(code); // a brand-new room, not the finished one
+    expect(guestLobby.room.runId).not.toBe(wipedRun); // a fresh run
+    expect(guestLobby.room.hostSeatId).toBe(guestLobby.room.yourSeatId); // first clicker hosts
+    expect(rooms.get(rematchCode)?.listed).toBe(false); // private: hidden from the browser/quickMatch
+    expect(rooms.get(code)?.rematchCode).toBe(rematchCode); // the finished room funnels later clickers here
+    expect(loadRun(wipedRun)?.active).toBe(0); // the wiped run stays final
+
+    // The host then clicks Play Again -> regroups into the SAME rematch lobby (not a second room).
+    host.mark();
+    host.send({ type: "playAgain" });
+    await host.nextOf("welcome", { fromNow: true, timeoutMs: 6000 });
+    const hostLobby = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "lobby",
+      { consumeBuffered: false, timeoutMs: 6000 },
+    );
+    expect(hostLobby.room.code).toBe(rematchCode); // same shared lobby
+    expect(hostLobby.room.seats.filter((s) => s.state !== "open").length).toBe(2); // both regrouped
 
     host.close();
     guest.close();

@@ -148,6 +148,8 @@ export class InventoryScreen implements Screen {
     this.ctx = this.canvas.getContext("2d")!;
     wrapper.appendChild(this.canvas);
 
+    if (import.meta.env.DEV) wrapper.appendChild(this.buildExportButton());
+
     this.statsPanel = document.createElement("div");
     Object.assign(this.statsPanel.style, {
       display: "none",
@@ -185,6 +187,34 @@ export class InventoryScreen implements Screen {
       close: () => this.onCloseCallback?.(),
       draw: () => this.draw(),
     });
+  }
+
+  /** Dev tool: copy the current loadout as a STARTER_PRESETS-shaped blob (equipped/bag IDs + the
+   *  computed attachments). Position items in the editor, then paste this into a preset definition. */
+  private buildExportButton(): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.textContent = "Export preset JSON";
+    Object.assign(btn.style, {
+      position: "absolute", bottom: "0", left: "100%", marginLeft: "16px",
+      padding: "8px 12px", background: "#3a5a3a", color: "#d4c4a8",
+      border: "2px solid #6b8c4a", borderRadius: "6px", cursor: "pointer",
+      fontFamily: "monospace", fontSize: "12px", whiteSpace: "nowrap",
+    });
+    btn.addEventListener("click", () => {
+      const inv = this.inventory;
+      if (!inv) return;
+      const blob = {
+        equippedIds: inv.equipped.map((i) => i.id),
+        bagIds: inv.bag.filter((i): i is ItemDefinition => i !== null).map((i) => i.id),
+        attachments: inv.attachments,
+      };
+      const json = JSON.stringify(blob, null, 2);
+      navigator.clipboard.writeText(json).then(
+        () => { btn.textContent = "Copied!"; setTimeout(() => { btn.textContent = "Export preset JSON"; }, 1200); },
+        () => { console.log(json); btn.textContent = "See console"; setTimeout(() => { btn.textContent = "Export preset JSON"; }, 1200); },
+      );
+    });
+    return btn;
   }
 
   private updateAttachment(itemId: string, panelPos: ItemPosition, item: ItemDefinition) {
