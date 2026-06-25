@@ -9,8 +9,9 @@
  * IMPORTANT: the server is imported DYNAMICALLY *after* env is set — a static import would hoist
  * above the env assignments and open the DB / pick the port too early.
  */
-import type { ClientMessage, ServerMessage, ServerMessageType, ClientId } from "shared";
+import type { ClientMessage, ServerEnvelope, ServerMessage, ServerMessageType, ClientId, RoomCode, WireLogRecord } from "shared";
 import { PROTOCOL_VERSION } from "shared";
+import { eventLog } from "../event-log.js";
 
 // A per-process base port derived from the PID, so if `bun test` ever forks files into separate
 // processes they will not collide. Within ONE process, index.ts binds Bun.serve exactly once
@@ -55,6 +56,8 @@ export interface MockClient {
   readonly ws: WebSocket;
   /** All messages received, in order. */
   readonly inbox: ServerMessage[];
+  /** Raw server envelopes received, in order. */
+  readonly envelopes: ServerEnvelope[];
   send(msg: ClientMessage): void;
   /** Resolve with the next (or already-buffered) message matching `pred`. */
   waitFor<T extends ServerMessage>(
@@ -84,6 +87,7 @@ export function connectClient(server: HarnessServer, clientId?: ClientId): Promi
   const id = clientId ?? `client-${++clientSeq}-${Math.random().toString(36).slice(2, 8)}`;
   const ws = new WebSocket(server.url);
   const inbox: ServerMessage[] = [];
+  const envelopes: ServerEnvelope[] = [];
   type Waiter = { pred: (m: ServerMessage) => boolean; resolve: (m: ServerMessage) => void; reject: (e: Error) => void };
   const waiters: Waiter[] = [];
   let cursor = 0; // index into inbox; nextOf(fromNow) advances this
@@ -93,7 +97,9 @@ export function connectClient(server: HarnessServer, clientId?: ClientId): Promi
 
   ws.addEventListener("message", (ev: MessageEvent) => {
     const data = typeof ev.data === "string" ? ev.data : String(ev.data);
-    const msg = JSON.parse(data) as ServerMessage;
+    const env = JSON.parse(data) as ServerEnvelope;
+    envelopes.push(env);
+    const msg = env.msg;
     inbox.push(msg);
     for (let i = waiters.length - 1; i >= 0; i--) {
       if (waiters[i]!.pred(msg)) {
@@ -108,6 +114,7 @@ export function connectClient(server: HarnessServer, clientId?: ClientId): Promi
     clientId: id,
     ws,
     inbox,
+    envelopes,
     send(msg) {
       ws.send(JSON.stringify(msg));
     },
@@ -192,6 +199,18 @@ export async function hello(
 }
 
 /** Small sleep helper for letting timers / event-loop turns flush. */
+export function timeline(room?: RoomCode): WireLogRecord[] {
+  return eventLog.recent(room ? { room } : undefined);
+}
+
+export function persistedTimeline(room?: RoomCode): WireLogRecord[] {
+  return eventLog.persisted(room ? { room } : undefined);
+}
+
+export function clearTimeline(): void {
+  eventLog.clear();
+}
+
 export function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }

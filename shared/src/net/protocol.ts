@@ -11,7 +11,7 @@ import type { SerializedGameState } from "../core/serialization.js";
 import type { InventoryState, AttachmentData } from "../core/inventory.js";
 import type { HexCoord, HexMapState } from "../map/hex-map.js";
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 // --- Identity / seats ---
 export type SeatId = "s0" | "s1" | "s2" | "s3"; // "s{index}", index-stable for the room's life
@@ -185,3 +185,68 @@ export type ServerMessage =
   | { type: "error"; code: ErrorCode; message: string; recoverable: boolean };
 
 export type ServerMessageType = ServerMessage["type"];
+
+/** Transport envelope for every server -> client message. ServerMessage shapes stay unchanged. */
+export interface ServerEnvelope {
+  readonly seq: number;
+  /** Per-process/server monotonic emit ordinal, not wall-clock time. */
+  readonly t: number;
+  readonly msg: ServerMessage;
+}
+
+export interface EventSummary {
+  readonly kind: GameEvent["type"];
+  readonly actor?: EntityId;
+  readonly target?: EntityId;
+  readonly amount?: number;
+}
+
+export interface WireLogRecord {
+  readonly dir: "send" | "recv";
+  readonly seq: number;
+  readonly t: number;
+  readonly room?: RoomCode;
+  readonly runId?: number;
+  readonly seatId?: SeatId;
+  readonly type: ServerMessageType;
+  readonly actionCount?: number;
+  readonly events?: readonly EventSummary[];
+  readonly combatPhase?: string;
+  readonly queueDepth?: number;
+  readonly note?: string;
+}
+
+export function summarizeEvent(ev: GameEvent): EventSummary {
+  switch (ev.type) {
+    case "attack": {
+      const firstHit = ev.hits[0];
+      return {
+        kind: ev.type,
+        actor: ev.attackerId,
+        target: firstHit?.targetId,
+        amount: firstHit?.damage,
+      };
+    }
+    case "move":
+    case "barrier":
+    case "knockback":
+    case "pull":
+    case "statusApplied":
+    case "collision":
+    case "zoneTick":
+      return {
+        kind: ev.type,
+        actor: ev.entityId,
+        amount: ev.type === "collision" ? ev.damage : ev.type === "zoneTick" ? ev.magnitude : undefined,
+      };
+    case "spawn":
+      return { kind: ev.type, actor: ev.entityId };
+    case "endTurn":
+    case "turnStart":
+      return { kind: ev.type };
+    case "zoneCreated":
+      return { kind: ev.type };
+    case "zoneExpired":
+      return { kind: ev.type };
+  }
+}

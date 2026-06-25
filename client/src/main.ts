@@ -203,7 +203,7 @@ async function init() {
     if (msg.seatId !== seat.mySeatId) return;
     if (activeDefendPromptId === msg.promptId) return;
     activeDefendPromptId = msg.promptId;
-    await waitForIdle(combatRenderer);
+    await waitForIdle(combatRenderer, combatStore);
     const power = await defendPrompt.run({
       promptId: msg.promptId,
       attackerId: msg.attackerId,
@@ -330,7 +330,7 @@ async function init() {
     // the combat animation queue drains (combatEnd gate) so the final death/clear animation plays out.
     if (screens.isActive("inventory")) return;
     if (combatActive && leavingCombat && (phase === "overworld" || phase === "gameover")) {
-      waitForIdle(combatRenderer).then(() => {
+      waitForIdle(combatRenderer, combatStore).then(() => {
         leavingCombat = false;
         switchForPhase(phase);
       });
@@ -374,10 +374,17 @@ async function init() {
   route();
 }
 
-function waitForIdle(renderer: GameRenderer): Promise<void> {
+/**
+ * Resolve once combat is fully at rest: the network batch queue has drained AND no visual is
+ * mid-animation. Gating on `store.isIdle()` (not just the renderer) is load-bearing — the server
+ * broadcasts a whole enemy sweep synchronously before a `defendPrompt`, so when the prompt lands
+ * the move that precedes the attack is still queued. Waiting only on `renderer.isAnimating()` would
+ * resolve in the gap between batches and fire the attack telegraph over the un-played move.
+ */
+function waitForIdle(renderer: GameRenderer, store: CombatStore): Promise<void> {
   return new Promise((resolve) => {
     const check = () => {
-      if (!renderer.isAnimating()) resolve();
+      if (store.isIdle() && !renderer.isAnimating()) resolve();
       else requestAnimationFrame(check);
     };
     requestAnimationFrame(check);

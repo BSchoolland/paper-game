@@ -28,6 +28,7 @@ import {
   isPlayerPhaseOver,
   heroExhausted,
   resolveVote,
+  PROTOCOL_VERSION,
 } from "shared";
 import type { Room, Seat, DefendRound, DefendTarget, MovementVote } from "./room.js";
 import { seatBuildSpec, sovereignFor } from "./room.js";
@@ -94,8 +95,8 @@ const ORIGIN: HexCoord = { q: 0, r: 0 };
  * connected seat in the room.
  */
 export interface RoomIO {
-  send(seat: Seat, msg: ServerMessage): void;
-  broadcast(room: Room, msg: ServerMessage): void;
+  send(seat: Seat, msg: ServerMessage, note?: string): void;
+  broadcast(room: Room, msg: ServerMessage, note?: string): void;
 }
 
 // =====================================================================================
@@ -117,7 +118,7 @@ function seatInfo(room: Room, seat: Seat): SeatInfo {
 /** The lobby/roster + phase snapshot for a given seat (R1). `forSeat` fills `yourSeatId`. */
 export function roomStatePayload(room: Room, forSeat: Seat | null): RoomStatePayload {
   return {
-    protocolVersion: 1,
+    protocolVersion: PROTOCOL_VERSION,
     code: room.code,
     phase: room.phase,
     hostSeatId: room.hostSeatId,
@@ -174,13 +175,13 @@ export function broadcastCoopStatus(room: Room, io: RoomIO): void {
   io.broadcast(room, { type: "coopStatus", coop: coopStatusPayload(room) });
 }
 
-export function broadcastState(room: Room, io: RoomIO, events: readonly GameEvent[]): void {
+export function broadcastState(room: Room, io: RoomIO, events: readonly GameEvent[], note?: string): void {
   if (!room.session) return;
   io.broadcast(room, {
     type: "state",
     state: room.session.serialize() as SerializedGameState,
     events,
-  });
+  }, note ?? (events.length === 0 ? "state-empty" : undefined));
 }
 
 export function sendInventory(room: Room, io: RoomIO, seat: Seat): void {
@@ -628,11 +629,16 @@ export function openDefendRound(
   for (const entityId of promptStep.targetIds) {
     const seat = room.seats.find((s) => s.heroEntityId === entityId);
     if (!seat) continue; // an enemy/non-seat target carries neutral defense by omission
+    // Only a seat a human might still answer for stays `pending`: connected (will answer) or
+    // disconnected (may reclaim and answer within the timeout, R11). A bot/open seat never answers,
+    // so default it to neutral NOW — otherwise a mixed bot+human round can't resolve until the full
+    // DEFEND_TIMEOUT_MS even after every human has answered (it would wait on the bot's dead target).
+    const awaitsHuman = seat.state === "human-connected" || seat.state === "human-disconnected";
     targets.push({
       promptId: `${promptStep.roundId}:${seat.seatId}`,
       entityId,
       seatId: seat.seatId,
-      status: "pending",
+      status: awaitsHuman ? "pending" : "answered",
       // Neutral / no-defense default = power 0. `defenseToMultiplier(0) === 1` (full damage); a
       // bot/disconnected/timed-out defender that never answers takes the full hit. (power 1.0 would
       // map to the "perfect" tier => 0 damage, i.e. invulnerable — the inverse of neutral. R11.)
@@ -666,7 +672,7 @@ export function openDefendRound(
         attackerPosition: round.attackerPosition,
         aimDirection: round.aimDirection,
         ability: round.ability,
-      });
+      }, "defend-wait");
     }
   }
   broadcastCoopStatus(room, io);

@@ -1,5 +1,7 @@
-import type { EntityId, GameState, GameEvent, PlayerAction, WireAction } from "shared";
+import type { EntityId, GameState, GameEvent, PlayerAction, WireAction, WireLogRecord } from "shared";
+import { summarizeEvent } from "shared";
 import { deserializeGameState } from "shared/src/core/serialization.js";
+import { clientEventLog } from "../net/client-event-log.js";
 import type { RoomConnection } from "../net/connection.js";
 import type { SeatContext } from "./seat-context.js";
 import type { GameStore } from "./game-store.js";
@@ -45,7 +47,15 @@ export class CombatStore implements GameStore {
     const newState = deserializeGameState(serialized);
 
     // Ignore any snapshot older than what we already display (out-of-order / dup).
-    if (this.displayState && newState.actionCount < this.displayState.actionCount) return;
+    if (this.displayState && newState.actionCount < this.displayState.actionCount) {
+      this.logStateDecision("dropped-stale", newState, events);
+      console.warn("[combat-store] dropped stale state", {
+        incomingActionCount: newState.actionCount,
+        displayActionCount: this.displayState.actionCount,
+      });
+      if (import.meta.env.DEV) throw new Error(`Stale combat state: ${newState.actionCount} < ${this.displayState.actionCount}`);
+      return;
+    }
 
     if (this.snapshotIsMyAction(this.displayState, newState, events)) this.notifySelfActed();
 
@@ -62,6 +72,7 @@ export class CombatStore implements GameStore {
     }
 
     if (events.length === 0) {
+      this.logStateDecision("queue-wipe", newState, events);
       this.queue.length = 0;
       this.displayState = newState;
       this.notify();
@@ -90,6 +101,7 @@ export class CombatStore implements GameStore {
 
     const next = this.queue.shift()!;
     this.displayState = next.state;
+    this.logStateDecision("drain", next.state, next.events);
 
     for (const listener of this.eventListeners) {
       listener(next.events);
@@ -97,6 +109,21 @@ export class CombatStore implements GameStore {
     this.notify();
 
     this.waitForAnimations(() => this.processNext());
+  }
+
+  private logStateDecision(note: string, state: GameState, events: readonly GameEvent[]): void {
+    const env = this.conn.currentServerEnvelope();
+    const record: WireLogRecord = {
+      dir: "recv",
+      seq: env?.seq ?? 0,
+      t: env?.t ?? 0,
+      type: "state",
+      actionCount: state.actionCount,
+      events: events.map(summarizeEvent),
+      queueDepth: this.queue.length,
+      note,
+    };
+    clientEventLog.record(record);
   }
 
   private waitForAnimations(cb: () => void) {
@@ -119,6 +146,11 @@ export class CombatStore implements GameStore {
 
   hasState(): boolean {
     return this.displayState !== null;
+  }
+
+  /** True once every received batch has finished animating: queue empty and not mid-drain. */
+  isIdle(): boolean {
+    return this.queue.length === 0 && !this.draining;
   }
 
   getState(): GameState | null {

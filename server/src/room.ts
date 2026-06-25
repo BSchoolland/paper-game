@@ -41,6 +41,7 @@ export interface SocketData {
   sessionToken: SessionToken;
   roomCode: RoomCode | null;
   seatId: SeatId | null;
+  seq: number;
 }
 
 export interface Seat {

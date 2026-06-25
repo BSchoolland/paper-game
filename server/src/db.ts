@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { HexCoord, HexStatus, UnitTemplate, ItemDefinition, InventoryState, AttachmentData } from "shared";
-import type { StructureEntry, Dimension, MapManifest } from "shared";
+import type { StructureEntry, Dimension, MapManifest, RoomCode, WireLogRecord } from "shared";
 
 const PUBLIC_DIR = resolve(import.meta.dir, "../../client/public");
 
@@ -58,6 +58,23 @@ db.exec(`
     FOREIGN KEY (dimension_id) REFERENCES dimensions(id)
   )
 `);
+db.exec(`
+  CREATE TABLE IF NOT EXISTS wire_log_records (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    t           INTEGER NOT NULL,
+    dir         TEXT NOT NULL,
+    seq         INTEGER NOT NULL,
+    room        TEXT,
+    run_id      INTEGER,
+    seat_id     TEXT,
+    type        TEXT NOT NULL,
+    action_count INTEGER,
+    note        TEXT,
+    record_json TEXT NOT NULL
+  )
+`);
+db.exec("CREATE INDEX IF NOT EXISTS idx_wire_log_records_room_t ON wire_log_records(room, t)");
+db.exec("CREATE INDEX IF NOT EXISTS idx_wire_log_records_t ON wire_log_records(t)");
 
 // --- Multiplayer co-op durable schema migration (PERSISTENCE.md; supersedes R13) ---
 // DISCOVERY (community fog-of-war) is GLOBAL per dimension and permanent; CLEARED-THIS-RUN
@@ -186,6 +203,47 @@ const SCHEMA_VERSION = 3;
     );
     db.exec("PRAGMA user_version = 5");
   }
+}
+
+
+// --- Wire event log persistence ---
+
+const insertWireLogRecordStmt = db.prepare(
+  "INSERT INTO wire_log_records (t, dir, seq, room, run_id, seat_id, type, action_count, note, record_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+);
+const recentWireLogRecordsStmt = db.prepare(
+  "SELECT record_json FROM wire_log_records ORDER BY t DESC, id DESC LIMIT ?",
+);
+const recentWireLogRecordsByRoomStmt = db.prepare(
+  "SELECT record_json FROM wire_log_records WHERE room = ? ORDER BY t DESC, id DESC LIMIT ?",
+);
+const clearWireLogRecordsStmt = db.prepare("DELETE FROM wire_log_records");
+
+export function saveWireLogRecord(record: WireLogRecord): void {
+  insertWireLogRecordStmt.run(
+    record.t,
+    record.dir,
+    record.seq,
+    record.room ?? null,
+    record.runId ?? null,
+    record.seatId ?? null,
+    record.type,
+    record.actionCount ?? null,
+    record.note ?? null,
+    JSON.stringify(record),
+  );
+}
+
+export function loadWireLogRecords(filter?: { room?: RoomCode; limit?: number }): WireLogRecord[] {
+  const limit = filter?.limit ?? 2000;
+  const rows = (filter?.room
+    ? recentWireLogRecordsByRoomStmt.all(filter.room, limit)
+    : recentWireLogRecordsStmt.all(limit)) as { record_json: string }[];
+  return rows.reverse().map((row) => JSON.parse(row.record_json) as WireLogRecord);
+}
+
+export function clearWireLogRecords(): void {
+  clearWireLogRecordsStmt.run();
 }
 
 // --- Discovery: GLOBAL community fog-of-war, keyed by dimension, permanent + append-only. ---

@@ -2,6 +2,8 @@ import type { ServerWebSocket } from "bun";
 import type {
   ClientMessage,
   ServerMessage,
+  ServerEnvelope,
+  WireLogRecord,
   ClientId,
   SessionToken,
   RoomCode,
@@ -11,7 +13,7 @@ import type {
   HexIconType,
   HexCoord,
 } from "shared";
-import { PROTOCOL_VERSION, getAnimSet, hexKey, getHexIcon, isDecorationHex } from "shared";
+import { PROTOCOL_VERSION, getAnimSet, hexKey, getHexIcon, isDecorationHex, summarizeEvent } from "shared";
 import { loadDimension, loadEnemyTemplateRegistry, loadItems } from "./db.js";
 import {
   startNewRun,
@@ -33,6 +35,9 @@ import {
   newTokenSalt,
   mintSessionToken,
   verifySessionToken,
+  saveWireLogRecord,
+  loadWireLogRecords,
+  clearWireLogRecords,
 } from "./db.js";
 import { rooms } from "./room-registry.js";
 import {
@@ -79,6 +84,13 @@ import { seedDimension501 } from "./seed-dimension-501.js";
 import { equipFromBag, unequipItem } from "shared";
 import { join } from "path";
 import { existsSync } from "fs";
+import { eventLog } from "./event-log.js";
+
+eventLog.setPersister({
+  save: saveWireLogRecord,
+  recent: loadWireLogRecords,
+  clear: clearWireLogRecords,
+});
 
 export function initSeeds(): void {
   seedDimension0();
@@ -120,20 +132,50 @@ const QUICKMATCH_CAPACITY: RoomCapacity = 4; // quick-match creates a 4-seat roo
 // RoomIO — the WS transport the machine drives through (it never touches sockets itself).
 // =====================================================================================
 
+let emitOrdinal = 0;
+
+function nextT(): number {
+  return ++emitOrdinal;
+}
+
+function buildSendRecord(ws: ServerWebSocket<SocketData>, env: ServerEnvelope, note?: string): WireLogRecord {
+  const room = ws.data.roomCode ? rooms.get(ws.data.roomCode) : null;
+  const stateMsg = env.msg.type === "state" ? env.msg : null;
+  return {
+    dir: "send",
+    seq: env.seq,
+    t: env.t,
+    room: ws.data.roomCode ?? undefined,
+    runId: room?.runId,
+    seatId: ws.data.seatId ?? undefined,
+    type: env.msg.type,
+    actionCount: stateMsg?.state.actionCount,
+    events: stateMsg?.events.map(summarizeEvent),
+    combatPhase: room?.combat?.step.kind,
+    note,
+  };
+}
+
+function emit(ws: ServerWebSocket<SocketData>, msg: ServerMessage, note?: string): void {
+  const seq = ++ws.data.seq;
+  const env: ServerEnvelope = { seq, t: nextT(), msg };
+  ws.send(JSON.stringify(env));
+  eventLog.record(buildSendRecord(ws, env, note));
+}
+
 const io: RoomIO = {
-  send(seat: Seat, msg: ServerMessage): void {
-    seat.socket?.send(JSON.stringify(msg));
+  send(seat: Seat, msg: ServerMessage, note?: string): void {
+    if (seat.socket) emit(seat.socket, msg, note);
   },
-  broadcast(room: Room, msg: ServerMessage): void {
-    const json = JSON.stringify(msg);
+  broadcast(room: Room, msg: ServerMessage, note?: string): void {
     for (const seat of room.seats) {
-      if (seat.socket) seat.socket.send(json);
+      if (seat.socket) emit(seat.socket, msg, note);
     }
   },
 };
 
-function sendTo(ws: ServerWebSocket<SocketData>, msg: ServerMessage): void {
-  ws.send(JSON.stringify(msg));
+function sendTo(ws: ServerWebSocket<SocketData>, msg: ServerMessage, note?: string): void {
+  emit(ws, msg, note);
 }
 
 /** Reap callback: tear down a room's timers + registry entry (R19/R31). Durable rows untouched.
@@ -239,7 +281,7 @@ function sendSeatSnapshots(room: Room, seat: Seat): void {
   }
   sendInventory(room, io, seat);
   if (room.phase === "combat" && room.session) {
-    io.send(seat, { type: "state", state: room.session.serialize() as import("shared").SerializedGameState, events: [] });
+    io.send(seat, { type: "state", state: room.session.serialize() as import("shared").SerializedGameState, events: [] }, "snapshot");
     io.send(seat, { type: "coopStatus", coop: coopStatusPayload(room) });
     // After the state + coopStatus are in flight, re-send any defend prompt this seat still owes so
     // a human who reconnected mid-round can answer it (R11 / DESIGN §5), not just see it pending.
@@ -831,11 +873,22 @@ export const server = Bun.serve({
     if (url.pathname === "/health") {
       return Response.json({ status: "ok", uptime: process.uptime() });
     }
+    if (url.pathname === "/api/wire-log") {
+      const limitRaw = Number(url.searchParams.get("limit") ?? "200");
+      const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(2000, Math.floor(limitRaw))) : 200;
+      const room = url.searchParams.get("room") ?? undefined;
+      // Serve the in-memory ring by default — it's populated in every dev sink (`ring`/`stdout`/`db`),
+      // so the log is reachable without forcing `MP_EVENT_LOG=db`. `?persisted=1` reads the DB instead
+      // (survives restarts; only written when the sink is `db`).
+      const usePersisted = url.searchParams.get("persisted") === "1";
+      const records = usePersisted ? eventLog.persisted({ room, limit }) : eventLog.recent({ room, limit });
+      return Response.json(records, { headers: CORS_HEADERS });
+    }
     if (url.pathname === "/ws") {
       // Identity comes from the `hello` message, never from query params (ruling R22). `?dim=` is
       // tolerated only as an asset-preload hint and ignored for identity here.
       const upgraded = server.upgrade(req, {
-        data: { clientId: "", sessionToken: "", roomCode: null, seatId: null } as SocketData,
+        data: { clientId: "", sessionToken: "", roomCode: null, seatId: null, seq: 0 } as SocketData,
       });
       if (!upgraded)
         return new Response("WebSocket upgrade failed", { status: 400 });
@@ -902,7 +955,7 @@ export const server = Bun.serve({
 
   websocket: {
     open(ws: ServerWebSocket<SocketData>) {
-      ws.data = { clientId: "", sessionToken: "", roomCode: null, seatId: null };
+      ws.data = { clientId: "", sessionToken: "", roomCode: null, seatId: null, seq: 0 };
     },
 
     message(ws: ServerWebSocket<SocketData>, raw: string | Buffer) {

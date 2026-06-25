@@ -1,6 +1,7 @@
-import type { ClientMessage, ServerMessage, ServerMessageType } from "shared";
-import { PROTOCOL_VERSION } from "shared";
+import type { ClientMessage, ServerEnvelope, ServerMessage, ServerMessageType, WireLogRecord } from "shared";
+import { PROTOCOL_VERSION, summarizeEvent } from "shared";
 import { getClientId, setStoredSeat } from "./player-token.js";
+import { clientEventLog } from "./client-event-log.js";
 
 /** A handler for one server message variant, narrowed to that variant's shape. */
 type Handler<T extends ServerMessageType> = (msg: Extract<ServerMessage, { type: T }>) => void;
@@ -28,6 +29,8 @@ export class RoomConnection {
   private _sessionToken: string | null = null;
   private reconnectAttempts = 0;
   private closedByUs = false;
+  private lastSeq = 0;
+  private dispatchEnvelope: ServerEnvelope | null = null;
 
   constructor(
     private url: string,
@@ -42,6 +45,7 @@ export class RoomConnection {
 
   private open(): void {
     this.notifyStatus(this._welcomed ? "reconnecting" : "connecting");
+    this.lastSeq = 0;
     this.ws = new WebSocket(this.url);
     this.ws.addEventListener("open", () => this.sendHello());
     this.ws.addEventListener("message", (event) => this.handleMessage(event));
@@ -73,7 +77,10 @@ export class RoomConnection {
   }
 
   private handleMessage(event: MessageEvent): void {
-    const msg = JSON.parse(event.data as string) as ServerMessage;
+    const env = JSON.parse(event.data as string) as ServerEnvelope;
+    this.checkSeq(env);
+    clientEventLog.record(this.buildRecvRecord(env));
+    const msg = env.msg;
     if (msg.type === "displaced") {
       // Another tab took this seat; do not fight to reconnect — the user must refresh to re-enter.
       this.closedByUs = true;
@@ -95,7 +102,39 @@ export class RoomConnection {
       this.notifyStatus("open");
     }
     const list = this.handlers.get(msg.type);
-    if (list) for (const h of list) h(msg);
+    if (list) {
+      this.dispatchEnvelope = env;
+      try {
+        for (const h of list) h(msg);
+      } finally {
+        this.dispatchEnvelope = null;
+      }
+    }
+  }
+
+  private checkSeq(env: ServerEnvelope): void {
+    const expected = this.lastSeq + 1;
+    if (env.seq !== expected) {
+      const note = env.seq <= this.lastSeq ? "seq-regress" : "seq-gap";
+      const record = this.buildRecvRecord(env, note);
+      clientEventLog.record(record);
+      console.warn("[wire] server message sequence anomaly", { expected, got: env.seq, record });
+      if (import.meta.env.DEV) throw new Error(`Server message sequence anomaly: expected ${expected}, got ${env.seq}`);
+    }
+    this.lastSeq = env.seq;
+  }
+
+  private buildRecvRecord(env: ServerEnvelope, note?: string): WireLogRecord {
+    const stateMsg = env.msg.type === "state" ? env.msg : null;
+    return {
+      dir: "recv",
+      seq: env.seq,
+      t: env.t,
+      type: env.msg.type,
+      actionCount: stateMsg?.state.actionCount,
+      events: stateMsg?.events.map(summarizeEvent),
+      note,
+    };
   }
 
   /** Subscribe to one server message type with a handler narrowed to that variant. */
@@ -119,6 +158,10 @@ export class RoomConnection {
 
   private notifyStatus(status: ConnectionStatus): void {
     for (const l of this.statusListeners) l(status);
+  }
+
+  currentServerEnvelope(): ServerEnvelope | null {
+    return this.dispatchEnvelope;
   }
 
   send(msg: ClientMessage): void {
