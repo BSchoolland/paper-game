@@ -50,6 +50,38 @@ export function drawRoughPath(
   }
 }
 
+/**
+ * Place jittered dots at a uniform arc-length `spacing` along a polyline. One arc-length cursor
+ * carries across vertices, so dot density is independent of how the line is segmented — a path with
+ * many short segments (e.g. one hugging a wall) gets the same spacing as a straight one, instead of a
+ * dot bunching up at every vertex. Queues circles into `g`; the caller applies the fill.
+ */
+export function drawDottedPolyline(
+  g: Graphics,
+  points: readonly Vec2[],
+  spacing: number,
+  dotRadius: number,
+  jitter: number,
+  seed: number
+) {
+  if (points.length < 2) return;
+  const rng = Rng.seeded(seed, 0);
+  let next = 0; // arc-length of the next dot
+  let acc = 0; // arc-length at the current segment's start
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!, b = points[i + 1]!;
+    const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+    if (segLen < 0.001) continue;
+    const nx = (b.x - a.x) / segLen, ny = (b.y - a.y) / segLen;
+    while (next <= acc + segLen) {
+      const d = next - acc;
+      g.circle(a.x + nx * d + rng.symmetric() * jitter, a.y + ny * d + rng.symmetric() * jitter, dotRadius);
+      next += spacing;
+    }
+    acc += segLen;
+  }
+}
+
 export function drawRoughEllipse(
   g: Graphics,
   cx: number,

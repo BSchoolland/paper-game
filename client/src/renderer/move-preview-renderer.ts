@@ -6,10 +6,10 @@ import {
   moveRadiusOf,
   CELL_WALL,
 } from "shared";
-import { Rng } from "shared";
 import {
   PENCIL,
   drawRoughCircle,
+  drawDottedPolyline,
 } from "./sketch-utils.js";
 
 /**
@@ -39,20 +39,11 @@ export function drawMovePreview(
   if (!displayTarget) return;
 
   const radius = moveRadiusOf(entity);
-  const raw = pathfind(entity.position, displayTarget, grid, radius);
+  // Route as a point (transit radius 0) so the dotted line threads the same sub-body gaps the move
+  // does; smoothing still uses the body radius, so it won't pull the line through a wall corner.
+  const raw = pathfind(entity.position, displayTarget, grid, 0);
   const waypoints: Vec2[] = smoothPath([entity.position, ...raw], grid, radius);
-  const rng = Rng.seeded(42, 0);
-  const dotSpacing = 6;
-  for (let i = 0; i < waypoints.length - 1; i++) {
-    const a = waypoints[i]!, b = waypoints[i + 1]!;
-    const segDx = b.x - a.x, segDy = b.y - a.y;
-    const segLen = Math.hypot(segDx, segDy);
-    if (segLen < 0.001) continue;
-    const nx = segDx / segLen, ny = segDy / segLen;
-    for (let d = 0; d < segLen; d += dotSpacing) {
-      g.circle(a.x + nx * d + rng.symmetric() * 0.8, a.y + ny * d + rng.symmetric() * 0.8, 1.2);
-    }
-  }
+  drawDottedPolyline(g, waypoints, 6, 1.2, 0.8, 42);
   g.fill({ color: PENCIL, alpha: 0.6 });
 
   drawRoughCircle(g, displayTarget.x, displayTarget.y, entity.collisionRadius, 1, 24, 13);

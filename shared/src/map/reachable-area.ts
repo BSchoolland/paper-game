@@ -3,9 +3,11 @@ import { pathfindFlood, type FloodResult } from "./pathfinding.js";
 import { moveRadiusOf } from "../combat/movement.js";
 
 /**
- * The set of tiles a unit can actually *reach* this turn (path distance ≤ move budget, body-clearance),
- * plus a sketched outline of that region for the move-range overlay. This replaces the straight-line
- * range circle: it's the real path-based reachable area, so it deforms around walls and obstacles.
+ * The set of tiles a unit can actually *reach* this turn (path distance ≤ move budget), plus a
+ * sketched outline of that region for the move-range overlay. This replaces the straight-line range
+ * circle: it's the real path-based reachable area, so it deforms around walls and obstacles. Transit
+ * is point-sized (like the AI mover), so the region threads gaps narrower than the body; the body's
+ * full radius only gates where it may *stop* (`flood.pathTo`'s endpoint check).
  *
  * `flood.pathTo(cursor, cap)` snaps a cursor to the nearest reachable tile (use for click/preview);
  * `contours` are closed world-space loops to stroke for the deformed "circle".
@@ -26,7 +28,9 @@ export function reachableArea(
   entities: ReadonlyMap<string, Entity>,
   maxDistance: number,
 ): ReachableArea {
-  const flood = pathfindFlood(entity.position, grid, moveRadiusOf(entity), entities, entity.id, maxDistance, BLOB_STEP);
+  // transitRadius 0: route as a point so the reachable region (and the click-snap built on it) can
+  // thread sub-body corridors, matching the AI mover. moveRadiusOf gates only the stop.
+  const flood = pathfindFlood(entity.position, grid, moveRadiusOf(entity), entities, entity.id, maxDistance, BLOB_STEP, 0);
   const contours = marchingSquares(flood).map((loop) => chaikin(loop, 2));
   return { flood, cap: maxDistance, contours };
 }

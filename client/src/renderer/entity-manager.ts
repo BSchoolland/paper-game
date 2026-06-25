@@ -282,13 +282,13 @@ export class EntityManager {
       case "move": {
         const visual = this.visuals.get(event.entityId);
         if (visual) {
-          // Recompute the body-clearance route locally so playback follows the path around obstacles
-          // instead of sliding straight through them. Only use it if it actually reaches the
-          // destination (an AI unit may have threaded a gap its body can't follow) — else fall back
-          // to a straight tween.
+          // Recompute the route locally (point-sized transit, like the mover) so playback follows the
+          // threaded path around obstacles instead of sliding straight through them. Smoothing uses
+          // the body radius so the drawn motion still hugs corners. Fall back to a straight tween only
+          // if no route exists at all.
           const mover = state.entities.get(event.entityId);
           const radius = mover ? moveRadiusOf(mover) : 16;
-          const route = pathfind(event.from, event.to, state.grid, radius);
+          const route = pathfind(event.from, event.to, state.grid, 0);
           const followsPath = route.length > 0 && distance(route[route.length - 1]!, event.to) < radius;
           const smoothed = followsPath ? smoothPath([event.from, ...route], state.grid, radius) : undefined;
           visual.triggerMove(event.from.x, event.from.y, event.to.x, event.to.y, smoothed);

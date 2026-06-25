@@ -330,17 +330,23 @@ export function pathfindFlood(
   entities: ReadonlyMap<string, Entity>,
   selfId: string,
   maxDistance: number,
-  /** Node spacing override. The flood requires full-body clearance (collisionRadius) at every cell,
-   *  so it never threads sub-body corridors regardless of step — callers that only need reachable
-   *  destinations (e.g. move-candidate generation, deduped to ~8px) pass a coarser step to settle far
-   *  fewer cells with identical post-dedup results. Defaults to the collision cellSize. */
+  /** Node spacing override. Callers that only need reachable destinations (e.g. move-candidate
+   *  generation, deduped to ~8px) pass a coarser step to settle far fewer cells with identical
+   *  post-dedup results. Defaults to the collision cellSize. */
   stepOverride?: number,
+  /** Body radius used for *transit* (the flood expansion). Defaults to `collisionRadius` (full-body
+   *  clearance everywhere). Pass `TRANSIT_RADIUS` to thread sub-body corridors like the AI mover —
+   *  `collisionRadius` then only gates where the body may *stop* (`pathTo`'s endpoint check). */
+  transitRadius: number = collisionRadius,
 ): FloodResult {
   const step = stepOverride ?? pathStep(grid);
   const { pgW, pgH } = pgDims(grid, step);
   const scx = Math.round(from.x / step);
   const scy = Math.round(from.y / step);
   const total = pgW * pgH;
+  // Transit mask gates expansion; stop mask gates where `pathTo` may land the full-radius body.
+  // Identical arrays when transitRadius === collisionRadius (getWalkableMask caches by radius).
+  const stopWalkable = getWalkableMask(grid, collisionRadius, step);
   // gScore must outlive this call (it's captured by the returned FloodResult), so it can't use the
   // shared A* scratch. But we skip the O(N) Infinity fill: a `seen` flag (zero-initialised) marks
   // which cells hold a real score, so unseen cells read as Infinity without ever being written.
@@ -350,14 +356,14 @@ export function pathfindFlood(
   const touched: number[] = [];
   const startIdx = scx * pgH + scy;
   if (scx < 0 || scx >= pgW || scy < 0 || scy >= pgH) {
-    return makeFloodResult(gScore, seen, startIdx, touched, pgW, pgH, step, from, buildBlockers(entities, selfId, collisionRadius));
+    return makeFloodResult(gScore, seen, startIdx, touched, pgW, pgH, step, from, buildBlockers(entities, selfId, collisionRadius), stopWalkable);
   }
   gScore[startIdx] = 0; seen[startIdx] = 1;
   touched.push(startIdx);
   // Blockers are NOT used during expansion (entities don't block transit). They're checked only
   // when selecting the endpoint in `pathTo`.
   const blockers = buildBlockers(entities, selfId, collisionRadius);
-  const walkable = getWalkableMask(grid, collisionRadius, step);
+  const walkable = getWalkableMask(grid, transitRadius, step);
 
   const open = new MinHeap(64);
   open.push(0, startIdx);
@@ -388,11 +394,11 @@ export function pathfindFlood(
     }
   }
 
-  return makeFloodResult(gScore, seen, startIdx, touched, pgW, pgH, step, from, blockers);
+  return makeFloodResult(gScore, seen, startIdx, touched, pgW, pgH, step, from, blockers, stopWalkable);
 }
 
 function makeFloodResult(
-  gScore: Float64Array, seen: Uint8Array, startIdx: number, touched: number[], pgW: number, pgH: number, step: number, from: Vec2, blockers: BlockerArrays,
+  gScore: Float64Array, seen: Uint8Array, startIdx: number, touched: number[], pgW: number, pgH: number, step: number, from: Vec2, blockers: BlockerArrays, stopWalkable: Uint8Array,
 ): FloodResult {
   return {
     gScore,
@@ -406,8 +412,9 @@ function makeFloodResult(
       const tcy = Math.round(target.y / step);
       const tIdx = tcx * pgH + tcy;
       const exactG = tIdx >= 0 && tIdx < gScore.length && seen[tIdx] ? gScore[tIdx] : Infinity;
-      // Exact-goal path is fine only if the endpoint isn't on top of another entity.
-      if (exactG !== undefined && exactG <= maxDist && !overlapsBlocker(target.x, target.y, blockers)) {
+      // Exact-goal path is fine only if the body fits at the stop (clear of walls and other entities);
+      // the cell may be transit-reachable yet too tight to stand in when transitRadius < collisionRadius.
+      if (exactG !== undefined && exactG <= maxDist && stopWalkable[tIdx] === 1 && !overlapsBlocker(target.x, target.y, blockers)) {
         if (distance(target, from) < 1) return null;
         return { x: target.x, y: target.y };
       }
@@ -417,6 +424,7 @@ function makeFloodResult(
       for (let i = 0; i < touched.length; i++) {
         const k = touched[i]!;
         if (gScore[k]! > maxDist) continue;
+        if (stopWalkable[k] !== 1) continue; // body must fit where it stops
         const cx = (k / pgH) | 0;
         const cy = k - cx * pgH;
         const px = cx * step, py = cy * step;
@@ -625,11 +633,13 @@ export interface MovePathPlan {
 }
 
 /**
- * Plan a *path-based* move to `destination`: the shortest route the body (moveRadius) can actually
- * travel, its length (the energy cost), and whether that length is within `maxDistance`. Unlike the
- * AI's point-transit pathing, this requires full move-radius clearance along the whole route, because
- * the unit travels it. The single source of truth shared by the authoritative resolver and the
- * client's preview/prediction, so server cost and client display can't drift.
+ * Plan a *path-based* move to `destination`: the route to it, its length (the energy cost), and
+ * whether that length is within `maxDistance`. Like the AI's mover, transit is point-sized
+ * (`TRANSIT_RADIUS`) so the route may thread any gap narrower than the body; the body only has to
+ * fit where it *stops*, which the full-radius wall/bounds check below (and the resolver's
+ * `canEntityOccupy` entity check) enforce at the destination. The single source of truth shared by
+ * the authoritative resolver and the client's preview/prediction, so server cost and client display
+ * can't drift.
  */
 export function playerMovePath(
   entity: Entity,
@@ -638,15 +648,17 @@ export function playerMovePath(
   maxDistance: number,
 ): MovePathPlan {
   const r = moveRadiusOf(entity);
-  const path = pathfind(entity.position, destination, grid, r, MAX_PATHFIND_NODES, Infinity);
+  const path = pathfind(entity.position, destination, grid, TRANSIT_RADIUS, MAX_PATHFIND_NODES, Infinity);
   if (path.length === 0) return { reachable: false, cost: 0, path: [] };
   let cost = 0;
   let prev = entity.position;
   for (const wp of path) { cost += distance(prev, wp); prev = wp; }
   const end = path[path.length - 1]!;
   // pathfind returns the exact goal as the last waypoint only when it actually reached it; a
-  // best-partial ends short. Reachable iff we reached the destination within the move budget.
-  const reachable = distance(end, destination) < 0.5 && cost <= maxDistance + 0.01;
+  // best-partial ends short. Reachable iff the body fits at the stop AND a point-route gets there
+  // within the move budget.
+  const fitsAtStop = isPositionWalkable(grid, destination, r) && isWithinBounds(grid, destination, r);
+  const reachable = fitsAtStop && distance(end, destination) < 0.5 && cost <= maxDistance + 0.01;
   return { reachable, cost, path };
 }
 
