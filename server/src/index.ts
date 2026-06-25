@@ -2,8 +2,6 @@ import type { ServerWebSocket } from "bun";
 import type {
   ClientMessage,
   ServerMessage,
-  ServerEnvelope,
-  WireLogRecord,
   ClientId,
   SessionToken,
   RoomCode,
@@ -13,7 +11,7 @@ import type {
   HexIconType,
   HexCoord,
 } from "shared";
-import { PROTOCOL_VERSION, getAnimSet, hexKey, getHexIcon, isDecorationHex, summarizeEvent } from "shared";
+import { PROTOCOL_VERSION, getAnimSet, hexKey, getHexIcon, isDecorationHex } from "shared";
 import { loadDimension, loadEnemyTemplateRegistry, loadItems } from "./db.js";
 import {
   startNewRun,
@@ -35,9 +33,6 @@ import {
   newTokenSalt,
   mintSessionToken,
   verifySessionToken,
-  saveWireLogRecord,
-  loadWireLogRecords,
-  clearWireLogRecords,
 } from "./db.js";
 import { rooms } from "./room-registry.js";
 import {
@@ -48,7 +43,6 @@ import {
 } from "./room.js";
 import type { Room, Seat, SocketData } from "./room.js";
 import {
-  type RoomIO,
   disposeRoom,
   broadcastRoomState,
   broadcastCoopStatus,
@@ -85,12 +79,7 @@ import { equipFromBag, unequipItem } from "shared";
 import { join } from "path";
 import { existsSync } from "fs";
 import { eventLog } from "./event-log.js";
-
-eventLog.setPersister({
-  save: saveWireLogRecord,
-  recent: loadWireLogRecords,
-  clear: clearWireLogRecords,
-});
+import { io, sendTo } from "./wire-transport.js";
 
 export function initSeeds(): void {
   seedDimension0();
@@ -127,56 +116,6 @@ const ORIGIN_KEY = hexKey(ORIGIN);
 const DISCOVERY_RADIUS = 15;
 const DEFAULT_DIMENSION = 1;
 const QUICKMATCH_CAPACITY: RoomCapacity = 4; // quick-match creates a 4-seat room when none are open
-
-// =====================================================================================
-// RoomIO — the WS transport the machine drives through (it never touches sockets itself).
-// =====================================================================================
-
-let emitOrdinal = 0;
-
-function nextT(): number {
-  return ++emitOrdinal;
-}
-
-function buildSendRecord(ws: ServerWebSocket<SocketData>, env: ServerEnvelope, note?: string): WireLogRecord {
-  const room = ws.data.roomCode ? rooms.get(ws.data.roomCode) : null;
-  const stateMsg = env.msg.type === "state" ? env.msg : null;
-  return {
-    dir: "send",
-    seq: env.seq,
-    t: env.t,
-    room: ws.data.roomCode ?? undefined,
-    runId: room?.runId,
-    seatId: ws.data.seatId ?? undefined,
-    type: env.msg.type,
-    actionCount: stateMsg?.state.actionCount,
-    events: stateMsg?.events.map(summarizeEvent),
-    combatPhase: room?.combat?.step.kind,
-    note,
-  };
-}
-
-function emit(ws: ServerWebSocket<SocketData>, msg: ServerMessage, note?: string): void {
-  const seq = ++ws.data.seq;
-  const env: ServerEnvelope = { seq, t: nextT(), msg };
-  ws.send(JSON.stringify(env));
-  eventLog.record(buildSendRecord(ws, env, note));
-}
-
-const io: RoomIO = {
-  send(seat: Seat, msg: ServerMessage, note?: string): void {
-    if (seat.socket) emit(seat.socket, msg, note);
-  },
-  broadcast(room: Room, msg: ServerMessage, note?: string): void {
-    for (const seat of room.seats) {
-      if (seat.socket) emit(seat.socket, msg, note);
-    }
-  },
-};
-
-function sendTo(ws: ServerWebSocket<SocketData>, msg: ServerMessage, note?: string): void {
-  emit(ws, msg, note);
-}
 
 /** Reap callback: tear down a room's timers + registry entry (R19/R31). Durable rows untouched.
  *  Used for prior-seat / zombie / race-loser disposal where the run must STAY active. */
