@@ -1,8 +1,7 @@
 import type { Graphics } from "pixi.js";
 import type { Entity, GameState, Vec2 } from "shared";
 import {
-  pathfind,
-  smoothPath,
+  planDisplayRoute,
   moveRadiusOf,
   CELL_WALL,
 } from "shared";
@@ -39,11 +38,8 @@ export function drawMovePreview(
   if (!displayTarget) return;
 
   const radius = moveRadiusOf(entity);
-  // Route as a point (transit radius 0) so the dotted line threads the same sub-body gaps the move
-  // does; smoothing still uses the body radius, so it won't pull the line through a wall corner.
-  const raw = pathfind(entity.position, displayTarget, grid, 0);
-  const waypoints: Vec2[] = smoothPath([entity.position, ...raw], grid, radius);
-  drawDottedPolyline(g, waypoints, 6, 1.2, 0.8, 42);
+  const { smoothed } = planDisplayRoute(entity.position, displayTarget, grid, radius);
+  drawDottedPolyline(g, smoothed, 6, 1.2, 0.8, 42);
   g.fill({ color: PENCIL, alpha: 0.6 });
 
   drawRoughCircle(g, displayTarget.x, displayTarget.y, entity.collisionRadius, 1, 24, 13);

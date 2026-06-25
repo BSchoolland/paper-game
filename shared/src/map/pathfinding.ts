@@ -623,6 +623,26 @@ export function smoothPath(polyline: Vec2[], grid: GridState, radius: number): V
   return pts;
 }
 
+export interface DisplayRoute {
+  /** Point-transit route to the target (excludes the start), empty if none exists. The reachability
+   *  yardstick: does its last waypoint land on the target? */
+  readonly route: Vec2[];
+  /** Body-radius-smoothed polyline through `route`, including the start point — what gets drawn. */
+  readonly smoothed: Vec2[];
+}
+
+/**
+ * The display-side route for a move: how the client draws the preview line and animates playback.
+ * Transit is point-sized (radius 0) so the route threads the same sub-body gaps the authoritative
+ * move does, while smoothing uses the body radius so the drawn line still hugs wall corners. This is
+ * the one place that pairing lives — both the move-preview line and the move-animation playback go
+ * through it, so they can't drift from each other or from the resolver's point-transit pathing.
+ */
+export function planDisplayRoute(from: Vec2, to: Vec2, grid: GridState, radius: number): DisplayRoute {
+  const route = pathfind(from, to, grid, TRANSIT_RADIUS);
+  return { route, smoothed: smoothPath([from, ...route], grid, radius) };
+}
+
 export interface MovePathPlan {
   /** True iff `destination` is reachable by a body-clearance route within the move budget. */
   readonly reachable: boolean;
