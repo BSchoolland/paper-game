@@ -3,7 +3,19 @@ import type { RoomConnection } from "../net/connection.js";
 import type { SeatContext } from "../state/seat-context.js";
 import { clearStoredSeat, getStoredSeat } from "../net/player-token.js";
 import type { RoomBrowserEntry, RoomCapacity } from "shared";
-import { panelCard, btn } from "./ui-kit.js";
+import { assetUrl } from "../renderer/asset-url.js";
+import {
+  THEME,
+  FONT,
+  boardBackdrop,
+  panelCard,
+  rule,
+  btn,
+  eyebrow,
+  heading,
+  seatPips,
+  mapIconDot,
+} from "./ui-kit.js";
 
 const LIST_POLL_MS = 3000;
 
@@ -12,6 +24,10 @@ const LIST_POLL_MS = 3000;
  * lobby-phase rooms (polled via `listRooms`), Quick Match (join any open room else create), plus
  * Create (capacity) / Join-by-code / force-reclaim. Owns the join/create error display. main.ts
  * routes here whenever `seat.room` is null (boot with no live game, or after `leftRoom`).
+ *
+ * Layout: a wide dark slate panel split into a left hero/actions column and a right "OPEN ROOMS"
+ * rail. The rail's row list (`browserList`) is repopulated in place on every poll so the
+ * join-by-code input never blurs mid-typing.
  */
 export class HomeScreen implements Screen {
   private container: HTMLDivElement;
@@ -37,14 +53,14 @@ export class HomeScreen implements Screen {
       display: none;
       align-items: center;
       justify-content: center;
-      font-family: monospace;
-      color: #4a3728;
-      background: rgba(26, 20, 14, 0.55);
+      font-family: ${FONT.body};
+      color: ${THEME.parch};
+      background: ${THEME.deep};
     `;
     document.body.appendChild(this.container);
 
     this.browserList = document.createElement("div");
-    this.browserList.style.cssText = "display:flex; flex-direction:column; gap:6px; margin-top:4px;";
+    this.browserList.style.cssText = "display:flex; flex-direction:column; gap:12px; margin-top:18px; flex:1; overflow-y:auto;";
 
     this.conn.on("error", (msg) => {
       switch (msg.code) {
@@ -101,91 +117,184 @@ export class HomeScreen implements Screen {
 
   private render() {
     this.container.innerHTML = "";
-    const card = panelCard();
-    card.style.minWidth = "360px";
-    card.style.maxHeight = "86vh";
-    card.style.overflowY = "auto";
+    this.container.appendChild(boardBackdrop("home"));
 
-    const heading = document.createElement("div");
-    heading.style.cssText = "font-size:22px; font-weight:bold; margin-bottom:2px; text-align:center;";
-    heading.textContent = "Co-op Expedition";
-    card.appendChild(heading);
+    const card = panelCard({ padded: false });
+    card.style.width = "1080px";
+    card.style.maxWidth = "94vw";
+    card.style.maxHeight = "90vh";
 
-    // Force-reclaim a seat the server welcomed us room-less for (live elsewhere, e.g. another tab).
+    const grid = document.createElement("div");
+    grid.style.cssText = `position:relative; display:grid; grid-template-columns:1fr 440px; min-height:560px; max-height:90vh;`;
+
+    grid.appendChild(this.leftColumn());
+    grid.appendChild(this.rightColumn());
+
+    card.appendChild(grid);
+    this.container.appendChild(card);
+  }
+
+  /** Left column: hero copy, reclaim (if any), Quick Match, Create (capacity), Join by code, errors. */
+  private leftColumn(): HTMLDivElement {
+    const left = document.createElement("div");
+    left.style.cssText = `
+      padding:48px 48px 44px; display:flex; flex-direction:column; justify-content:center;
+      overflow-y:auto;
+    `;
+
+    left.appendChild(eyebrow("Cooperative Expedition"));
+    const title = heading("Gather Your Warband", "hero");
+    title.style.marginTop = "10px";
+    title.style.fontSize = "50px";
+    left.appendChild(title);
+
+    const blurb = document.createElement("p");
+    blurb.textContent =
+      "Brave the gateway city together. Form a party of up to four, choose your kits, and march into the painted wilds.";
+    blurb.style.cssText = `margin:18px 0 28px; max-width:440px; font:16px/1.6 ${FONT.body}; color:${THEME.muted};`;
+    left.appendChild(blurb);
+
+    const actions = document.createElement("div");
+    actions.style.cssText = `display:flex; flex-direction:column; gap:14px; max-width:420px;`;
+
+    // ── Reclaim a seat the server welcomed us room-less for (live elsewhere) ──
     const stored = getStoredSeat();
     if (stored) {
-      const reclaimBtn = btn("Take over my seat", true);
+      const reclaimBtn = btn("Take over my seat", "primary");
+      reclaimBtn.style.width = "100%";
       reclaimBtn.addEventListener("click", () => {
         this.joinError = "";
         this.conn.send({ type: "reclaimSeat", code: stored.code, seatId: stored.seatId, force: true });
       });
-      card.appendChild(reclaimBtn);
+      actions.appendChild(reclaimBtn);
 
       const forget = document.createElement("button");
       forget.tabIndex = -1;
       forget.textContent = "(start fresh instead)";
-      forget.style.cssText = "background:none; border:none; color:#8a7a68; font-family:monospace; font-size:11px; cursor:pointer;";
-      forget.addEventListener("click", () => { clearStoredSeat(); this.render(); });
-      card.appendChild(forget);
-      card.appendChild(divider());
+      forget.style.cssText = `
+        align-self:center; background:none; border:none; cursor:pointer;
+        font:600 11px ${FONT.body}; letter-spacing:1px; color:${THEME.muted};
+      `;
+      forget.addEventListener("click", () => {
+        clearStoredSeat();
+        this.render();
+      });
+      actions.appendChild(forget);
+      actions.appendChild(rule());
     }
 
-    // Quick Match: join any open room, else create one (server-side).
-    const quickBtn = btn("⚡ Quick Match", true);
+    // ── Quick Match ──
+    const quickBtn = btn("Quick Match", "primary");
+    quickBtn.style.width = "100%";
+    quickBtn.style.fontSize = "18px";
+    quickBtn.style.padding = "17px 26px";
     quickBtn.addEventListener("click", () => {
       this.joinError = "";
       this.conn.send({ type: "quickMatch", dimensionId: this.dimensionId });
     });
-    card.appendChild(quickBtn);
+    actions.appendChild(quickBtn);
 
-    this.populateBrowser();
-    card.appendChild(this.browserList);
-    card.appendChild(divider());
+    actions.appendChild(this.createBlock());
+    actions.appendChild(this.joinBlock());
 
-    // Create
-    const createLabel = document.createElement("div");
-    createLabel.style.cssText = "font-size:13px;";
-    createLabel.textContent = "Create a party";
-    card.appendChild(createLabel);
+    if (this.joinError) actions.appendChild(this.errorBox());
+
+    left.appendChild(actions);
+    return left;
+  }
+
+  /** Create a party: a 2/3/4 capacity segmented control + Create room button. */
+  private createBlock(): HTMLDivElement {
+    const block = document.createElement("div");
+    block.style.cssText = "display:flex; flex-direction:column; gap:10px; margin-top:4px;";
+
+    const label = document.createElement("div");
+    label.style.cssText = `font:600 12px ${FONT.body}; text-transform:uppercase; letter-spacing:0.2em; color:${THEME.faint};`;
+    label.textContent = "Create a party";
+    block.appendChild(label);
 
     const capRow = document.createElement("div");
-    capRow.style.cssText = "display:flex; gap:8px;";
-    const capButtons: HTMLButtonElement[] = [];
-    for (const n of [2, 3, 4] as RoomCapacity[]) {
-      const b = btn(`${n}`);
-      b.style.flex = "1";
-      if (n === this.capacity) b.style.outline = "2px solid #4a3728";
-      b.addEventListener("click", () => {
+    capRow.style.cssText = `display:flex; border:1px solid ${THEME.goldLine}; border-radius:8px; overflow:hidden; background:rgba(11,9,6,0.4);`;
+    const applyCapSkin = (seg: HTMLButtonElement, n: RoomCapacity) => {
+      const on = n === this.capacity;
+      seg.style.background = on ? "linear-gradient(180deg, rgba(184,137,58,0.35), rgba(184,137,58,0.15))" : "transparent";
+      const lbl = seg.firstElementChild as HTMLElement;
+      lbl.style.color = on ? THEME.gold : THEME.muted;
+      const pips = seg.lastElementChild as HTMLElement;
+      pips.style.opacity = on ? "1" : ".5";
+    };
+    const capValues: RoomCapacity[] = [2, 3, 4];
+    const capSegs: HTMLButtonElement[] = [];
+    for (const n of capValues) {
+      const seg = document.createElement("button");
+      seg.tabIndex = -1;
+      seg.style.cssText = `
+        flex:1; cursor:pointer; border:none; background:transparent;
+        padding:10px 6px;
+        display:flex; flex-direction:column; align-items:center; gap:6px;
+        ${n !== 4 ? `border-right:1px solid ${THEME.goldLine};` : ""}
+        transition:background .12s;
+      `;
+      const segLabel = document.createElement("div");
+      segLabel.textContent = `${n}`;
+      segLabel.style.cssText = `font:700 16px ${FONT.cinzel};`;
+      const pips = document.createElement("div");
+      pips.appendChild(seatPips(n, n));
+      pips.style.cssText = "display:flex; justify-content:center;";
+      seg.append(segLabel, pips);
+      applyCapSkin(seg, n);
+      seg.addEventListener("click", () => {
         this.capacity = n;
-        for (const cb of capButtons) cb.style.outline = "none";
-        b.style.outline = "2px solid #4a3728";
+        capSegs.forEach((s, i) => applyCapSkin(s, capValues[i]!));
       });
-      capButtons.push(b);
-      capRow.appendChild(b);
+      capSegs.push(seg);
+      capRow.appendChild(seg);
     }
-    card.appendChild(capRow);
+    block.appendChild(capRow);
 
-    const createBtn = btn("Create room", true);
+    const createBtn = btn("Create Room", "secondary");
+    createBtn.style.width = "100%";
     createBtn.addEventListener("click", () => {
       this.joinError = "";
       this.conn.send({ type: "createRoom", capacity: this.capacity, dimensionId: this.dimensionId });
     });
-    card.appendChild(createBtn);
+    block.appendChild(createBtn);
+    return block;
+  }
 
-    card.appendChild(divider());
+  /** Join by code: glyph + spaced uppercase input + Join button. Input must survive polls (see render). */
+  private joinBlock(): HTMLDivElement {
+    const block = document.createElement("div");
+    block.style.cssText = "display:flex; flex-direction:column; gap:10px; margin-top:4px;";
 
-    // Join by code
+    const label = document.createElement("div");
+    label.style.cssText = `font:600 12px ${FONT.body}; text-transform:uppercase; letter-spacing:0.2em; color:${THEME.faint};`;
+    label.textContent = "Join by code";
+    block.appendChild(label);
+
+    const codeRow = document.createElement("div");
+    codeRow.style.cssText = "display:flex; align-items:center; gap:10px;";
+    codeRow.appendChild(mapIconDot("gateway-city", 44));
+
     const codeInput = document.createElement("input");
-    codeInput.placeholder = "ROOM CODE";
+    codeInput.placeholder = "CODE";
     codeInput.maxLength = 6;
     codeInput.style.cssText = `
-      text-transform: uppercase; letter-spacing: 3px; padding: 10px;
-      font-family: monospace; font-size: 16px; text-align: center;
-      border: 2px solid #6b5b4a; border-radius: 6px; background: #fffaf0; color: #4a3728;
+      flex:1; min-width:0; box-sizing:border-box;
+      text-transform:uppercase; letter-spacing:6px; padding:13px 14px;
+      font:600 18px ${FONT.cinzel}; text-align:center;
+      border:1px solid ${THEME.goldLine}; border-radius:8px;
+      background:rgba(11,9,6,0.5); color:${THEME.gold};
+      box-shadow:inset 0 2px 6px rgba(0,0,0,0.4);
     `;
-    card.appendChild(codeInput);
+    codeInput.addEventListener("focus", () => {
+      codeInput.style.borderColor = THEME.gold;
+    });
+    codeInput.addEventListener("blur", () => {
+      codeInput.style.borderColor = THEME.goldLine;
+    });
 
-    const joinBtn = btn("Join by code");
+    const joinBtn = btn("Join by Code", "secondary");
     const doJoin = () => {
       const code = codeInput.value.trim().toUpperCase();
       if (code.length === 0) return;
@@ -193,17 +302,68 @@ export class HomeScreen implements Screen {
       this.conn.send({ type: "joinRoom", code });
     };
     joinBtn.addEventListener("click", doJoin);
-    codeInput.addEventListener("keydown", (e) => { if (e.key === "Enter") doJoin(); });
-    card.appendChild(joinBtn);
+    codeInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") doJoin();
+    });
 
-    if (this.joinError) {
-      const err = document.createElement("div");
-      err.style.cssText = "color:#8b3a3a; font-size:12px; text-align:center;";
-      err.textContent = this.joinError;
-      card.appendChild(err);
-    }
+    codeRow.appendChild(codeInput);
+    codeRow.appendChild(joinBtn);
+    block.appendChild(codeRow);
+    return block;
+  }
 
-    this.container.appendChild(card);
+  private errorBox(): HTMLDivElement {
+    const err = document.createElement("div");
+    err.style.cssText = `
+      display:flex; align-items:center; gap:8px; margin-top:2px;
+      padding:10px 14px; border-radius:8px;
+      background:rgba(139,58,58,.18); border:1px solid rgba(199,90,74,.4);
+      color:#f0c0b8; font:13px ${FONT.body};
+    `;
+    const x = document.createElement("span");
+    x.textContent = "✕";
+    x.style.cssText = `font-weight:700; flex:0 0 auto; color:${THEME.danger};`;
+    const text = document.createElement("span");
+    text.textContent = this.joinError;
+    err.append(x, text);
+    return err;
+  }
+
+  /** Right column: the "OPEN ROOMS" rail. The masthead is static; only `browserList` reflows on poll. */
+  private rightColumn(): HTMLDivElement {
+    const right = document.createElement("div");
+    right.style.cssText = `
+      padding:36px 32px; display:flex; flex-direction:column; min-width:0;
+      background:linear-gradient(180deg, rgba(11,9,6,0.55), rgba(11,9,6,0.85));
+      border-left:1px solid ${THEME.goldLine};
+    `;
+
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex; align-items:baseline; justify-content:space-between;";
+    const title = heading("Open Rooms", "section");
+    const refresh = document.createElement("button");
+    refresh.tabIndex = -1;
+    refresh.textContent = "↻ refresh";
+    refresh.style.cssText = `background:none; border:none; cursor:pointer; font:600 11px ${FONT.body}; letter-spacing:1px; color:${THEME.goldDeep};`;
+    refresh.addEventListener("click", () => this.requestList());
+    head.append(title, refresh);
+    right.appendChild(head);
+    right.appendChild(rule());
+
+    this.populateBrowser();
+    right.appendChild(this.browserList);
+
+    const status = document.createElement("div");
+    status.style.cssText = `
+      display:flex; align-items:center; justify-content:center; gap:9px; margin-top:16px; flex:0 0 auto;
+      padding-top:16px; border-top:1px solid rgba(184,137,58,0.2);
+      font:13px ${FONT.body}; color:${THEME.faint};
+    `;
+    status.innerHTML =
+      `<span style="width:8px;height:8px;border-radius:50%;background:${THEME.green};box-shadow:0 0 8px ${THEME.green}"></span>` +
+      `Connected to the realm`;
+    right.appendChild(status);
+    return right;
   }
 
   /** Repopulate the persistent browser list in place (no full render — input/focus preserved). */
@@ -211,23 +371,23 @@ export class HomeScreen implements Screen {
     const wrap = this.browserList;
     wrap.innerHTML = "";
 
-    const header = document.createElement("div");
-    header.style.cssText = "display:flex; align-items:center; justify-content:space-between;";
-    const title = document.createElement("span");
-    title.style.cssText = "font-size:13px; color:#8a7a68;";
-    title.textContent = `Open rooms (${this.rooms.length})`;
-    const refresh = document.createElement("button");
-    refresh.tabIndex = -1;
-    refresh.textContent = "↻ refresh";
-    refresh.style.cssText = "background:none; border:none; color:#6b5b4a; font-family:monospace; font-size:11px; cursor:pointer;";
-    refresh.addEventListener("click", () => this.requestList());
-    header.append(title, refresh);
-    wrap.appendChild(header);
-
     if (this.rooms.length === 0) {
       const empty = document.createElement("div");
-      empty.style.cssText = "font-size:12px; color:#8a7a68; text-align:center; padding:6px;";
-      empty.textContent = "No open rooms — Quick Match or create one.";
+      empty.style.cssText = `
+        position:relative; padding:28px 14px; text-align:center; overflow:hidden;
+        border-radius:10px; border:1px dashed ${THEME.goldLine};
+        background:linear-gradient(180deg, rgba(58,47,37,0.2), rgba(11,9,6,0.3));
+        font:600 14px ${FONT.cinzel}; color:${THEME.muted};
+      `;
+      const watermark = document.createElement("div");
+      watermark.style.cssText = `
+        position:absolute; inset:0; opacity:.08; pointer-events:none;
+        background:url(${assetUrl("/sprites/map-icons/ruins.png")}) center/48px no-repeat;
+      `;
+      const emptyText = document.createElement("span");
+      emptyText.textContent = "No open rooms — Quick Match or create one.";
+      emptyText.style.cssText = "position:relative;";
+      empty.append(watermark, emptyText);
       wrap.appendChild(empty);
       return;
     }
@@ -235,31 +395,42 @@ export class HomeScreen implements Screen {
     for (const r of this.rooms) {
       const row = document.createElement("div");
       row.style.cssText = `
-        display:flex; align-items:center; gap:8px; padding:7px 10px; font-size:13px;
-        background: rgba(255,250,238,0.85); border:1px solid rgba(74,55,40,0.3); border-radius:6px;
+        display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:10px;
+        background:linear-gradient(150deg, rgba(40,30,20,0.5), rgba(18,13,8,0.6));
+        backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+        border:1px solid rgba(184,137,58,0.28);
+        border-bottom:1px solid ${THEME.goldLine};
+        box-shadow:0 4px 14px -8px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,250,240,0.05);
       `;
+
+      row.appendChild(mapIconDot("gateway-city", 44));
+
       const info = document.createElement("div");
-      info.style.cssText = "flex:1; display:flex; flex-direction:column;";
+      info.style.cssText = "flex:1; min-width:0;";
+      const code = document.createElement("div");
+      code.textContent = r.code;
+      code.style.cssText = `font:600 17px ${FONT.cinzel}; letter-spacing:0.08em; color:${THEME.gold};`;
+      const meta = document.createElement("div");
       const host = r.hostDisplayName || "Open room";
-      info.innerHTML =
-        `<span style="font-weight:bold; letter-spacing:2px;">${r.code}</span>` +
-        `<span style="font-size:11px; color:#8a7a68;">${host} · ${r.totalSeats - r.openSeats}/${r.totalSeats} · dim ${r.dimensionId}</span>`;
+      meta.textContent = `Host · ${host} · dim ${r.dimensionId}`;
+      meta.style.cssText = `font:13px ${FONT.body}; color:${THEME.muted}; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;`;
+      info.append(code, meta);
       row.appendChild(info);
 
-      const join = btn("Join");
-      join.style.padding = "6px 12px";
+      const seatsWrap = document.createElement("div");
+      seatsWrap.style.cssText = "display:flex; flex-direction:column; align-items:flex-end; gap:8px;";
+      seatsWrap.appendChild(seatPips(r.totalSeats, r.totalSeats - r.openSeats));
+
+      const join = btn("Join", "secondary");
+      join.style.padding = "7px 18px";
+      join.style.fontSize = "13px";
       join.addEventListener("click", () => {
         this.joinError = "";
         this.conn.send({ type: "joinRoom", code: r.code });
       });
-      row.appendChild(join);
+      seatsWrap.appendChild(join);
+      row.appendChild(seatsWrap);
       wrap.appendChild(row);
     }
   }
-}
-
-function divider(): HTMLDivElement {
-  const d = document.createElement("div");
-  d.style.cssText = "height:1px; background:rgba(74,55,40,0.3); margin:6px 0;";
-  return d;
 }
