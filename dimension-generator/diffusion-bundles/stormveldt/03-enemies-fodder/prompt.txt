@@ -1,0 +1,24 @@
+Dimension: Stormveldt
+Biome: Endless purple-grass steppes studded with amethyst geode hills, under a permanent storm-grey sky that flickers with dry lightning.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "FODDER" tier: cost 1-2, swarms
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Dust Hare — fast melee rusher with high evasion and almost no HP. Lean long-legged grey hare kicking up grit.
+
+  Spark Beetle — suicide chipper that bursts for static damage when it dies. Palm-sized beetle with a crackling purple carapace.
+
+  Sling Marmot — weak ranged pelter that flings crystal pebbles from a safe distance. Stout burrowing rodent with bulging cheeks.
+
+  Charge Gnat — swarm flier that marks a target so it takes extra lightning damage. Drifting cloud of glowing static midges.

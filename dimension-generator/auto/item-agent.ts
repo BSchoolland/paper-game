@@ -1,4 +1,6 @@
 import { client, SMART_MODEL, tool, hasToolCall, stepCountIs, z, createStepLog, appendStepLog, callWithRetry } from "./llm.js";
+import { weaponItemSchema } from "./schemas.js";
+import type { WeaponItem } from "./schemas.js";
 import type { DimensionSpec } from "./generate-spec.js";
 import { join } from "node:path";
 
@@ -7,51 +9,6 @@ const HERO_ARENA = join(ROOT, "hero-arena/src/t2");
 const TAG = "[item-agent]";
 
 function log(...args: unknown[]) { console.log(`  ${TAG}`, ...args); }
-
-const sectorShape = z.object({ kind: z.literal("sector"), radius: z.number(), halfAngle: z.number() });
-const rectangleShape = z.object({ kind: z.literal("rectangle"), length: z.number(), width: z.number() });
-const circleShape = z.object({ kind: z.literal("circle"), radius: z.number(), range: z.number() });
-const pointShape = z.object({ kind: z.literal("point"), range: z.number() });
-const combatShape = z.union([sectorShape, rectangleShape, circleShape, pointShape]);
-
-const weaponEffect = z.union([
-  z.object({ type: z.literal("pull"), distance: z.number() }),
-  z.object({ type: z.literal("applyStatus"), status: z.enum(["slowed", "winded", "suppressed", "rooted"]), duration: z.number(), value: z.number() }),
-]);
-
-const attackAbility = z.object({
-  id: z.string(),
-  name: z.string(),
-  kind: z.literal("attack"),
-  cost: z.object({ red: z.number().optional(), blue: z.number().optional() }),
-  shape: combatShape,
-  damage: z.number(),
-  knockback: z.number(),
-  recoil: z.number().optional(),
-  lungeThrough: z.number().optional(),
-  wallSlamDamage: z.number().optional(),
-  onHit: z.array(weaponEffect).optional(),
-  visual: z.object({
-    color: z.number().optional(),
-    trailEffect: z.enum(["slash", "thrust", "projectile", "explosion", "splash"]).optional(),
-    screenShake: z.number().optional(),
-  }).optional(),
-});
-
-const weaponItemSchema = z.object({
-  id: z.string().describe("Kebab-case, e.g. 'dune-cleaver'"),
-  name: z.string(),
-  description: z.string(),
-  rarity: z.enum(["common", "uncommon", "rare"]),
-  dimensionId: z.number(),
-  slotCost: z.object({
-    hand: z.number().describe("1 for one-handed, 2 for two-handed"),
-  }),
-  abilities: z.array(attackAbility).min(2).max(3).describe("2 abilities for common, 2-3 for uncommon+"),
-  animSet: z.enum(["sword", "spear", "bow", "staff", "two-handed", "dual-wield"]),
-});
-
-type WeaponItem = z.infer<typeof weaponItemSchema>;
 
 async function runItemTest(dimId: number, seeds: number = 3): Promise<string> {
   const nproc = navigator.hardwareConcurrency ?? 4;

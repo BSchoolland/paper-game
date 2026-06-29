@@ -1,0 +1,623 @@
+[
+  {
+    "id": "iron-sword",
+    "name": "Iron Sword",
+    "description": "A plain, reliable blade with no tricks.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "sword",
+    "abilities": [
+      {
+        "id": "iron-sword-slash",
+        "name": "Slash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 66, "halfAngle": 0.785398163 },
+        "damage": 16,
+        "knockback": 5,
+        "visual": { "color": 12303291, "trailEffect": "slash" }
+      },
+      {
+        "id": "iron-sword-cleave",
+        "name": "Heavy Cleave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 78, "halfAngle": 1.570796327 },
+        "damage": 27,
+        "knockback": 8,
+        "visual": { "color": 12303291, "trailEffect": "slash" }
+      }
+    ]
+  },
+  {
+    "id": "frostbrand",
+    "name": "Frostbrand",
+    "description": "Chills on hit, slowing the target's next move.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "sword",
+    "abilities": [
+      {
+        "id": "frostbrand-slash",
+        "name": "Chill Slash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 74, "halfAngle": 0.872664626 },
+        "damage": 17,
+        "knockback": 5,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.3 }],
+        "visual": { "color": 9425887, "trailEffect": "slash" }
+      },
+      {
+        "id": "frostbrand-cleave",
+        "name": "Rimebite Cleave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 125, "width": 20 },
+        "damage": 29,
+        "knockback": 7,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.35 }],
+        "visual": { "color": 9425887, "trailEffect": "slash" }
+      },
+      {
+        "id": "frostbrand-thrust",
+        "name": "Frost Thrust",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 95, "width": 16 },
+        "damage": 17,
+        "knockback": 6,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.4 }],
+        "visual": { "color": 9425887, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "glacier-edge",
+    "name": "Glacier Edge",
+    "description": "Heavy strikes with a chance to freeze a foe solid for a turn.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "sword",
+    "abilities": [
+      {
+        "id": "glacier-edge-slash",
+        "name": "Heavy Slash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 74, "halfAngle": 0.872664626 },
+        "damage": 21,
+        "knockback": 6,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.35 }],
+        "visual": { "color": 9425887, "trailEffect": "slash" }
+      },
+      {
+        "id": "glacier-edge-shatter",
+        "name": "Glacial Shatter",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 84, "halfAngle": 1.221730476 },
+        "damage": 38,
+        "knockback": 9,
+        "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1.5, "value": 1 }],
+        "visual": { "color": 9425887, "trailEffect": "slash", "screenShake": 4 }
+      },
+      {
+        "id": "glacier-edge-flashfreeze",
+        "name": "Flash Freeze",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 110, "width": 18 },
+        "damage": 28,
+        "knockback": 5,
+        "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1, "value": 1 }],
+        "visual": { "color": 9425887, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "hunting-spear",
+    "name": "Hunting Spear",
+    "description": "Basic reach weapon for keeping enemies at arm's length.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "spear",
+    "abilities": [
+      {
+        "id": "hunting-spear-thrust",
+        "name": "Thrust",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "rectangle", "length": 90, "width": 16 },
+        "damage": 13,
+        "knockback": 6,
+        "visual": { "color": 12303291, "trailEffect": "thrust" }
+      },
+      {
+        "id": "hunting-spear-lunge",
+        "name": "Lunge",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 120, "width": 18 },
+        "damage": 22,
+        "knockback": 9,
+        "lungeThrough": 40,
+        "visual": { "color": 12303291, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "icepick-spear",
+    "name": "Icepick Spear",
+    "description": "A narrow point that pierces through armor.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "spear",
+    "abilities": [
+      {
+        "id": "icepick-spear-jab",
+        "name": "Quick Jab",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "rectangle", "length": 100, "width": 14 },
+        "damage": 18,
+        "knockback": 4,
+        "visual": { "color": 9425887, "trailEffect": "thrust" }
+      },
+      {
+        "id": "icepick-spear-pierce",
+        "name": "Armor Pierce",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 145, "width": 14 },
+        "damage": 36,
+        "knockback": 6,
+        "lungeThrough": 60,
+        "visual": { "color": 9425887, "trailEffect": "thrust", "screenShake": 2 }
+      },
+      {
+        "id": "icepick-spear-skewer",
+        "name": "Skewer",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 115, "width": 14 },
+        "damage": 26,
+        "knockback": 5,
+        "lungeThrough": 30,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.25 }],
+        "visual": { "color": 9425887, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "frost-lance",
+    "name": "Frost Lance",
+    "description": "Long reach with a deep chill that lingers several turns.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "spear",
+    "abilities": [
+      {
+        "id": "frost-lance-thrust",
+        "name": "Long Thrust",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "rectangle", "length": 135, "width": 16 },
+        "damage": 21,
+        "knockback": 6,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.3 }],
+        "visual": { "color": 9425887, "trailEffect": "thrust" }
+      },
+      {
+        "id": "frost-lance-deepchill",
+        "name": "Deep Chill",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 155, "width": 18 },
+        "damage": 31,
+        "knockback": 7,
+        "lungeThrough": 40,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 5, "value": 0.45 }],
+        "visual": { "color": 9425887, "trailEffect": "thrust", "screenShake": 2 }
+      },
+      {
+        "id": "frost-lance-impale",
+        "name": "Frozen Impale",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 125, "width": 16 },
+        "damage": 24,
+        "knockback": 5,
+        "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1, "value": 1 }],
+        "visual": { "color": 9425887, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "short-bow",
+    "name": "Short Bow",
+    "description": "Simple ranged weapon, light and quick.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "bow",
+    "abilities": [
+      {
+        "id": "short-bow-shot",
+        "name": "Quick Shot",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 230 },
+        "damage": 13,
+        "knockback": 3,
+        "visual": { "color": 12303291, "trailEffect": "projectile" }
+      },
+      {
+        "id": "short-bow-power",
+        "name": "Power Shot",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "point", "range": 250 },
+        "damage": 22,
+        "knockback": 5,
+        "visual": { "color": 12303291, "trailEffect": "projectile" }
+      }
+    ]
+  },
+  {
+    "id": "hunters-bow",
+    "name": "Hunter's Bow",
+    "description": "Deals bonus damage to slowed or chilled targets.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "bow",
+    "abilities": [
+      {
+        "id": "hunters-bow-shot",
+        "name": "Hunting Shot",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 245 },
+        "damage": 17,
+        "knockback": 3,
+        "visual": { "color": 9425887, "trailEffect": "projectile" }
+      },
+      {
+        "id": "hunters-bow-aimed",
+        "name": "Aimed Shot",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "point", "range": 270 },
+        "damage": 27,
+        "knockback": 5,
+        "visual": { "color": 9425887, "trailEffect": "projectile", "screenShake": 2 }
+      },
+      {
+        "id": "hunters-bow-chillshot",
+        "name": "Chill Shot",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 50, "range": 220 },
+        "damage": 17,
+        "knockback": 3,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.35 }],
+        "visual": { "color": 9425887, "trailEffect": "projectile" }
+      }
+    ]
+  },
+  {
+    "id": "frost-bow",
+    "name": "Frost Bow",
+    "description": "Arrows root the struck enemy in ice, stopping their movement.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "bow",
+    "abilities": [
+      {
+        "id": "frost-bow-shot",
+        "name": "Ice Shot",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 240 },
+        "damage": 16,
+        "knockback": 3,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.3 }],
+        "visual": { "color": 9425887, "trailEffect": "projectile" }
+      },
+      {
+        "id": "frost-bow-rootarrow",
+        "name": "Root Arrow",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "point", "range": 260 },
+        "damage": 22,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1.5, "value": 1 }],
+        "visual": { "color": 9425887, "trailEffect": "projectile", "screenShake": 2 }
+      },
+      {
+        "id": "frost-bow-volley",
+        "name": "Frost Volley",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 60, "range": 210 },
+        "damage": 18,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.35 }],
+        "visual": { "color": 9425887, "trailEffect": "projectile" }
+      }
+    ]
+  },
+  {
+    "id": "oak-staff",
+    "name": "Oak Staff",
+    "description": "Fires a weak frost bolt at range.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "staff",
+    "abilities": [
+      {
+        "id": "oak-staff-bolt",
+        "name": "Frost Bolt",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 235 },
+        "damage": 13,
+        "knockback": 3,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.2 }],
+        "visual": { "color": 12303291, "trailEffect": "projectile" }
+      },
+      {
+        "id": "oak-staff-burst",
+        "name": "Frost Burst",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 34, "range": 205 },
+        "damage": 17,
+        "knockback": 4,
+        "visual": { "color": 12303291, "trailEffect": "splash" }
+      }
+    ]
+  },
+  {
+    "id": "chill-staff",
+    "name": "Chill Staff",
+    "description": "Sweeps a small area with cold, slowing everything hit.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "staff",
+    "abilities": [
+      {
+        "id": "chill-staff-bolt",
+        "name": "Cold Bolt",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 220 },
+        "damage": 11,
+        "knockback": 3,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.25 }],
+        "visual": { "color": 9425887, "trailEffect": "projectile" }
+      },
+      {
+        "id": "chill-staff-sweep",
+        "name": "Frost Sweep",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 62, "range": 180 },
+        "damage": 14,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.3 }],
+        "visual": { "color": 9425887, "trailEffect": "splash" }
+      },
+      {
+        "id": "chill-staff-cone",
+        "name": "Cold Snap",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "sector", "radius": 85, "halfAngle": 0.785398163 },
+        "damage": 13,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.35 }],
+        "visual": { "color": 9425887, "trailEffect": "splash" }
+      }
+    ]
+  },
+  {
+    "id": "blizzard-staff",
+    "name": "Blizzard Staff",
+    "description": "Calls a burst of freezing wind for heavy AoE damage.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "staff",
+    "abilities": [
+      {
+        "id": "blizzard-staff-bolt",
+        "name": "Ice Bolt",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 240 },
+        "damage": 16,
+        "knockback": 3,
+        "visual": { "color": 9425887, "trailEffect": "projectile" }
+      },
+      {
+        "id": "blizzard-staff-blast",
+        "name": "Blizzard Blast",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 85, "range": 200 },
+        "damage": 27,
+        "knockback": 6,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.3 }],
+        "visual": { "color": 9425887, "trailEffect": "explosion", "screenShake": 4 }
+      },
+      {
+        "id": "blizzard-staff-gale",
+        "name": "Freezing Gale",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "sector", "radius": 110, "halfAngle": 0.785398163 },
+        "damage": 20,
+        "knockback": 8,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.35 }],
+        "visual": { "color": 9425887, "trailEffect": "splash" }
+      }
+    ]
+  },
+  {
+    "id": "woodcutters-axe",
+    "name": "Woodcutter's Axe",
+    "description": "A slow, heavy swing that hits hard.",
+    "rarity": "common",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "woodcutters-axe-chop",
+        "name": "Chop",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 80, "halfAngle": 1.047197551 },
+        "damage": 22,
+        "knockback": 9,
+        "visual": { "color": 12303291, "trailEffect": "slash" }
+      },
+      {
+        "id": "woodcutters-axe-cleave",
+        "name": "Great Cleave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 115, "width": 24 },
+        "damage": 38,
+        "knockback": 13,
+        "visual": { "color": 12303291, "trailEffect": "slash", "screenShake": 4 }
+      }
+    ]
+  },
+  {
+    "id": "avalanche-maul",
+    "name": "Avalanche Maul",
+    "description": "A crushing smash that knocks the target back.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "avalanche-maul-smash",
+        "name": "Smash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 82, "halfAngle": 1.047197551 },
+        "damage": 25,
+        "knockback": 14,
+        "visual": { "color": 9425887, "trailEffect": "slash", "screenShake": 3 }
+      },
+      {
+        "id": "avalanche-maul-crush",
+        "name": "Avalanche Crush",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 78, "range": 0 },
+        "damage": 44,
+        "knockback": 20,
+        "wallSlamDamage": 12,
+        "visual": { "color": 9425887, "trailEffect": "explosion", "screenShake": 6 }
+      },
+      {
+        "id": "avalanche-maul-shove",
+        "name": "Glacier Shove",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 100, "width": 26 },
+        "damage": 28,
+        "knockback": 22,
+        "wallSlamDamage": 10,
+        "visual": { "color": 9425887, "trailEffect": "slash", "screenShake": 3 }
+      }
+    ]
+  },
+  {
+    "id": "frost-greatsword",
+    "name": "Frost Greatsword",
+    "description": "Wide cleave that chills every enemy it carves through.",
+    "rarity": "rare",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "frost-greatsword-swing",
+        "name": "Frost Swing",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 90, "halfAngle": 1.221730476 },
+        "damage": 27,
+        "knockback": 8,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.3 }],
+        "visual": { "color": 9425887, "trailEffect": "slash", "screenShake": 3 }
+      },
+      {
+        "id": "frost-greatsword-cleave",
+        "name": "Glacial Cleave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 95, "halfAngle": 1.570796327 },
+        "damage": 44,
+        "knockback": 11,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.4 }],
+        "visual": { "color": 9425887, "trailEffect": "slash", "screenShake": 5 }
+      },
+      {
+        "id": "frost-greatsword-whirl",
+        "name": "Frozen Whirl",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 88, "range": 0 },
+        "damage": 32,
+        "knockback": 9,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.35 }],
+        "visual": { "color": 9425887, "trailEffect": "splash", "screenShake": 4 }
+      }
+    ]
+  },
+  {
+    "id": "snow-shovel",
+    "name": "Snow Shovel",
+    "description": "Flat swings stagger foes, or scoop snow to blind one for a turn.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "snow-shovel-swing",
+        "name": "Flat Swing",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 86, "halfAngle": 1.221730476 },
+        "damage": 28,
+        "knockback": 10,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }],
+        "visual": { "color": 9425887, "trailEffect": "slash", "screenShake": 3 }
+      },
+      {
+        "id": "snow-shovel-slam",
+        "name": "Heavy Slam",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 115, "width": 24 },
+        "damage": 44,
+        "knockback": 12,
+        "visual": { "color": 9425887, "trailEffect": "slash", "screenShake": 4 }
+      },
+      {
+        "id": "snow-shovel-blind",
+        "name": "Snow Blind",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "point", "range": 150 },
+        "damage": 12,
+        "knockback": 3,
+        "onHit": [{ "type": "applyStatus", "status": "suppressed", "duration": 2, "value": 1 }],
+        "visual": { "color": 14869218, "trailEffect": "splash" }
+      }
+    ]
+  }
+]

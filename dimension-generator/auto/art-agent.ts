@@ -9,13 +9,12 @@
  *   import { generateArt } from "./art-agent.js";
  *   await generateArt(dimId, spec, bundlesRoot);
  */
-import OpenAI from "openai";
 import { readdir, readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-
-const openai = new OpenAI();
+import { slugify } from "../slugify.js";
+import { generateImage, resizeToSquare, ART_BACKEND } from "./generate-image.js";
 const ROOT = join(import.meta.dir, "..", "..");
 const BUNDLES_DIR = join(import.meta.dir, "..", "diffusion-bundles");
 const SCRIPTS = join(ROOT, "scripts");
@@ -30,99 +29,50 @@ interface BundleResult {
 
 async function generateBundle(bundleDir: string): Promise<BundleResult> {
   const name = basename(bundleDir);
-  const promptPath = join(bundleDir, "prompt.txt");
-  const prompt = await readFile(promptPath, "utf-8");
+  const prompt = await readFile(join(bundleDir, "prompt.txt"), "utf-8");
 
   const files = await readdir(bundleDir);
   const refFile = files.find(f => f.startsWith("reference"));
   if (!refFile) throw new Error(`No reference image in ${bundleDir}`);
   const refPath = join(bundleDir, refFile);
-
+  const outPath = join(bundleDir, "output.png");
   const fullPrompt = prompt + BG_SUFFIX;
 
-  console.log(`  Generating: ${name}`);
+  console.log(`  Generating: ${name} [${ART_BACKEND}]`);
   console.log(`    Prompt: ${prompt.slice(0, 80).replace(/\n/g, " ")}...`);
-
   const t0 = Date.now();
 
-  const refBuffer = await Bun.file(refPath).arrayBuffer();
-  const refBlob = new File([refBuffer], refFile, {
-    type: refFile.endsWith(".png") ? "image/png" : "image/jpeg",
-  });
-
-  const response = await openai.images.edit({
-    model: "gpt-image-2",
-    image: refBlob,
+  await generateImage({
     prompt: fullPrompt,
+    outPath,
+    referencePath: refPath,
     size: "1024x1024",
     quality: "low",
+    aspectHint: "SQUARE (1:1 aspect ratio)",
+    label: name,
   });
+  resizeToSquare(outPath, 1024);
 
   const elapsed = (Date.now() - t0) / 1000;
-  const image = response.data![0]!;
-
-  const outPath = join(bundleDir, "output.png");
-  if (image.b64_json) {
-    await Bun.write(outPath, Buffer.from(image.b64_json, "base64"));
-  } else if (image.url) {
-    const res = await fetch(image.url);
-    await Bun.write(outPath, await res.arrayBuffer());
-  } else {
-    throw new Error(`No image data for ${name}`);
-  }
-
   console.log(`    Done in ${elapsed.toFixed(1)}s -> ${outPath}`);
   return { name, imagePath: outPath, elapsed };
 }
 
-function slugify(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
-
+// Sprite names come straight from the structured roster — no text parsing. The names here must match
+// the kebab-case ids the enemy/item agents assign (both go through the shared slugify).
 function extractEnemyNames(spec: any, batchIdx: number): string {
-  // Structured format (enemyBatches array)
-  if (spec.enemyBatches?.[batchIdx]?.enemies) {
-    return spec.enemyBatches[batchIdx].enemies
-      .map((e: any) => slugify(e.name))
-      .join(",");
-  }
-  // Freeform format — parse names from the text
-  if (spec.enemies && typeof spec.enemies === "string") {
-    const tiers = ["FODDER", "STANDARD", "ELITE", "BOSS"];
-    const lines = spec.enemies.split("\n");
-    const tierNames: string[][] = [[], [], [], []];
-    let currentTier = -1;
-    for (const line of lines) {
-      const tierMatch = tiers.findIndex(t => line.toUpperCase().includes(t));
-      if (tierMatch >= 0) { currentTier = tierMatch; continue; }
-      const nameMatch = line.match(/^-\s*(.+?)\s*[—–-]\s*/);
-      if (nameMatch && currentTier >= 0) {
-        tierNames[currentTier]!.push(slugify(nameMatch[1]!));
-      }
-    }
-    if (tierNames[batchIdx]!.length === 4) return tierNames[batchIdx]!.join(",");
-  }
-  return "enemy-a,enemy-b,enemy-c,enemy-d";
+  const batch = spec.enemyBatches?.[batchIdx];
+  if (!batch?.enemies) throw new Error(`spec.enemyBatches[${batchIdx}] missing (structured roster required)`);
+  if (batch.enemies.length !== 4) throw new Error(`enemy batch ${batchIdx} has ${batch.enemies.length} enemies; need 4`);
+  return batch.enemies.map((e: any) => slugify(e.name)).join(",");
 }
 
 function extractItemNames(spec: any): string {
-  // Structured format
-  if (Array.isArray(spec.items) && spec.items[0]?.name) {
-    return spec.items.map((i: any) => slugify(i.name)).join(",");
-  }
-  // Freeform format
-  if (typeof spec.items === "string") {
-    const names: string[] = [];
-    for (const line of spec.items.split("\n")) {
-      const m = line.match(/^-\s*(.+?)\s*\(/);
-      if (m) names.push(slugify(m[1]!));
-    }
-    if (names.length === 16) return names.join(",");
-  }
-  return Array.from({ length: 16 }, (_, i) => `item-${i}`).join(",");
+  if (!Array.isArray(spec.items)) throw new Error("spec.items must be a structured array (structured roster required)");
+  return spec.items.map((i: any) => slugify(i.name)).join(",");
 }
 
-function extractSprites(dimId: number, result: BundleResult, spec: any) {
+export function extractSprites(dimId: number, result: BundleResult, spec: any) {
   const { name, imagePath } = result;
   console.log(`  Extracting: ${name}`);
 

@@ -1,0 +1,26 @@
+Dimension: Stormveldt
+Biome: Endless purple-grass steppes studded with amethyst geode hills, under a permanent storm-grey sky that flickers with dry lightning.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Iron Sword (sword, common) — Reliable single-target slash, no frills.
+  Shard Saber (sword, uncommon) — Amethyst-edged blade that hits harder on each consecutive strike against the same foe.
+  Stormbrand (sword, rare) — Discharges static on hit, arcing a small shock to one adjacent enemy.
+  Hunting Spear (spear, common) — Basic reach poke that hits from one tile back.
+  Horn Spear (spear, uncommon) — Buffalo-horn tip that knocks the target back a tile on hit.
+  Quartz Lance (spear, rare) — Crystal-tipped thrust that ignores a chunk of armor.
+  Hunting Bow (bow, common) — Straightforward ranged shot.
+  Crystal Bow (bow, uncommon) — Fires shards that splinter for minor splash to adjacent tiles.
+  Storm Bow (bow, rare) — Arrows apply a static mark, raising lightning damage the target takes.
+  Spark Staff (staff, common) — Short-range zap with light damage.
+  Charge Rod (staff, uncommon) — Builds charge over turns, then releases a heavier shock.
+  Thunder Staff (staff, rare) — Calls a lightning strike onto a tile, hitting everything on it.
+  Stone Maul (two-handed, common) — Slow, heavy smash for big single hits.
+  Geode Hammer (two-handed, uncommon) — Crystal hammer whose ground-slam knocks back foes around the impact.
+  Stormhammer (two-handed, rare) — Slam sends a shockwave down a line, staggering those it passes.
+  Shard Greatsword (two-handed, rare) — Wide cleave that strikes all enemies in an arc in front.

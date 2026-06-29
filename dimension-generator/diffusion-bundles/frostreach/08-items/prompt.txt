@@ -1,0 +1,35 @@
+Dimension: Frostreach
+Biome: A whole frozen planet: wind-scoured snow plains, frozen pine forests, splintered glacier peaks, blue ice caves and crevasses, frozen sea-ice, and rare steaming geothermal vents.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+SWORDS:
+1. Iron Sword (sword, common) — A plain, reliable blade with no tricks.
+2. Frostbrand (sword, uncommon) — Chills on hit, slowing the target's next move.
+3. Glacier Edge (sword, rare) — Heavy strikes with a chance to freeze a foe solid for a turn.
+
+SPEARS:
+4. Hunting Spear (spear, common) — Basic reach weapon for keeping enemies at arm's length.
+5. Icepick Spear (spear, uncommon) — A narrow point that pierces through armor.
+6. Frost Lance (spear, rare) — Long reach with a deep chill that lingers several turns.
+
+BOWS:
+7. Short Bow (bow, common) — Simple ranged weapon, light and quick.
+8. Hunter's Bow (bow, uncommon) — Deals bonus damage to slowed or chilled targets.
+9. Frost Bow (bow, rare) — Arrows root the struck enemy in ice, stopping their movement.
+
+STAFFS:
+10. Oak Staff (staff, common) — Fires a weak frost bolt at range.
+11. Chill Staff (staff, uncommon) — Sweeps a small area with cold, slowing everything hit.
+12. Blizzard Staff (staff, rare) — Calls a burst of freezing wind for heavy AoE damage.
+
+TWO-HANDED:
+13. Woodcutter's Axe (two-handed, common) — A slow, heavy swing that hits hard.
+14. Avalanche Maul (two-handed, uncommon) — A crushing smash that knocks the target back.
+15. Frost Greatsword (two-handed, rare) — Wide cleave that chills every enemy it carves through.
+16. Snow Shovel (two-handed, uncommon) — Flat swings stagger foes, or scoop snow to blind one for a turn.

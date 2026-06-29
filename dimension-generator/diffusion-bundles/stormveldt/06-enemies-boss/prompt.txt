@@ -1,0 +1,24 @@
+Dimension: Stormveldt
+Biome: Endless purple-grass steppes studded with amethyst geode hills, under a permanent storm-grey sky that flickers with dry lightning.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "BOSS" tier: cost 10-15
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Storm Bull — apex charger; stampedes across the field with massive knockback and high burst. Colossal bull trailing sparks.
+
+  Geode Titan — massive tank with a ground-slam AoE and damage-reduction hardening phases. Towering crystal golem.
+
+  Storm Roc — mobile flying boss that dive-bombs and chains lightning between charged targets. Giant raptor in a static halo.
+
+  Herd Patriarch — summoner-buffer that calls in the herd and enrages all allies in a rage phase. Enormous amethyst-crusted bull, horns wreathed in lightning.

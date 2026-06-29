@@ -1,0 +1,218 @@
+{
+  "id": 702,
+  "name": "Stormveldt",
+  "description": "A planet of wide-open amethyst steppes where dry lightning never stops falling. Crystal outcrops drink the charge and hum, and colossal herds migrate across the plains in ritual formation, drawn from storm to storm. The whole world is restless, electric, and strangely orderly — beasts that bow before they charge.",
+  "palette": {
+    "primary": "#6B3FA0",
+    "secondary": "#4A4E5C",
+    "accent": "#F2D94E"
+  },
+  "mood": "Charged, restless, ceremonial — calm before a stampede.",
+  "biome": "Endless purple-grass steppes studded with amethyst geode hills, under a permanent storm-grey sky that flickers with dry lightning.",
+  "droppedNoun": "product",
+  "negatedNoun": "newspaper",
+  "enemyBatches": [
+    {
+      "name": "FODDER",
+      "description": "cost 1-2, swarms",
+      "enemies": [
+        {
+          "name": "Dust Hare",
+          "role": "fast melee rusher with high evasion and almost no HP",
+          "description": "Lean long-legged grey hare kicking up grit."
+        },
+        {
+          "name": "Spark Beetle",
+          "role": "suicide chipper that bursts for static damage when it dies",
+          "description": "Palm-sized beetle with a crackling purple carapace."
+        },
+        {
+          "name": "Sling Marmot",
+          "role": "weak ranged pelter that flings crystal pebbles from a safe distance",
+          "description": "Stout burrowing rodent with bulging cheeks."
+        },
+        {
+          "name": "Charge Gnat",
+          "role": "swarm flier that marks a target so it takes extra lightning damage",
+          "description": "Drifting cloud of glowing static midges."
+        }
+      ]
+    },
+    {
+      "name": "STANDARD",
+      "description": "cost 3-5",
+      "enemies": [
+        {
+          "name": "Steppe Buffalo",
+          "role": "straight-line charger that knocks targets back hard",
+          "description": "Shaggy bull with crystal-crusted horns."
+        },
+        {
+          "name": "Crystal Boar",
+          "role": "armored bruiser that gores and shrugs off chip damage",
+          "description": "Tusked boar plated with amethyst down its spine."
+        },
+        {
+          "name": "Spark Crow",
+          "role": "ranged diver that zaps from above and repositions",
+          "description": "Black bird wreathed in crackling static."
+        },
+        {
+          "name": "Quartz Tortoise",
+          "role": "defensive anchor that shields itself and taunts nearby foes",
+          "description": "Domed geode-shelled tortoise."
+        }
+      ]
+    },
+    {
+      "name": "ELITE",
+      "description": "cost 6-9",
+      "enemies": [
+        {
+          "name": "Massive Buffalo",
+          "role": "heavier charger whose stampede knocks back everything in its lane",
+          "description": "Enormous shaggy bull, ground shaking."
+        },
+        {
+          "name": "Thunderhorn",
+          "role": "caster that calls lightning onto a tile for area denial",
+          "description": "Elk-like beast crowned with sparking crystal antlers."
+        },
+        {
+          "name": "Crystal Golem",
+          "role": "huge tank that reflects static damage back at attackers",
+          "description": "Lumbering humanoid heap of amethyst boulders."
+        },
+        {
+          "name": "Herd Bull",
+          "role": "support that rallies and enrages nearby beasts, then charges",
+          "description": "Scarred lead bull draped in crystal growth."
+        }
+      ]
+    },
+    {
+      "name": "BOSS",
+      "description": "cost 10-15",
+      "enemies": [
+        {
+          "name": "Storm Bull",
+          "role": "apex charger; stampedes across the field with massive knockback and high burst",
+          "description": "Colossal bull trailing sparks."
+        },
+        {
+          "name": "Geode Titan",
+          "role": "massive tank with a ground-slam AoE and damage-reduction hardening phases",
+          "description": "Towering crystal golem."
+        },
+        {
+          "name": "Storm Roc",
+          "role": "mobile flying boss that dive-bombs and chains lightning between charged targets",
+          "description": "Giant raptor in a static halo."
+        },
+        {
+          "name": "Herd Patriarch",
+          "role": "summoner-buffer that calls in the herd and enrages all allies in a rage phase",
+          "description": "Enormous amethyst-crusted bull, horns wreathed in lightning."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Iron Sword",
+      "type": "sword",
+      "rarity": "common",
+      "description": "Reliable single-target slash, no frills."
+    },
+    {
+      "name": "Shard Saber",
+      "type": "sword",
+      "rarity": "uncommon",
+      "description": "Amethyst-edged blade that hits harder on each consecutive strike against the same foe."
+    },
+    {
+      "name": "Stormbrand",
+      "type": "sword",
+      "rarity": "rare",
+      "description": "Discharges static on hit, arcing a small shock to one adjacent enemy."
+    },
+    {
+      "name": "Hunting Spear",
+      "type": "spear",
+      "rarity": "common",
+      "description": "Basic reach poke that hits from one tile back."
+    },
+    {
+      "name": "Horn Spear",
+      "type": "spear",
+      "rarity": "uncommon",
+      "description": "Buffalo-horn tip that knocks the target back a tile on hit."
+    },
+    {
+      "name": "Quartz Lance",
+      "type": "spear",
+      "rarity": "rare",
+      "description": "Crystal-tipped thrust that ignores a chunk of armor."
+    },
+    {
+      "name": "Hunting Bow",
+      "type": "bow",
+      "rarity": "common",
+      "description": "Straightforward ranged shot."
+    },
+    {
+      "name": "Crystal Bow",
+      "type": "bow",
+      "rarity": "uncommon",
+      "description": "Fires shards that splinter for minor splash to adjacent tiles."
+    },
+    {
+      "name": "Storm Bow",
+      "type": "bow",
+      "rarity": "rare",
+      "description": "Arrows apply a static mark, raising lightning damage the target takes."
+    },
+    {
+      "name": "Spark Staff",
+      "type": "staff",
+      "rarity": "common",
+      "description": "Short-range zap with light damage."
+    },
+    {
+      "name": "Charge Rod",
+      "type": "staff",
+      "rarity": "uncommon",
+      "description": "Builds charge over turns, then releases a heavier shock."
+    },
+    {
+      "name": "Thunder Staff",
+      "type": "staff",
+      "rarity": "rare",
+      "description": "Calls a lightning strike onto a tile, hitting everything on it."
+    },
+    {
+      "name": "Stone Maul",
+      "type": "two-handed",
+      "rarity": "common",
+      "description": "Slow, heavy smash for big single hits."
+    },
+    {
+      "name": "Geode Hammer",
+      "type": "two-handed",
+      "rarity": "uncommon",
+      "description": "Crystal hammer whose ground-slam knocks back foes around the impact."
+    },
+    {
+      "name": "Stormhammer",
+      "type": "two-handed",
+      "rarity": "rare",
+      "description": "Slam sends a shockwave down a line, staggering those it passes."
+    },
+    {
+      "name": "Shard Greatsword",
+      "type": "two-handed",
+      "rarity": "rare",
+      "description": "Wide cleave that strikes all enemies in an arc in front."
+    }
+  ]
+}

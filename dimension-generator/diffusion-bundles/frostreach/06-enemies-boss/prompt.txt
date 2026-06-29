@@ -1,0 +1,20 @@
+Dimension: Frostreach
+Biome: A whole frozen planet: wind-scoured snow plains, frozen pine forests, splintered glacier peaks, blue ice caves and crevasses, frozen sea-ice, and rare steaming geothermal vents.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+The enemies in this batch:
+
+BOSS (cost 10-15):
+13. Frost Wyrm — flying boss with a cone breath that freezes a line of tiles. Long serpentine white dragon trailing frost.
+14. Avalanche Troll — regenerates each turn and smashes terrain to bury and block tiles. Hulking troll caked in snow and broken rock.
+15. Glacier Mammoth — enormous tank that charges in a straight line, trampling and knocking back. Vast tusked mammoth, fur hung with icicles.
+16. Frost Lich — caster boss that raises frozen corpses as Frost Rats and Wolves while chilling the field. Crowned skeletal figure sheathed in clear ice.

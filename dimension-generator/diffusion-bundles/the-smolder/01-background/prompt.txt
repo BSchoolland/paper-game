@@ -1,0 +1,12 @@
+Dimension: The Smolder
+Biome: smoldering ash steppe with glass flats and ember canyons
+Mood: Grey, hot, and restless, with smoke on every horizon and embers underfoot. There are no towns here, only long roads and the people who keep moving along them.
+Palette: primary #3A332E, secondary #8C7E72, accent #E2581F
+
+Description: A world where the ground itself never stops burning: peat fires creep underground for years and grey ash falls like snow. Old stone causeways thread across smoldering steppes, glass flats where the heat ran hottest, and ember canyons that glow at night. Nomads follow the roads between fires, and everything that lives here has learned to wear the heat.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

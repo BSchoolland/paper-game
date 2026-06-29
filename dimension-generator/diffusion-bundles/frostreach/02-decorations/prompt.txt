@@ -1,0 +1,14 @@
+Dimension: Frostreach
+Biome: A whole frozen planet: wind-scoured snow plains, frozen pine forests, splintered glacier peaks, blue ice caves and crevasses, frozen sea-ice, and rare steaming geothermal vents.
+Mood: Cold, exposed, and indifferent — beautiful pale light over a world that will bury you without noticing.
+Palette: primary #dce8f0, secondary #3a5a78, accent #8fd3df
+
+Description: A frozen planet wrapped pole to pole in snow and old glacier ice, where pale bands of cold light hang over the drifts like halos and nothing in the white offers shelter. Its biomes range from wind-scoured snow plains and frozen pine forests to splintered glacier peaks, blue crevasse caves, and steaming geothermal pockets that never quite thaw. Travelers dig in or die; the world helps no one.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color saturation, isometric three-quarter perspective, and drop shadows. Ignore the reference's parchment background.
+
+Each decoration should be a single distinct object with clear space around it, suitable for cutting out individually. A mix of organic decorations (plants/natural objects) and structural decorations (walls/ruins/built objects) — choose what fits this dimension's biome and mood.
+
+Important: Use a variety of colors across the decorations — not everything should be the same color as the dimension palette. Natural environments have diverse coloring, so include variety (e.g. different plant greens, browns, grays for rocks, varied flower colors).

@@ -1,0 +1,26 @@
+Dimension: Hornmarsh
+Biome: Sprawling river deltas and mudflats give way to towering reed forests, lily-choked lagoons, tangled root mangroves, and steaming mineral springs — all warm, green-gold, and alive with sound.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+1. Reed Cutter — sword — common — A light reed-handled shortsword, quick but weak.
+2. Fishing Spear — spear — common — A barbed spear made for stabbing fish in the shallows.
+3. Reed Bow — bow — common — A simple bow bent from a dried reed, fires fast.
+4. Reed Staff — staff — common — A hollow reed staff that hums and cracks on impact.
+5. Bog Maul — two-handed — common — A heavy mud-caked club, slow but hard-hitting.
+6. Gator-Tooth Sword — sword — uncommon — A blade lined with crocodile teeth that tears wounds open.
+7. Heron Spear — spear — uncommon — A long thin spear with extra reach to poke from afar.
+8. Fowler's Bow — bow — uncommon — A short hunting bow built for rapid follow-up shots.
+9. Marsh Staff — staff — uncommon — A staff topped with a heavy seed-pod that splashes mud and slows.
+10. Boat Oar — two-handed — uncommon — A broad oar that sweeps several enemies in one swing.
+11. Gator Jaw — two-handed — uncommon — A whole crocodile jaw on a haft, brutal crushing bite.
+12. Trident — spear — uncommon — A three-pronged fishing fork that strikes targets in a line.
+13. Bronze Saber — sword — rare — A curved brass-bright blade, keen and well balanced.
+14. Horn Bow — bow — rare — A composite bow of horn and reed with long range and heavy draw.
+15. Brass Horn — staff — rare — A great brass horn that blasts a wave of sound through nearby foes.
+16. Bronze Greatsword — two-handed — rare — A massive bronze blade that crushes through wide arcs.

@@ -1,0 +1,241 @@
+{
+  "dust-hare": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 2 }, "distance": 200 },
+      { "id": "dust-hare-kick", "name": "Grit Kick", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 44, "halfAngle": 0.6 }, "damage": 18, "knockback": 20, "visual": { "color": 9211020, "trailEffect": "thrust", "screenShake": 0.1 } }
+    ],
+    "hp": 46,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 11,
+    "className": "Dust Hare",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 2,
+    "tags": ["melee", "swarm"]
+  },
+  "spark-beetle": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 130 },
+      { "id": "spark-beetle-discharge", "name": "Static Discharge", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 48, "halfAngle": 0.8 }, "damage": 19, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "suppressed", "duration": 2, "value": 1 }], "visual": { "color": 11894492, "trailEffect": "explosion", "screenShake": 0.18 } }
+    ],
+    "hp": 28,
+    "energy": { "red": 1, "blue": 1 },
+    "collisionRadius": 10,
+    "className": "Spark Beetle",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 1,
+    "tags": ["melee", "swarm"]
+  },
+  "sling-marmot": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 100 },
+      { "id": "sling-marmot-pebble", "name": "Crystal Pebble", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "point", "range": 205 }, "damage": 18, "knockback": 0, "visual": { "color": 11894492, "trailEffect": "projectile", "screenShake": 0.1 } }
+    ],
+    "hp": 46,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 11,
+    "className": "Sling Marmot",
+    "heightMeters": 1,
+    "strategy": "kite",
+    "cost": 2,
+    "tags": ["ranged", "swarm"]
+  },
+  "charge-gnat": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 2 }, "distance": 185 },
+      { "id": "charge-gnat-mark", "name": "Static Mark", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 46, "halfAngle": 0.9 }, "damage": 19, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }], "visual": { "color": 13624575, "trailEffect": "splash", "screenShake": 0.08 } }
+    ],
+    "hp": 48,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 10,
+    "className": "Charge Gnat",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 2,
+    "tags": ["melee", "swarm"]
+  },
+  "steppe-buffalo": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 140 },
+      { "id": "steppe-buffalo-charge", "name": "Goring Charge", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 130, "width": 30 }, "damage": 32, "knockback": 55, "lungeThrough": 1, "visual": { "color": 9211020, "trailEffect": "thrust", "screenShake": 0.3 } },
+      { "id": "steppe-buffalo-gore", "name": "Hook Horns", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 56, "halfAngle": 0.7 }, "damage": 23, "knockback": 25, "visual": { "color": 11894492, "trailEffect": "slash", "screenShake": 0.2 } }
+    ],
+    "hp": 128,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 16,
+    "className": "Steppe Buffalo",
+    "heightMeters": 3,
+    "strategy": "rush",
+    "cost": 4,
+    "tags": ["melee"]
+  },
+  "crystal-boar": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 120 },
+      { "id": "crystal-boar-gore", "name": "Tusk Gore", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 58, "halfAngle": 0.75 }, "damage": 26, "knockback": 20, "visual": { "color": 11894492, "trailEffect": "slash", "screenShake": 0.22 } }
+    ],
+    "hp": 158,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 16,
+    "className": "Crystal Boar",
+    "heightMeters": 2,
+    "strategy": "rush",
+    "cost": 4,
+    "tags": ["melee", "tank"]
+  },
+  "spark-crow": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 2 }, "distance": 175 },
+      { "id": "spark-crow-zap", "name": "Diving Zap", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "point", "range": 215 }, "damage": 16, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 1, "value": 1 }], "visual": { "color": 13624575, "trailEffect": "projectile", "screenShake": 0.12 } }
+    ],
+    "hp": 56,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 12,
+    "className": "Spark Crow",
+    "heightMeters": 2,
+    "strategy": "kite",
+    "cost": 3,
+    "tags": ["ranged"]
+  },
+  "quartz-tortoise": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 70 },
+      { "id": "quartz-tortoise-slam", "name": "Shell Slam", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 66, "range": 45 }, "damage": 29, "knockback": 40, "visual": { "color": 11894492, "trailEffect": "explosion", "screenShake": 0.28 } },
+      { "id": "quartz-tortoise-shield", "name": "Geode Shell", "kind": "barrier", "cost": { "blue": 1 }, "barrierHp": 60 }
+    ],
+    "hp": 140,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 17,
+    "className": "Quartz Tortoise",
+    "heightMeters": 2,
+    "strategy": "threat",
+    "cost": 4,
+    "tags": ["melee", "tank"]
+  },
+  "massive-buffalo": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 130 },
+      { "id": "massive-buffalo-stampede", "name": "Stampede", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 160, "width": 40 }, "damage": 32, "knockback": 60, "lungeThrough": 1, "visual": { "color": 9211020, "trailEffect": "explosion", "screenShake": 0.4 } },
+      { "id": "massive-buffalo-trample", "name": "Trample", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 64, "halfAngle": 0.85 }, "damage": 22, "knockback": 30, "visual": { "color": 11894492, "trailEffect": "slash", "screenShake": 0.3 } }
+    ],
+    "hp": 205,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 22,
+    "className": "Massive Buffalo",
+    "heightMeters": 4,
+    "strategy": "rush",
+    "cost": 7,
+    "tags": ["melee", "elite"]
+  },
+  "thunderhorn": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 110 },
+      { "id": "thunderhorn-bolt", "name": "Antler Bolt", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "point", "range": 225 }, "damage": 18, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }], "visual": { "color": 13624575, "trailEffect": "projectile", "screenShake": 0.15 } },
+      { "id": "thunderhorn-strike", "name": "Call Lightning", "kind": "zone", "cost": { "red": 1 }, "range": 200, "zone": { "effect": "damage", "radius": 70, "duration": 3, "magnitude": 16, "color": 13624575, "pattern": "spikes" } }
+    ],
+    "hp": 140,
+    "energy": { "red": 2, "blue": 2 },
+    "collisionRadius": 16,
+    "className": "Thunderhorn",
+    "heightMeters": 3,
+    "strategy": "kite",
+    "cost": 7,
+    "tags": ["ranged", "elite"]
+  },
+  "crystal-golem": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 65 },
+      { "id": "crystal-golem-smash", "name": "Amethyst Smash", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 72, "range": 55 }, "damage": 25, "knockback": 45, "visual": { "color": 11894492, "trailEffect": "explosion", "screenShake": 0.42 } },
+      { "id": "crystal-golem-shards", "name": "Static Shards", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 85, "range": 0 }, "damage": 18, "knockback": 25, "onHit": [{ "type": "applyStatus", "status": "suppressed", "duration": 2, "value": 1 }], "visual": { "color": 13624575, "trailEffect": "explosion", "screenShake": 0.35 } }
+    ],
+    "hp": 232,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 24,
+    "className": "Crystal Golem",
+    "heightMeters": 4,
+    "strategy": "threat",
+    "cost": 8,
+    "tags": ["melee", "tank", "elite"]
+  },
+  "herd-bull": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 130 },
+      { "id": "herd-bull-charge", "name": "Rallying Charge", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 140, "width": 34 }, "damage": 28, "knockback": 45, "lungeThrough": 1, "visual": { "color": 9211020, "trailEffect": "thrust", "screenShake": 0.32 } },
+      { "id": "herd-bull-bellow", "name": "Enraging Bellow", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 75, "range": 0 }, "damage": 14, "knockback": 35, "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }], "visual": { "color": 11894492, "trailEffect": "explosion", "screenShake": 0.3 } }
+    ],
+    "hp": 190,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 20,
+    "className": "Herd Bull",
+    "heightMeters": 3,
+    "strategy": "rush",
+    "cost": 7,
+    "tags": ["melee", "elite"]
+  },
+  "storm-bull": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 135 },
+      { "id": "storm-bull-stampede", "name": "Thunder Stampede", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 175, "width": 44 }, "damage": 34, "knockback": 65, "lungeThrough": 1, "visual": { "color": 13624575, "trailEffect": "explosion", "screenShake": 0.5 } },
+      { "id": "storm-bull-gore", "name": "Charged Gore", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 70, "halfAngle": 0.7 }, "damage": 26, "knockback": 35, "onHit": [{ "type": "applyStatus", "status": "suppressed", "duration": 2, "value": 1 }], "visual": { "color": 11894492, "trailEffect": "slash", "screenShake": 0.4 } }
+    ],
+    "hp": 330,
+    "energy": { "red": 3, "blue": 1 },
+    "collisionRadius": 28,
+    "className": "Storm Bull",
+    "heightMeters": 5,
+    "strategy": "threat",
+    "cost": 13,
+    "tags": ["melee", "tank", "boss"]
+  },
+  "geode-titan": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 80 },
+      { "id": "geode-titan-slam", "name": "Ground Slam", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 90, "range": 0 }, "damage": 26, "knockback": 50, "visual": { "color": 11894492, "trailEffect": "explosion", "screenShake": 0.5 } },
+      { "id": "geode-titan-boulder", "name": "Crystal Hurl", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 60, "range": 190 }, "damage": 22, "knockback": 25, "visual": { "color": 13624575, "trailEffect": "projectile", "screenShake": 0.35 } },
+      { "id": "geode-titan-harden", "name": "Geode Hardening", "kind": "barrier", "cost": { "blue": 1 }, "barrierHp": 90 }
+    ],
+    "hp": 380,
+    "energy": { "red": 3, "blue": 1 },
+    "collisionRadius": 28,
+    "className": "Geode Titan",
+    "heightMeters": 5,
+    "strategy": "threat",
+    "cost": 14,
+    "tags": ["melee", "tank", "boss"]
+  },
+  "storm-roc": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 150 },
+      { "id": "storm-roc-dive", "name": "Dive Bomb", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 165, "width": 36 }, "damage": 30, "knockback": 40, "lungeThrough": 1, "visual": { "color": 13624575, "trailEffect": "thrust", "screenShake": 0.4 } },
+      { "id": "storm-roc-chain", "name": "Chain Lightning", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 78, "range": 200 }, "damage": 22, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }], "visual": { "color": 13624575, "trailEffect": "explosion", "screenShake": 0.3 } }
+    ],
+    "hp": 295,
+    "energy": { "red": 3, "blue": 2 },
+    "collisionRadius": 24,
+    "className": "Storm Roc",
+    "heightMeters": 4,
+    "strategy": "threat",
+    "cost": 13,
+    "tags": ["ranged", "boss"]
+  },
+  "herd-patriarch": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 120 },
+      { "id": "herd-patriarch-charge", "name": "Patriarch Charge", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 160, "width": 42 }, "damage": 32, "knockback": 55, "lungeThrough": 1, "visual": { "color": 13624575, "trailEffect": "explosion", "screenShake": 0.48 } },
+      { "id": "herd-patriarch-gore", "name": "Thunder Horns", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 72, "halfAngle": 0.8 }, "damage": 21, "knockback": 30, "visual": { "color": 11894492, "trailEffect": "slash", "screenShake": 0.38 } },
+      { "id": "herd-patriarch-bellow", "name": "Rage Bellow", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 85, "range": 0 }, "damage": 16, "knockback": 40, "onHit": [{ "type": "applyStatus", "status": "suppressed", "duration": 2, "value": 1 }], "visual": { "color": 13624575, "trailEffect": "explosion", "screenShake": 0.4 } }
+    ],
+    "hp": 285,
+    "energy": { "red": 3, "blue": 2 },
+    "collisionRadius": 28,
+    "className": "Herd Patriarch",
+    "heightMeters": 5,
+    "strategy": "threat",
+    "cost": 15,
+    "tags": ["melee", "boss"],
+    "effects": [
+      { "trigger": "onDeath", "action": { "type": "spawn", "templateKey": "dust-hare", "count": 2 } }
+    ]
+  }
+}

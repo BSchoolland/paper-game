@@ -1,0 +1,12 @@
+Dimension: Hornmarsh
+Biome: Sprawling river deltas and mudflats give way to towering reed forests, lily-choked lagoons, tangled root mangroves, and steaming mineral springs — all warm, green-gold, and alive with sound.
+Mood: Warm, humid, and droning — fertile and teeming, but heavy with the constant low hum of the reeds.
+Palette: primary #3f5e2e, secondary #caa64a, accent #cd7f32
+
+Description: A warm, waterlogged planet of endless river deltas where hollow reeds catch the wind and boom across the water like horns, so the whole world hums day and night. Giant lily pads carpet the slow channels, fish leap in the amber light, and thick humid air hangs over miles of mud and reed. Nothing here is owned or traded — it is pure overgrown wilderness, teeming and loud.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

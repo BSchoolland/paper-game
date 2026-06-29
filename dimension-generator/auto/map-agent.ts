@@ -21,15 +21,22 @@ import { mkdir, copyFile, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { MAP_PROMPTS, fullPrompt } from "./map-prompts.js";
 import { client, SMART_MODEL } from "./llm.js";
+import { generateImage, ART_BACKEND } from "./generate-image.js";
 import type { MapManifest } from "../../shared/src/encounter/map-manifest.js";
 
-const openai = new OpenAI();
+// Map + reference generation goes through the shared generateImage (codex by default). Collision
+// detection (detectPass) stays on the OpenAI API: it needs faithful in-place recoloring — keep the
+// scene identical, paint non-walkable regions red — which codex's generative tool can't do reliably.
+// Lazy client so codex-only runs (--no-collision) need no OPENAI_API_KEY.
+let openai: OpenAI | undefined;
+const getOpenAI = () => (openai ??= new OpenAI());
 const ROOT = join(import.meta.dir, "..", "..");
 
 export const MAP_MODEL = "gpt-image-2";
-const MAP_SIZE = "1456x1088"; // ~4:3, matches reference, both divisible by 16
+const MAP_SIZE = "1456x1088"; // ~4:3, matches reference, both divisible by 16 (API path only)
 const MAP_QUALITY = "low";
-const CONCURRENCY = 6;
+const MAP_ASPECT = "4:3 LANDSCAPE (clearly wider than tall)"; // codex aspect hint
+const CONCURRENCY = ART_BACKEND === "codex" ? 8 : 6;
 
 // --- collision detection ---
 const COLLISION_PY = join(ROOT, "dimension-generator/scripts/collision_mask.py");
@@ -43,30 +50,6 @@ const COLLISION_PROMPT =
 export const MULTIPASS_TYPES = new Set([
   "town", "city", "gateway-city", "gateway", "enemy-camp", "great-treasure", "great-ruins",
 ]);
-
-// --- shared image client (one place for the OpenAI call + decode) ---
-
-async function loadRefBlob(path: string): Promise<File> {
-  const buf = await Bun.file(path).arrayBuffer();
-  const ext = extname(path).toLowerCase() === ".png" ? "png" : "jpeg";
-  return new File([buf], `reference.${ext}`, { type: `image/${ext}` });
-}
-
-async function generateImage(opts: {
-  prompt: string;
-  refBlob?: File;
-  size?: string;
-  quality?: string;
-}): Promise<Buffer> {
-  const { prompt, refBlob, size = MAP_SIZE, quality = MAP_QUALITY } = opts;
-  const res = refBlob
-    ? await openai.images.edit({ model: MAP_MODEL, image: refBlob, prompt, n: 1, size: size as any, quality: quality as any })
-    : await openai.images.generate({ model: MAP_MODEL, prompt, n: 1, size: size as any, quality: quality as any });
-  const img = res.data![0]!;
-  if (img.b64_json) return Buffer.from(img.b64_json, "base64");
-  if (img.url) return Buffer.from(await (await fetch(img.url)).arrayBuffer());
-  throw new Error("No image data in response");
-}
 
 // --- bounded-concurrency pool ---
 
@@ -128,9 +111,15 @@ export async function generateDimensionReference(
     "- The walkable ground should remain light and parchment colored.",
     "- Keep the minimal theme from the reference image; do not overwhelm with detail.",
   ].join("\n");
-  const refBlob = await loadRefBlob(canonicalRefPath);
-  const buf = await generateImage({ prompt, refBlob });
-  await Bun.write(outPath, buf);
+  await generateImage({
+    prompt,
+    outPath,
+    referencePath: canonicalRefPath,
+    size: MAP_SIZE,
+    quality: MAP_QUALITY,
+    aspectHint: MAP_ASPECT,
+    label: "dimension reference",
+  });
   console.log(`  Phase A: dimension reference -> ${outPath}`);
 }
 
@@ -146,7 +135,7 @@ function pngSize(buf: Buffer): [number, number] {
 async function detectPass(smallPath: string): Promise<Buffer> {
   const buf = await Bun.file(smallPath).arrayBuffer();
   const blob = new File([buf], "in.png", { type: "image/png" });
-  const res = await openai.images.edit({ model: MAP_MODEL, image: blob, prompt: COLLISION_PROMPT, n: 1, size: DETECT_SIZE as any, quality: "low" as any });
+  const res = await getOpenAI().images.edit({ model: MAP_MODEL, image: blob, prompt: COLLISION_PROMPT, n: 1, size: DETECT_SIZE as any, quality: "low" as any });
   const img = res.data![0]!;
   if (img.b64_json) return Buffer.from(img.b64_json, "base64");
   if (img.url) return Buffer.from(await (await fetch(img.url)).arrayBuffer());
@@ -204,15 +193,20 @@ export async function generateMaps(dimId: number, referencePath: string): Promis
   console.log(`  Reference: ${referencePath}`);
   console.log(`  ${MAP_PROMPTS.length} maps @ ${MAP_SIZE} ${MAP_QUALITY}, concurrency ${CONCURRENCY}\n`);
 
-  const refBuffer = await Bun.file(referencePath).arrayBuffer();
   const refExt = extname(referencePath).toLowerCase() === ".png" ? "png" : "jpeg";
-  const mkBlob = () => new File([refBuffer], `reference.${refExt}`, { type: `image/${refExt}` });
 
   const t0 = Date.now();
   const files = await pool(MAP_PROMPTS, CONCURRENCY, async (p) => {
     const file = `${p.encounterType}-${p.variant}.png`;
-    const buf = await generateImage({ prompt: fullPrompt(p), refBlob: mkBlob() });
-    await Bun.write(join(outDir, file), buf);
+    await generateImage({
+      prompt: fullPrompt(p),
+      outPath: join(outDir, file),
+      referencePath,
+      size: MAP_SIZE,
+      quality: MAP_QUALITY,
+      aspectHint: MAP_ASPECT,
+      label: file,
+    });
     console.log(`  ✓ ${file}`);
     return { encounterType: p.encounterType as string, file };
   });

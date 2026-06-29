@@ -22,6 +22,7 @@
 import { mkdir, rm, writeFile, copyFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { extname, dirname, resolve, join } from "node:path";
+import { slugify } from "./slugify.js";
 
 interface EnemySpec {
   name: string;
@@ -49,10 +50,8 @@ interface DimensionSpec {
   palette: { primary: string; secondary: string; accent: string };
   mood: string;
   biome: string;
-  mechanicalIdentity?: string;
-  enemyBatches?: EnemyBatch[];
-  items?: ItemSpec[] | string;
-  enemies?: string;
+  enemyBatches: EnemyBatch[];
+  items: ItemSpec[];
 }
 
 const SCRIPT_DIR = dirname(import.meta.path);
@@ -64,10 +63,6 @@ const REFERENCES = {
   items: join(REF_DIR, "dim0-items.png"),
   mapDecorations: join(REF_DIR, "dim0-map-decorations.png"),
 };
-
-function slugify(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
-}
 
 async function writeBundle(opts: {
   outDir: string;
@@ -163,68 +158,40 @@ async function buildFromSpec(spec: DimensionSpec): Promise<string> {
     ].join("\n"),
   });
 
-  // 3-6. Enemies (one zip per batch)
-  if (spec.enemyBatches) {
-    for (let i = 0; i < spec.enemyBatches.length; i++) {
-      const batch = spec.enemyBatches[i]!;
-      if (batch.enemies.length !== 4) {
-        console.warn(`WARN: enemy batch "${batch.name}" has ${batch.enemies.length} enemies (expected 4 for a 4×4 grid)`);
-      }
-      const enemyList = batch.enemies.map(formatEnemy).join("\n\n");
-      const idx = String(3 + i).padStart(2, "0");
-      await writeBundle({
-        outDir,
-        name: `${idx}-enemies-${slugify(batch.name)}`,
-        spec,
-        referenceImage: REFERENCES.enemies,
-        prompt: [
-          lightContext(spec),
-          "",
-          "Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.",
-          "",
-          "The image must be a 4×4 grid:",
-          "  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)",
-          "  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)",
-          "  - Each enemy is consistent across its column (same character drawn 4 different ways)",
-          "  - All characters must face to the RIGHT",
-          "",
-          `This batch is the "${batch.name}" tier: ${batch.description}`,
-          "",
-          "The 4 enemies in this batch (one per column, in this order):",
-          "",
-          enemyList,
-        ].join("\n"),
-      });
+  // 3-6. Enemies (one bundle per tier). Structured roster required — freeform strings are not parsed.
+  if (!spec.enemyBatches?.length) {
+    throw new Error("spec.enemyBatches is required (structured roster). Freeform enemy strings are no longer supported.");
+  }
+  for (let i = 0; i < spec.enemyBatches.length; i++) {
+    const batch = spec.enemyBatches[i]!;
+    if (batch.enemies.length !== 4) {
+      throw new Error(`enemy batch "${batch.name}" has ${batch.enemies.length} enemies; need exactly 4 for a 4×4 grid.`);
     }
-  } else if (spec.enemies && typeof spec.enemies === "string") {
-    // Freeform format: split into 4 tiers by header
-    const tierNames = ["fodder", "standard", "elite", "boss"];
-    const sections = spec.enemies.split(/(?=FODDER|STANDARD|ELITE|BOSS)/i).filter(s => s.trim());
-    for (let i = 0; i < Math.min(sections.length, 4); i++) {
-      const section = sections[i]!.trim();
-      const idx = String(3 + i).padStart(2, "0");
-      await writeBundle({
-        outDir,
-        name: `${idx}-enemies-${tierNames[i]}`,
-        spec,
-        referenceImage: REFERENCES.enemies,
-        prompt: [
-          lightContext(spec),
-          "",
-          "Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.",
-          "",
-          "The image must be a 4×4 grid:",
-          "  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)",
-          "  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)",
-          "  - Each enemy is consistent across its column (same character drawn 4 different ways)",
-          "  - All characters must face to the RIGHT",
-          "",
-          "The enemies in this batch:",
-          "",
-          section,
-        ].join("\n"),
-      });
-    }
+    const enemyList = batch.enemies.map(formatEnemy).join("\n\n");
+    const idx = String(3 + i).padStart(2, "0");
+    await writeBundle({
+      outDir,
+      name: `${idx}-enemies-${slugify(batch.name)}`,
+      spec,
+      referenceImage: REFERENCES.enemies,
+      prompt: [
+        lightContext(spec),
+        "",
+        "Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.",
+        "",
+        "The image must be a 4×4 grid:",
+        "  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)",
+        "  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)",
+        "  - Each enemy is consistent across its column (same character drawn 4 different ways)",
+        "  - All characters must face to the RIGHT",
+        "",
+        `This batch is the "${batch.name}" tier: ${batch.description}`,
+        "",
+        "The 4 enemies in this batch (one per column, in this order):",
+        "",
+        enemyList,
+      ].join("\n"),
+    });
   }
 
   // 7. Map decorations (world-map / hex-map terrain icons)
@@ -242,10 +209,11 @@ async function buildFromSpec(spec: DimensionSpec): Promise<string> {
     ].join("\n"),
   });
 
-  // 8. Items
-  const itemListText = Array.isArray(spec.items)
-    ? spec.items.map(formatItem).join("\n")
-    : (spec.items ?? "16 fantasy items matching the dimension's theme");
+  // 8. Items. Structured roster required — freeform strings are not parsed.
+  if (!Array.isArray(spec.items)) {
+    throw new Error("spec.items must be a structured array. Freeform item strings are no longer supported.");
+  }
+  const itemListText = spec.items.map(formatItem).join("\n");
   await writeBundle({
     outDir,
     name: "08-items",
@@ -281,7 +249,10 @@ async function build(specPath: string): Promise<string> {
 
 export { build as buildDiffusionBundles, buildFromSpec };
 
-const specArg = process.argv[2];
-if (specArg) {
-  await build(resolve(specArg));
+// Only run as CLI if this file is the main module
+if (import.meta.main) {
+  const specArg = process.argv[2];
+  if (specArg) {
+    await build(resolve(specArg));
+  }
 }

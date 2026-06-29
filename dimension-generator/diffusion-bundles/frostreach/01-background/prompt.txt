@@ -1,0 +1,12 @@
+Dimension: Frostreach
+Biome: A whole frozen planet: wind-scoured snow plains, frozen pine forests, splintered glacier peaks, blue ice caves and crevasses, frozen sea-ice, and rare steaming geothermal vents.
+Mood: Cold, exposed, and indifferent — beautiful pale light over a world that will bury you without noticing.
+Palette: primary #dce8f0, secondary #3a5a78, accent #8fd3df
+
+Description: A frozen planet wrapped pole to pole in snow and old glacier ice, where pale bands of cold light hang over the drifts like halos and nothing in the white offers shelter. Its biomes range from wind-scoured snow plains and frozen pine forests to splintered glacier peaks, blue crevasse caves, and steaming geothermal pockets that never quite thaw. Travelers dig in or die; the world helps no one.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

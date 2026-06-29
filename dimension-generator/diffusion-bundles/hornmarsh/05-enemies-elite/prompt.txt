@@ -1,0 +1,20 @@
+Dimension: Hornmarsh
+Biome: Sprawling river deltas and mudflats give way to towering reed forests, lily-choked lagoons, tangled root mangroves, and steaming mineral springs — all warm, green-gold, and alive with sound.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+The enemies in this batch:
+
+ELITE (cost 6-9):
+9. Marsh Crocodile — heavy bite that grapples and holds a target in place; armored dark-green reptile.
+10. Boomreed — hollow reed-stalk creature that releases an AoE sound blast to stun nearby foes; upright bundle of brass-gold reeds.
+11. Giant Catfish — water-bound bruiser with a wide tail-sweep AoE; huge whiskered grey-green fish.
+12. Water Constrictor — large snake that coils to immobilize and crush over time; thick brown-banded python.

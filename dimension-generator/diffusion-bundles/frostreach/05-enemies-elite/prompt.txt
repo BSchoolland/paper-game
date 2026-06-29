@@ -1,0 +1,20 @@
+Dimension: Frostreach
+Biome: A whole frozen planet: wind-scoured snow plains, frozen pine forests, splintered glacier peaks, blue ice caves and crevasses, frozen sea-ice, and rare steaming geothermal vents.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+The enemies in this batch:
+
+ELITE (cost 6-9):
+9. Frost Giant — heavy melee bruiser with knockback swings. Towering blue-skinned giant, ice matted in his beard.
+10. Snow Bear — tanky frontline with a roar that taunts. Massive white bear, hide caked in snow.
+11. Ice Golem — slow armored wall with very high defense. Lumbering figure built of packed ice and stone.
+12. Frost Witch — ranged caster dealing AoE freeze and control. Gaunt woman in rimed furs, breath like fog.

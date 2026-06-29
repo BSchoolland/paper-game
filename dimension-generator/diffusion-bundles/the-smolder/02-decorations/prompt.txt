@@ -1,0 +1,14 @@
+Dimension: The Smolder
+Biome: smoldering ash steppe with glass flats and ember canyons
+Mood: Grey, hot, and restless, with smoke on every horizon and embers underfoot. There are no towns here, only long roads and the people who keep moving along them.
+Palette: primary #3A332E, secondary #8C7E72, accent #E2581F
+
+Description: A world where the ground itself never stops burning: peat fires creep underground for years and grey ash falls like snow. Old stone causeways thread across smoldering steppes, glass flats where the heat ran hottest, and ember canyons that glow at night. Nomads follow the roads between fires, and everything that lives here has learned to wear the heat.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color saturation, isometric three-quarter perspective, and drop shadows. Ignore the reference's parchment background.
+
+Each decoration should be a single distinct object with clear space around it, suitable for cutting out individually. A mix of organic decorations (plants/natural objects) and structural decorations (walls/ruins/built objects) — choose what fits this dimension's biome and mood.
+
+Important: Use a variety of colors across the decorations — not everything should be the same color as the dimension palette. Natural environments have diverse coloring, so include variety (e.g. different plant greens, browns, grays for rocks, varied flower colors).

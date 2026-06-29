@@ -1,0 +1,611 @@
+[
+  {
+    "id": "reed-cutter",
+    "name": "Reed Cutter",
+    "description": "A light reed-handled shortsword, quick but weak.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "sword",
+    "abilities": [
+      {
+        "id": "reed-cutter-slash",
+        "name": "Quick Slash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 66, "halfAngle": 0.785398163 },
+        "damage": 16,
+        "knockback": 5,
+        "visual": { "color": 12303291, "trailEffect": "slash" }
+      },
+      {
+        "id": "reed-cutter-cut",
+        "name": "Reed Cut",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 78, "halfAngle": 1.396263402 },
+        "damage": 28,
+        "knockback": 8,
+        "visual": { "color": 12303291, "trailEffect": "slash" }
+      }
+    ]
+  },
+  {
+    "id": "fishing-spear",
+    "name": "Fishing Spear",
+    "description": "A barbed spear made for stabbing fish in the shallows.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "spear",
+    "abilities": [
+      {
+        "id": "fishing-spear-thrust",
+        "name": "Stab",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "rectangle", "length": 90, "width": 16 },
+        "damage": 13,
+        "knockback": 6,
+        "visual": { "color": 12303291, "trailEffect": "thrust" }
+      },
+      {
+        "id": "fishing-spear-lunge",
+        "name": "Barbed Lunge",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 120, "width": 18 },
+        "damage": 22,
+        "knockback": 9,
+        "lungeThrough": 40,
+        "visual": { "color": 12303291, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "reed-bow",
+    "name": "Reed Bow",
+    "description": "A simple bow bent from a dried reed, fires fast.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "bow",
+    "abilities": [
+      {
+        "id": "reed-bow-shot",
+        "name": "Quick Shot",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 235 },
+        "damage": 16,
+        "knockback": 3,
+        "visual": { "color": 12303291, "trailEffect": "projectile" }
+      },
+      {
+        "id": "reed-bow-power",
+        "name": "Power Shot",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "point", "range": 255 },
+        "damage": 27,
+        "knockback": 5,
+        "visual": { "color": 12303291, "trailEffect": "projectile" }
+      }
+    ]
+  },
+  {
+    "id": "reed-staff",
+    "name": "Reed Staff",
+    "description": "A hollow reed staff that hums and cracks on impact.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "staff",
+    "abilities": [
+      {
+        "id": "reed-staff-crack",
+        "name": "Reed Crack",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 230 },
+        "damage": 13,
+        "knockback": 3,
+        "visual": { "color": 12303291, "trailEffect": "projectile" }
+      },
+      {
+        "id": "reed-staff-hum",
+        "name": "Droning Hum",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 30, "range": 195 },
+        "damage": 16,
+        "knockback": 4,
+        "visual": { "color": 12303291, "trailEffect": "splash" }
+      }
+    ]
+  },
+  {
+    "id": "bog-maul",
+    "name": "Bog Maul",
+    "description": "A heavy mud-caked club, slow but hard-hitting.",
+    "rarity": "common",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "bog-maul-smash",
+        "name": "Smash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 80, "halfAngle": 1.047197551 },
+        "damage": 22,
+        "knockback": 10,
+        "visual": { "color": 12303291, "trailEffect": "slash" }
+      },
+      {
+        "id": "bog-maul-crush",
+        "name": "Mud Crush",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 115, "width": 24 },
+        "damage": 38,
+        "knockback": 13,
+        "visual": { "color": 12303291, "trailEffect": "slash", "screenShake": 4 }
+      }
+    ]
+  },
+  {
+    "id": "gator-tooth-sword",
+    "name": "Gator-Tooth Sword",
+    "description": "A blade lined with crocodile teeth that tears wounds open.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "sword",
+    "abilities": [
+      {
+        "id": "gator-tooth-sword-slash",
+        "name": "Toothed Slash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 74, "halfAngle": 0.959931089 },
+        "damage": 20,
+        "knockback": 5,
+        "visual": { "color": 4153390, "trailEffect": "slash" }
+      },
+      {
+        "id": "gator-tooth-sword-rend",
+        "name": "Rending Cleave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 84, "halfAngle": 1.308996939 },
+        "damage": 39,
+        "knockback": 8,
+        "visual": { "color": 4153390, "trailEffect": "slash", "screenShake": 2 }
+      },
+      {
+        "id": "gator-tooth-sword-gut",
+        "name": "Gut Thrust",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 105, "width": 16 },
+        "damage": 30,
+        "knockback": 5,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }],
+        "visual": { "color": 4153390, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "heron-spear",
+    "name": "Heron Spear",
+    "description": "A long thin spear with extra reach to poke from afar.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "spear",
+    "abilities": [
+      {
+        "id": "heron-spear-thrust",
+        "name": "Long Poke",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "rectangle", "length": 130, "width": 15 },
+        "damage": 19,
+        "knockback": 5,
+        "visual": { "color": 4153390, "trailEffect": "thrust" }
+      },
+      {
+        "id": "heron-spear-lunge",
+        "name": "Heron Lunge",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 160, "width": 16 },
+        "damage": 34,
+        "knockback": 6,
+        "lungeThrough": 55,
+        "visual": { "color": 4153390, "trailEffect": "thrust", "screenShake": 2 }
+      },
+      {
+        "id": "heron-spear-pin",
+        "name": "Pinning Stab",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 135, "width": 14 },
+        "damage": 25,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1, "value": 1 }],
+        "visual": { "color": 4153390, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "fowlers-bow",
+    "name": "Fowler's Bow",
+    "description": "A short hunting bow built for rapid follow-up shots.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "bow",
+    "abilities": [
+      {
+        "id": "fowlers-bow-shot",
+        "name": "Quick Shot",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 245 },
+        "damage": 17,
+        "knockback": 3,
+        "visual": { "color": 4153390, "trailEffect": "projectile" }
+      },
+      {
+        "id": "fowlers-bow-double",
+        "name": "Double Shot",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "point", "range": 270 },
+        "damage": 27,
+        "knockback": 5,
+        "visual": { "color": 4153390, "trailEffect": "projectile", "screenShake": 2 }
+      },
+      {
+        "id": "fowlers-bow-spray",
+        "name": "Snap Spray",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 50, "range": 215 },
+        "damage": 18,
+        "knockback": 3,
+        "visual": { "color": 4153390, "trailEffect": "projectile" }
+      }
+    ]
+  },
+  {
+    "id": "marsh-staff",
+    "name": "Marsh Staff",
+    "description": "A staff topped with a heavy seed-pod that splashes mud and slows.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "staff",
+    "abilities": [
+      {
+        "id": "marsh-staff-bolt",
+        "name": "Mud Bolt",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 220 },
+        "damage": 11,
+        "knockback": 3,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.25 }],
+        "visual": { "color": 4153390, "trailEffect": "projectile" }
+      },
+      {
+        "id": "marsh-staff-splash",
+        "name": "Mud Splash",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 62, "range": 180 },
+        "damage": 14,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.3 }],
+        "visual": { "color": 4153390, "trailEffect": "splash" }
+      },
+      {
+        "id": "marsh-staff-mire",
+        "name": "Mire Cone",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "sector", "radius": 85, "halfAngle": 0.785398163 },
+        "damage": 13,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.35 }],
+        "visual": { "color": 4153390, "trailEffect": "splash" }
+      }
+    ]
+  },
+  {
+    "id": "boat-oar",
+    "name": "Boat Oar",
+    "description": "A broad oar that sweeps several enemies in one swing.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "boat-oar-sweep",
+        "name": "Wide Sweep",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 86, "halfAngle": 1.396263402 },
+        "damage": 24,
+        "knockback": 12,
+        "visual": { "color": 4153390, "trailEffect": "slash", "screenShake": 3 }
+      },
+      {
+        "id": "boat-oar-broad",
+        "name": "Broad Sweep",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 95, "halfAngle": 1.570796327 },
+        "damage": 40,
+        "knockback": 14,
+        "visual": { "color": 4153390, "trailEffect": "slash", "screenShake": 4 }
+      },
+      {
+        "id": "boat-oar-shove",
+        "name": "Oar Shove",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 100, "width": 26 },
+        "damage": 28,
+        "knockback": 22,
+        "wallSlamDamage": 10,
+        "visual": { "color": 4153390, "trailEffect": "slash", "screenShake": 3 }
+      }
+    ]
+  },
+  {
+    "id": "gator-jaw",
+    "name": "Gator Jaw",
+    "description": "A whole crocodile jaw on a haft, brutal crushing bite.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "gator-jaw-bite",
+        "name": "Snap Bite",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 82, "halfAngle": 1.047197551 },
+        "damage": 25,
+        "knockback": 12,
+        "visual": { "color": 4153390, "trailEffect": "slash", "screenShake": 3 }
+      },
+      {
+        "id": "gator-jaw-crush",
+        "name": "Crushing Bite",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 76, "range": 0 },
+        "damage": 44,
+        "knockback": 18,
+        "wallSlamDamage": 12,
+        "visual": { "color": 4153390, "trailEffect": "explosion", "screenShake": 6 }
+      },
+      {
+        "id": "gator-jaw-hold",
+        "name": "Death Hold",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 95, "width": 22 },
+        "damage": 28,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1.5, "value": 1 }],
+        "visual": { "color": 4153390, "trailEffect": "slash", "screenShake": 3 }
+      }
+    ]
+  },
+  {
+    "id": "trident",
+    "name": "Trident",
+    "description": "A three-pronged fishing fork that strikes targets in a line.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "spear",
+    "abilities": [
+      {
+        "id": "trident-jab",
+        "name": "Fork Jab",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "rectangle", "length": 105, "width": 18 },
+        "damage": 18,
+        "knockback": 5,
+        "visual": { "color": 4153390, "trailEffect": "thrust" }
+      },
+      {
+        "id": "trident-prong",
+        "name": "Three-Prong",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 150, "width": 20 },
+        "damage": 35,
+        "knockback": 6,
+        "lungeThrough": 55,
+        "visual": { "color": 4153390, "trailEffect": "thrust", "screenShake": 2 }
+      },
+      {
+        "id": "trident-skewer",
+        "name": "Skewer Line",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 130, "width": 18 },
+        "damage": 26,
+        "knockback": 5,
+        "lungeThrough": 40,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.25 }],
+        "visual": { "color": 4153390, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "bronze-saber",
+    "name": "Bronze Saber",
+    "description": "A curved brass-bright blade, keen and well balanced.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "sword",
+    "abilities": [
+      {
+        "id": "bronze-saber-slash",
+        "name": "Keen Slash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 80, "halfAngle": 1.047197551 },
+        "damage": 28,
+        "knockback": 7,
+        "visual": { "color": 13467442, "trailEffect": "slash" }
+      },
+      {
+        "id": "bronze-saber-cleave",
+        "name": "Brass Cleave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 90, "halfAngle": 1.308996939 },
+        "damage": 49,
+        "knockback": 10,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2.5, "value": 1 }],
+        "visual": { "color": 13467442, "trailEffect": "slash", "screenShake": 4 }
+      },
+      {
+        "id": "bronze-saber-riposte",
+        "name": "Riposte Thrust",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 118, "width": 18 },
+        "damage": 38,
+        "knockback": 7,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }],
+        "visual": { "color": 13467442, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "horn-bow",
+    "name": "Horn Bow",
+    "description": "A composite bow of horn and reed with long range and heavy draw.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "bow",
+    "abilities": [
+      {
+        "id": "horn-bow-shot",
+        "name": "Draw Shot",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 265 },
+        "damage": 18,
+        "knockback": 4,
+        "visual": { "color": 13467442, "trailEffect": "projectile" }
+      },
+      {
+        "id": "horn-bow-heavy",
+        "name": "Heavy Draw",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "point", "range": 290 },
+        "damage": 32,
+        "knockback": 7,
+        "visual": { "color": 13467442, "trailEffect": "projectile", "screenShake": 3 }
+      },
+      {
+        "id": "horn-bow-volley",
+        "name": "Piercing Volley",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 60, "range": 230 },
+        "damage": 22,
+        "knockback": 4,
+        "visual": { "color": 13467442, "trailEffect": "projectile" }
+      }
+    ]
+  },
+  {
+    "id": "brass-horn",
+    "name": "Brass Horn",
+    "description": "A great brass horn that blasts a wave of sound through nearby foes.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "staff",
+    "abilities": [
+      {
+        "id": "brass-horn-blast",
+        "name": "Sound Blast",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "circle", "radius": 60, "range": 150 },
+        "damage": 16,
+        "knockback": 6,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }],
+        "visual": { "color": 13280330, "trailEffect": "splash" }
+      },
+      {
+        "id": "brass-horn-wave",
+        "name": "Horn Wave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 110, "halfAngle": 0.785398163 },
+        "damage": 27,
+        "knockback": 8,
+        "onHit": [{ "type": "applyStatus", "status": "suppressed", "duration": 2, "value": 1 }],
+        "visual": { "color": 13280330, "trailEffect": "splash", "screenShake": 4 }
+      },
+      {
+        "id": "brass-horn-boom",
+        "name": "Resonant Boom",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 85, "range": 0 },
+        "damage": 24,
+        "knockback": 10,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2.5, "value": 1 }],
+        "visual": { "color": 13280330, "trailEffect": "explosion", "screenShake": 5 }
+      }
+    ]
+  },
+  {
+    "id": "bronze-greatsword",
+    "name": "Bronze Greatsword",
+    "description": "A massive bronze blade that crushes through wide arcs.",
+    "rarity": "rare",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "bronze-greatsword-swing",
+        "name": "Broad Swing",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 94, "halfAngle": 1.308996939 },
+        "damage": 31,
+        "knockback": 10,
+        "visual": { "color": 13467442, "trailEffect": "slash", "screenShake": 3 }
+      },
+      {
+        "id": "bronze-greatsword-cleave",
+        "name": "Crushing Cleave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 100, "halfAngle": 1.570796327 },
+        "damage": 51,
+        "knockback": 13,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2.5, "value": 1 }],
+        "visual": { "color": 13467442, "trailEffect": "slash", "screenShake": 5 }
+      },
+      {
+        "id": "bronze-greatsword-whirl",
+        "name": "Wide Arc",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 92, "range": 0 },
+        "damage": 38,
+        "knockback": 11,
+        "visual": { "color": 13467442, "trailEffect": "explosion", "screenShake": 4 }
+      }
+    ]
+  }
+]

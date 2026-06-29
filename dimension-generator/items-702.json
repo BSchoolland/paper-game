@@ -1,0 +1,620 @@
+[
+  {
+    "id": "iron-sword",
+    "name": "Iron Sword",
+    "description": "A plain, reliable blade with no tricks.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "sword",
+    "abilities": [
+      {
+        "id": "iron-sword-slash",
+        "name": "Slash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 66, "halfAngle": 0.785398163 },
+        "damage": 16,
+        "knockback": 5,
+        "visual": { "color": 12303291, "trailEffect": "slash" }
+      },
+      {
+        "id": "iron-sword-cleave",
+        "name": "Heavy Cleave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 78, "halfAngle": 1.570796327 },
+        "damage": 27,
+        "knockback": 8,
+        "visual": { "color": 12303291, "trailEffect": "slash" }
+      }
+    ]
+  },
+  {
+    "id": "shard-saber",
+    "name": "Shard Saber",
+    "description": "An amethyst-edged blade that bites deeper the longer it works a single foe.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "sword",
+    "abilities": [
+      {
+        "id": "shard-saber-slash",
+        "name": "Edge Slash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 72, "halfAngle": 0.785398163 },
+        "damage": 21,
+        "knockback": 4,
+        "visual": { "color": 7028640, "trailEffect": "slash" }
+      },
+      {
+        "id": "shard-saber-runthrough",
+        "name": "Run-Through",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 105, "width": 16 },
+        "damage": 44,
+        "knockback": 6,
+        "visual": { "color": 7028640, "trailEffect": "thrust", "screenShake": 2 }
+      },
+      {
+        "id": "shard-saber-flurry",
+        "name": "Shard Flurry",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 95, "width": 16 },
+        "damage": 33,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.3 }],
+        "visual": { "color": 7028640, "trailEffect": "slash" }
+      }
+    ]
+  },
+  {
+    "id": "stormbrand",
+    "name": "Stormbrand",
+    "description": "Discharges static on impact, arcing a shock to a nearby enemy.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "sword",
+    "abilities": [
+      {
+        "id": "stormbrand-slash",
+        "name": "Static Slash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 78, "halfAngle": 0.872664626 },
+        "damage": 24,
+        "knockback": 5,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 1.5, "value": 1 }],
+        "visual": { "color": 15915854, "trailEffect": "slash" }
+      },
+      {
+        "id": "stormbrand-arc",
+        "name": "Arc Discharge",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 96, "halfAngle": 1.396263402 },
+        "damage": 41,
+        "knockback": 7,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }],
+        "visual": { "color": 15915854, "trailEffect": "slash", "screenShake": 4 }
+      },
+      {
+        "id": "stormbrand-chain",
+        "name": "Chain Shock",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 74, "range": 60 },
+        "damage": 30,
+        "knockback": 5,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.3 }],
+        "visual": { "color": 15915854, "trailEffect": "splash", "screenShake": 2 }
+      }
+    ]
+  },
+  {
+    "id": "hunting-spear",
+    "name": "Hunting Spear",
+    "description": "Basic reach weapon for keeping enemies at arm's length.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "spear",
+    "abilities": [
+      {
+        "id": "hunting-spear-thrust",
+        "name": "Thrust",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "rectangle", "length": 95, "width": 16 },
+        "damage": 15,
+        "knockback": 6,
+        "visual": { "color": 12303291, "trailEffect": "thrust" }
+      },
+      {
+        "id": "hunting-spear-lunge",
+        "name": "Lunge",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 125, "width": 20 },
+        "damage": 26,
+        "knockback": 9,
+        "lungeThrough": 40,
+        "visual": { "color": 12303291, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "horn-spear",
+    "name": "Horn Spear",
+    "description": "A buffalo-horn tip that throws the target back a full tile.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "spear",
+    "abilities": [
+      {
+        "id": "horn-spear-jab",
+        "name": "Goring Jab",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "rectangle", "length": 100, "width": 16 },
+        "damage": 17,
+        "knockback": 14,
+        "visual": { "color": 7028640, "trailEffect": "thrust" }
+      },
+      {
+        "id": "horn-spear-charge",
+        "name": "Horn Charge",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 135, "width": 18 },
+        "damage": 34,
+        "knockback": 20,
+        "wallSlamDamage": 12,
+        "lungeThrough": 40,
+        "visual": { "color": 7028640, "trailEffect": "thrust", "screenShake": 4 }
+      },
+      {
+        "id": "horn-spear-toss",
+        "name": "Tossing Gore",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 110, "width": 18 },
+        "damage": 25,
+        "knockback": 22,
+        "wallSlamDamage": 10,
+        "visual": { "color": 7028640, "trailEffect": "thrust", "screenShake": 3 }
+      }
+    ]
+  },
+  {
+    "id": "quartz-lance",
+    "name": "Quartz Lance",
+    "description": "A crystal-tipped thrust that punches clean through armor.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "spear",
+    "abilities": [
+      {
+        "id": "quartz-lance-thrust",
+        "name": "Piercing Thrust",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "rectangle", "length": 115, "width": 16 },
+        "damage": 23,
+        "knockback": 5,
+        "lungeThrough": 50,
+        "visual": { "color": 7028640, "trailEffect": "thrust" }
+      },
+      {
+        "id": "quartz-lance-impale",
+        "name": "Crystal Impale",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 155, "width": 16 },
+        "damage": 46,
+        "knockback": 6,
+        "lungeThrough": 80,
+        "visual": { "color": 7028640, "trailEffect": "thrust", "screenShake": 3 }
+      },
+      {
+        "id": "quartz-lance-skewer",
+        "name": "Sunder Skewer",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 130, "width": 16 },
+        "damage": 32,
+        "knockback": 5,
+        "lungeThrough": 60,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.3 }],
+        "visual": { "color": 7028640, "trailEffect": "thrust" }
+      }
+    ]
+  },
+  {
+    "id": "hunting-bow",
+    "name": "Hunting Bow",
+    "description": "A straightforward bow for clean ranged shots.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "bow",
+    "abilities": [
+      {
+        "id": "hunting-bow-shot",
+        "name": "Quick Shot",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 235 },
+        "damage": 15,
+        "knockback": 3,
+        "visual": { "color": 12303291, "trailEffect": "projectile" }
+      },
+      {
+        "id": "hunting-bow-power",
+        "name": "Power Shot",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "point", "range": 255 },
+        "damage": 26,
+        "knockback": 5,
+        "visual": { "color": 12303291, "trailEffect": "projectile" }
+      }
+    ]
+  },
+  {
+    "id": "crystal-bow",
+    "name": "Crystal Bow",
+    "description": "Fires shards that splinter on impact, peppering nearby foes.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "bow",
+    "abilities": [
+      {
+        "id": "crystal-bow-shot",
+        "name": "Shard Shot",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 235 },
+        "damage": 13,
+        "knockback": 3,
+        "visual": { "color": 7028640, "trailEffect": "projectile" }
+      },
+      {
+        "id": "crystal-bow-burst",
+        "name": "Splinter Burst",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 42, "range": 215 },
+        "damage": 18,
+        "knockback": 5,
+        "visual": { "color": 7028640, "trailEffect": "splash", "screenShake": 2 }
+      },
+      {
+        "id": "crystal-bow-spray",
+        "name": "Shard Spray",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 40, "range": 200 },
+        "damage": 14,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.25 }],
+        "visual": { "color": 7028640, "trailEffect": "splash" }
+      }
+    ]
+  },
+  {
+    "id": "storm-bow",
+    "name": "Storm Bow",
+    "description": "Arrows brand the target with a clinging static charge.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "bow",
+    "abilities": [
+      {
+        "id": "storm-bow-shot",
+        "name": "Static Shot",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 245 },
+        "damage": 18,
+        "knockback": 3,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.3 }],
+        "visual": { "color": 15915854, "trailEffect": "projectile" }
+      },
+      {
+        "id": "storm-bow-mark",
+        "name": "Charged Mark",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "point", "range": 265 },
+        "damage": 30,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "suppressed", "duration": 2, "value": 1 }],
+        "visual": { "color": 15915854, "trailEffect": "projectile", "screenShake": 2 }
+      },
+      {
+        "id": "storm-bow-volley",
+        "name": "Static Volley",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 58, "range": 215 },
+        "damage": 20,
+        "knockback": 4,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.35 }],
+        "visual": { "color": 15915854, "trailEffect": "splash" }
+      }
+    ]
+  },
+  {
+    "id": "spark-staff",
+    "name": "Spark Staff",
+    "description": "Fires a short-range zap for light damage.",
+    "rarity": "common",
+    "slotCost": { "hand": 1 },
+    "animSet": "staff",
+    "abilities": [
+      {
+        "id": "spark-staff-zap",
+        "name": "Zap",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 185 },
+        "damage": 12,
+        "knockback": 3,
+        "visual": { "color": 15915854, "trailEffect": "projectile" }
+      },
+      {
+        "id": "spark-staff-jolt",
+        "name": "Jolt",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 30, "range": 180 },
+        "damage": 15,
+        "knockback": 4,
+        "visual": { "color": 15915854, "trailEffect": "splash" }
+      }
+    ]
+  },
+  {
+    "id": "charge-rod",
+    "name": "Charge Rod",
+    "description": "Stores up static across turns, then unleashes a heavier shock.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 1 },
+    "animSet": "staff",
+    "abilities": [
+      {
+        "id": "charge-rod-zap",
+        "name": "Trickle Zap",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 195 },
+        "damage": 11,
+        "knockback": 3,
+        "visual": { "color": 15915854, "trailEffect": "projectile" }
+      },
+      {
+        "id": "charge-rod-release",
+        "name": "Discharge",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 44, "range": 185 },
+        "damage": 18,
+        "knockback": 6,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 1.5, "value": 1 }],
+        "visual": { "color": 15915854, "trailEffect": "explosion", "screenShake": 4 }
+      },
+      {
+        "id": "charge-rod-overload",
+        "name": "Overload",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "sector", "radius": 78, "halfAngle": 0.785398163 },
+        "damage": 14,
+        "knockback": 7,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.25 }],
+        "visual": { "color": 15915854, "trailEffect": "splash" }
+      }
+    ]
+  },
+  {
+    "id": "thunder-staff",
+    "name": "Thunder Staff",
+    "description": "Calls a lightning strike down onto a tile, hitting everything on it.",
+    "rarity": "rare",
+    "slotCost": { "hand": 1 },
+    "animSet": "staff",
+    "abilities": [
+      {
+        "id": "thunder-staff-bolt",
+        "name": "Lightning Bolt",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "point", "range": 245 },
+        "damage": 16,
+        "knockback": 3,
+        "visual": { "color": 15915854, "trailEffect": "projectile" }
+      },
+      {
+        "id": "thunder-staff-strike",
+        "name": "Thunderstrike",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 80, "range": 210 },
+        "damage": 28,
+        "knockback": 6,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }],
+        "visual": { "color": 15915854, "trailEffect": "explosion", "screenShake": 5 }
+      },
+      {
+        "id": "thunder-staff-storm",
+        "name": "Rolling Storm",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "sector", "radius": 110, "halfAngle": 0.785398163 },
+        "damage": 21,
+        "knockback": 7,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.3 }],
+        "visual": { "color": 15915854, "trailEffect": "splash", "screenShake": 3 }
+      }
+    ]
+  },
+  {
+    "id": "stone-maul",
+    "name": "Stone Maul",
+    "description": "A slow, heavy smash that lands one big hit.",
+    "rarity": "common",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "stone-maul-smash",
+        "name": "Smash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 80, "halfAngle": 1.047197551 },
+        "damage": 22,
+        "knockback": 9,
+        "visual": { "color": 12303291, "trailEffect": "slash" }
+      },
+      {
+        "id": "stone-maul-crush",
+        "name": "Crushing Blow",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 120, "width": 24 },
+        "damage": 43,
+        "knockback": 13,
+        "visual": { "color": 12303291, "trailEffect": "slash", "screenShake": 4 }
+      }
+    ]
+  },
+  {
+    "id": "geode-hammer",
+    "name": "Geode Hammer",
+    "description": "A crystal hammer whose ground-slam hurls back everything around the impact.",
+    "rarity": "uncommon",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "geode-hammer-smash",
+        "name": "Smash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 82, "halfAngle": 1.047197551 },
+        "damage": 25,
+        "knockback": 14,
+        "visual": { "color": 7028640, "trailEffect": "slash", "screenShake": 3 }
+      },
+      {
+        "id": "geode-hammer-slam",
+        "name": "Ground Slam",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "circle", "radius": 80, "range": 0 },
+        "damage": 44,
+        "knockback": 20,
+        "wallSlamDamage": 12,
+        "visual": { "color": 7028640, "trailEffect": "explosion", "screenShake": 6 }
+      },
+      {
+        "id": "geode-hammer-shove",
+        "name": "Quake Shove",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 100, "width": 26 },
+        "damage": 28,
+        "knockback": 22,
+        "wallSlamDamage": 10,
+        "visual": { "color": 7028640, "trailEffect": "slash", "screenShake": 3 }
+      }
+    ]
+  },
+  {
+    "id": "stormhammer",
+    "name": "Stormhammer",
+    "description": "A slam that sends a shockwave down a line, staggering all it rolls through.",
+    "rarity": "rare",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "stormhammer-smash",
+        "name": "Charged Smash",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 84, "halfAngle": 1.047197551 },
+        "damage": 26,
+        "knockback": 12,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 1.5, "value": 1 }],
+        "visual": { "color": 15915854, "trailEffect": "slash", "screenShake": 4 }
+      },
+      {
+        "id": "stormhammer-shockwave",
+        "name": "Shockwave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "rectangle", "length": 160, "width": 26 },
+        "damage": 42,
+        "knockback": 14,
+        "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2.5, "value": 1 }],
+        "visual": { "color": 15915854, "trailEffect": "explosion", "screenShake": 6 }
+      },
+      {
+        "id": "stormhammer-rolling",
+        "name": "Rolling Thunder",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "rectangle", "length": 135, "width": 24 },
+        "damage": 30,
+        "knockback": 12,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.35 }],
+        "visual": { "color": 15915854, "trailEffect": "slash", "screenShake": 4 }
+      }
+    ]
+  },
+  {
+    "id": "shard-greatsword",
+    "name": "Shard Greatsword",
+    "description": "A wide crystalline cleave that carves through everything in the arc ahead.",
+    "rarity": "rare",
+    "slotCost": { "hand": 2 },
+    "animSet": "two-handed",
+    "abilities": [
+      {
+        "id": "shard-greatsword-swing",
+        "name": "Wide Swing",
+        "kind": "attack",
+        "cost": { "red": 1 },
+        "shape": { "kind": "sector", "radius": 94, "halfAngle": 1.221730476 },
+        "damage": 31,
+        "knockback": 9,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 0.3 }],
+        "visual": { "color": 7028640, "trailEffect": "slash", "screenShake": 3 }
+      },
+      {
+        "id": "shard-greatsword-cleave",
+        "name": "Crystal Cleave",
+        "kind": "attack",
+        "cost": { "red": 2 },
+        "shape": { "kind": "sector", "radius": 100, "halfAngle": 1.570796327 },
+        "damage": 50,
+        "knockback": 12,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2.5, "value": 0.35 }],
+        "visual": { "color": 7028640, "trailEffect": "slash", "screenShake": 5 }
+      },
+      {
+        "id": "shard-greatsword-whirl",
+        "name": "Shard Whirl",
+        "kind": "attack",
+        "cost": { "red": 1, "blue": 1 },
+        "shape": { "kind": "circle", "radius": 92, "range": 0 },
+        "damage": 37,
+        "knockback": 10,
+        "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 3, "value": 0.35 }],
+        "visual": { "color": 7028640, "trailEffect": "splash", "screenShake": 4 }
+      }
+    ]
+  }
+]

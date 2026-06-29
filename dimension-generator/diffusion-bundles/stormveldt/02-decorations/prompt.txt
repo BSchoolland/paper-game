@@ -1,0 +1,14 @@
+Dimension: Stormveldt
+Biome: Endless purple-grass steppes studded with amethyst geode hills, under a permanent storm-grey sky that flickers with dry lightning.
+Mood: Charged, restless, ceremonial — calm before a stampede.
+Palette: primary #6B3FA0, secondary #4A4E5C, accent #F2D94E
+
+Description: A planet of wide-open amethyst steppes where dry lightning never stops falling. Crystal outcrops drink the charge and hum, and colossal herds migrate across the plains in ritual formation, drawn from storm to storm. The whole world is restless, electric, and strangely orderly — beasts that bow before they charge.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color saturation, isometric three-quarter perspective, and drop shadows. Ignore the reference's parchment background.
+
+Each decoration should be a single distinct object with clear space around it, suitable for cutting out individually. A mix of organic decorations (plants/natural objects) and structural decorations (walls/ruins/built objects) — choose what fits this dimension's biome and mood.
+
+Important: Use a variety of colors across the decorations — not everything should be the same color as the dimension palette. Natural environments have diverse coloring, so include variety (e.g. different plant greens, browns, grays for rocks, varied flower colors).

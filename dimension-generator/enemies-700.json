@@ -1,0 +1,242 @@
+{
+  "frost-rat": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 150 },
+      { "id": "frost-rat-gnaw", "name": "Gnaw", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 42, "halfAngle": 0.75 }, "damage": 13, "knockback": 0, "visual": { "color": 14086399, "trailEffect": "slash", "screenShake": 0.1 } }
+    ],
+    "hp": 44,
+    "energy": { "red": 1, "blue": 1 },
+    "collisionRadius": 11,
+    "className": "Frost Rat",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 1,
+    "tags": ["melee", "swarm"]
+  },
+  "snow-hare": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 2 }, "distance": 185 },
+      { "id": "snow-hare-kick", "name": "Hind Kick", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 44, "halfAngle": 0.6 }, "damage": 17, "knockback": 25, "visual": { "color": 16777215, "trailEffect": "thrust", "screenShake": 0.12 } }
+    ],
+    "hp": 52,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 12,
+    "className": "Snow Hare",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 2,
+    "tags": ["melee", "swarm"]
+  },
+  "ice-beetle": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 100 },
+      { "id": "ice-beetle-shear", "name": "Mandible Shear", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 50, "halfAngle": 0.7 }, "damage": 24, "knockback": 0, "visual": { "color": 10476287, "trailEffect": "slash", "screenShake": 0.15 } }
+    ],
+    "hp": 84,
+    "energy": { "red": 1, "blue": 1 },
+    "collisionRadius": 14,
+    "className": "Ice Beetle",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 2,
+    "tags": ["melee", "tank", "swarm"]
+  },
+  "snowfly": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 2 }, "distance": 165 },
+      { "id": "snowfly-chill-touch", "name": "Chill Touch", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 46, "halfAngle": 0.85 }, "damage": 14, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 50 }], "visual": { "color": 12576511, "trailEffect": "splash", "screenShake": 0.08 } }
+    ],
+    "hp": 38,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 10,
+    "className": "Snowfly",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 1,
+    "tags": ["melee", "swarm"]
+  },
+  "frost-wolf": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 150 },
+      { "id": "frost-wolf-bite", "name": "Bite", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 60, "halfAngle": 0.8 }, "damage": 25, "knockback": 10, "visual": { "color": 13692671, "trailEffect": "slash", "screenShake": 0.18 } },
+      { "id": "frost-wolf-lunge", "name": "Pack Lunge", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 95, "width": 22 }, "damage": 31, "knockback": 25, "lungeThrough": 1, "visual": { "color": 13692671, "trailEffect": "thrust", "screenShake": 0.2 } }
+    ],
+    "hp": 122,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 14,
+    "className": "Frost Wolf",
+    "heightMeters": 2,
+    "strategy": "rush",
+    "cost": 4,
+    "tags": ["melee"]
+  },
+  "ice-spitter": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 95 },
+      { "id": "ice-spitter-glob", "name": "Freezing Glob", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "point", "range": 220 }, "damage": 13, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 35 }], "visual": { "color": 10476287, "trailEffect": "projectile", "screenShake": 0.12 } }
+    ],
+    "hp": 52,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 13,
+    "className": "Ice Spitter",
+    "heightMeters": 2,
+    "strategy": "kite",
+    "cost": 3,
+    "tags": ["ranged"]
+  },
+  "snow-shaman": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 110 },
+      { "id": "snow-shaman-hex", "name": "Rime Hex", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "point", "range": 200 }, "damage": 11, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 30 }], "visual": { "color": 12576511, "trailEffect": "projectile", "screenShake": 0.1 } },
+      { "id": "snow-shaman-ward", "name": "Rime Ward", "kind": "barrier", "cost": { "blue": 1 }, "barrierHp": 45 },
+      { "id": "snow-shaman-mend", "name": "Mending Frost", "kind": "zone", "cost": { "red": 1 }, "range": 150, "zone": { "effect": "heal", "radius": 65, "duration": 3, "magnitude": 14, "color": 10476287, "pattern": "pulse" } }
+    ],
+    "hp": 62,
+    "energy": { "red": 2, "blue": 2 },
+    "collisionRadius": 13,
+    "className": "Snow Shaman",
+    "heightMeters": 2,
+    "strategy": "kite",
+    "cost": 4,
+    "tags": ["ranged", "elite"]
+  },
+  "frost-mantis": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 145 },
+      { "id": "frost-mantis-scythe", "name": "Glass Scythe", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "sector", "radius": 64, "halfAngle": 0.55 }, "damage": 32, "knockback": 10, "visual": { "color": 12576511, "trailEffect": "slash", "screenShake": 0.22 } }
+    ],
+    "hp": 76,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 13,
+    "className": "Frost Mantis",
+    "heightMeters": 2,
+    "strategy": "rush",
+    "cost": 3,
+    "tags": ["melee"]
+  },
+  "frost-giant": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 100 },
+      { "id": "frost-giant-swing", "name": "Glacial Swing", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 75, "halfAngle": 1.0 }, "damage": 26, "knockback": 55, "visual": { "color": 4886233, "trailEffect": "slash", "screenShake": 0.35 } },
+      { "id": "frost-giant-slam", "name": "Ice Slam", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 110, "width": 36 }, "damage": 30, "knockback": 45, "visual": { "color": 4886233, "trailEffect": "explosion", "screenShake": 0.4 } }
+    ],
+    "hp": 175,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 22,
+    "className": "Frost Giant",
+    "heightMeters": 4,
+    "strategy": "rush",
+    "cost": 7,
+    "tags": ["melee", "elite"]
+  },
+  "snow-bear": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 105 },
+      { "id": "snow-bear-maul", "name": "Maul", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 65, "halfAngle": 0.9 }, "damage": 22, "knockback": 25, "visual": { "color": 16777215, "trailEffect": "slash", "screenShake": 0.3 } },
+      { "id": "snow-bear-roar", "name": "Roar", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 70, "range": 0 }, "damage": 12, "knockback": 35, "onHit": [{ "type": "applyStatus", "status": "winded", "duration": 2, "value": 1 }], "visual": { "color": 13692671, "trailEffect": "explosion", "screenShake": 0.3 } }
+    ],
+    "hp": 195,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 22,
+    "className": "Snow Bear",
+    "heightMeters": 3,
+    "strategy": "threat",
+    "cost": 7,
+    "tags": ["melee", "tank", "elite"]
+  },
+  "ice-golem": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 65 },
+      { "id": "ice-golem-crush", "name": "Crush", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 70, "range": 55 }, "damage": 26, "knockback": 45, "visual": { "color": 10476287, "trailEffect": "explosion", "screenShake": 0.4 } }
+    ],
+    "hp": 250,
+    "energy": { "red": 1, "blue": 1 },
+    "collisionRadius": 24,
+    "className": "Ice Golem",
+    "heightMeters": 4,
+    "strategy": "threat",
+    "cost": 8,
+    "tags": ["melee", "tank", "elite"]
+  },
+  "frost-witch": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 100 },
+      { "id": "frost-witch-nova", "name": "Freeze Nova", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 65, "range": 170 }, "damage": 18, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1, "value": 1 }], "visual": { "color": 12576511, "trailEffect": "explosion", "screenShake": 0.2 } },
+      { "id": "frost-witch-wall", "name": "Rime Wall", "kind": "zone", "cost": { "blue": 1 }, "range": 140, "zone": { "effect": "wall", "radius": 50, "duration": 3, "magnitude": 1, "color": 12576511, "pattern": "solid" } }
+    ],
+    "hp": 125,
+    "energy": { "red": 2, "blue": 2 },
+    "collisionRadius": 14,
+    "className": "Frost Witch",
+    "heightMeters": 2,
+    "strategy": "kite",
+    "cost": 7,
+    "tags": ["ranged", "elite"]
+  },
+  "frost-wyrm": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 120 },
+      { "id": "frost-wyrm-breath", "name": "Frost Breath", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 95, "halfAngle": 0.6 }, "damage": 28, "knockback": 20, "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 40 }], "visual": { "color": 12576511, "trailEffect": "splash", "screenShake": 0.35 } },
+      { "id": "frost-wyrm-rime-line", "name": "Rime Lance", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 165, "width": 30 }, "damage": 32, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1, "value": 1 }], "visual": { "color": 10476287, "trailEffect": "projectile", "screenShake": 0.4 } }
+    ],
+    "hp": 300,
+    "energy": { "red": 3, "blue": 2 },
+    "collisionRadius": 26,
+    "className": "Frost Wyrm",
+    "heightMeters": 5,
+    "strategy": "threat",
+    "cost": 13,
+    "tags": ["ranged", "boss"]
+  },
+  "avalanche-troll": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 95 },
+      { "id": "avalanche-troll-smash", "name": "Boulder Smash", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "rectangle", "length": 120, "width": 40 }, "damage": 30, "knockback": 45, "visual": { "color": 4886233, "trailEffect": "explosion", "screenShake": 0.45 } },
+      { "id": "avalanche-troll-sweep", "name": "Avalanche Sweep", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 80, "range": 0 }, "damage": 22, "knockback": 50, "visual": { "color": 16777215, "trailEffect": "explosion", "screenShake": 0.4 } },
+      { "id": "avalanche-troll-bury", "name": "Bury", "kind": "zone", "cost": { "blue": 1 }, "range": 110, "zone": { "effect": "wall", "radius": 55, "duration": 4, "magnitude": 1, "color": 14086399, "pattern": "solid" } }
+    ],
+    "hp": 370,
+    "energy": { "red": 3, "blue": 1 },
+    "collisionRadius": 26,
+    "className": "Avalanche Troll",
+    "heightMeters": 4,
+    "strategy": "threat",
+    "cost": 14,
+    "tags": ["melee", "tank", "boss"]
+  },
+  "glacier-mammoth": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 120 },
+      { "id": "glacier-mammoth-charge", "name": "Trampling Charge", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 150, "width": 42 }, "damage": 32, "knockback": 55, "lungeThrough": 1, "visual": { "color": 13692671, "trailEffect": "explosion", "screenShake": 0.5 } },
+      { "id": "glacier-mammoth-stomp", "name": "Stomp", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 80, "range": 0 }, "damage": 24, "knockback": 40, "visual": { "color": 16777215, "trailEffect": "explosion", "screenShake": 0.45 } }
+    ],
+    "hp": 380,
+    "energy": { "red": 3, "blue": 1 },
+    "collisionRadius": 28,
+    "className": "Glacier Mammoth",
+    "heightMeters": 5,
+    "strategy": "threat",
+    "cost": 14,
+    "tags": ["melee", "tank", "boss"]
+  },
+  "frost-lich": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 90 },
+      { "id": "frost-lich-shatter", "name": "Shatter Frost", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 75, "range": 180 }, "damage": 20, "knockback": 10, "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1, "value": 1 }], "visual": { "color": 12576511, "trailEffect": "explosion", "screenShake": 0.3 } },
+      { "id": "frost-lich-bolt", "name": "Rime Bolt", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "point", "range": 240 }, "damage": 18, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 35 }], "visual": { "color": 10476287, "trailEffect": "projectile", "screenShake": 0.2 } },
+      { "id": "frost-lich-field", "name": "Chilling Field", "kind": "zone", "cost": { "blue": 1 }, "range": 160, "zone": { "effect": "drainBlue", "radius": 80, "duration": 3, "magnitude": 1, "color": 12576511, "pattern": "drain" } }
+    ],
+    "hp": 290,
+    "energy": { "red": 3, "blue": 3 },
+    "collisionRadius": 18,
+    "className": "Frost Lich",
+    "heightMeters": 3,
+    "strategy": "threat",
+    "cost": 15,
+    "tags": ["ranged", "boss"],
+    "effects": [
+      { "trigger": "onDeath", "action": { "type": "spawn", "templateKey": "frost-rat", "count": 3 } },
+      { "trigger": "onDeath", "action": { "type": "spawn", "templateKey": "frost-wolf", "count": 1 } }
+    ]
+  }
+}

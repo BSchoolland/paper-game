@@ -1,0 +1,12 @@
+Dimension: Stormveldt
+Biome: Endless purple-grass steppes studded with amethyst geode hills, under a permanent storm-grey sky that flickers with dry lightning.
+Mood: Charged, restless, ceremonial — calm before a stampede.
+Palette: primary #6B3FA0, secondary #4A4E5C, accent #F2D94E
+
+Description: A planet of wide-open amethyst steppes where dry lightning never stops falling. Crystal outcrops drink the charge and hum, and colossal herds migrate across the plains in ritual formation, drawn from storm to storm. The whole world is restless, electric, and strangely orderly — beasts that bow before they charge.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

@@ -1,0 +1,54 @@
+{
+  "id": 701,
+  "name": "Hornmarsh",
+  "description": "A warm, waterlogged planet of endless river deltas where hollow reeds catch the wind and boom across the water like horns, so the whole world hums day and night. Giant lily pads carpet the slow channels, fish leap in the amber light, and thick humid air hangs over miles of mud and reed. Nothing here is owned or traded — it is pure overgrown wilderness, teeming and loud.",
+  "palette": { "primary": "#3f5e2e", "secondary": "#caa64a", "accent": "#cd7f32" },
+  "mood": "Warm, humid, and droning — fertile and teeming, but heavy with the constant low hum of the reeds.",
+  "biome": "Sprawling river deltas and mudflats give way to towering reed forests, lily-choked lagoons, tangled root mangroves, and steaming mineral springs — all warm, green-gold, and alive with sound.",
+  "droppedNoun": "ski",
+  "negatedNoun": "currency",
+  "enemyBatches": [
+    { "name": "FODDER", "description": "cost 1-2, swarms", "enemies": [
+      { "name": "Mud Frog", "role": "small hopping melee that closes distance fast and swarms", "description": "Warty brown frog with bulging eyes." },
+      { "name": "Biting Gnats", "role": "tiny flying swarm dealing chip damage and lowering accuracy", "description": "A shifting black cloud." },
+      { "name": "Reed Snake", "role": "fast, low-HP biter that darts in and out", "description": "Thin bright-green snake." },
+      { "name": "Leech", "role": "slow crawler that latches on and drains HP over several turns", "description": "Fat glossy-black slug." }
+    ]},
+    { "name": "STANDARD", "description": "cost 3-5", "enemies": [
+      { "name": "Bog Toad", "role": "tongue lashes out to pull a target into melee range", "description": "Bloated green-gold toad." },
+      { "name": "Skipjack", "role": "leaps from the water for a surprise lunge, then dives back to safety", "description": "Flashing silver-blue fish." },
+      { "name": "Marsh Heron", "role": "long beak gives extra reach for hard single-target stabs", "description": "Tall grey wading bird." },
+      { "name": "Snapping Lily", "role": "rooted ambusher disguised as a lily pad, big bite when anything steps adjacent", "description": "Pink-white bloom hiding a toothed maw." }
+    ]},
+    { "name": "ELITE", "description": "cost 6-9", "enemies": [
+      { "name": "Marsh Crocodile", "role": "heavy bite that grapples and holds a target in place", "description": "Armored dark-green reptile." },
+      { "name": "Boomreed", "role": "hollow reed-stalk creature that releases an AoE sound blast to stun nearby foes", "description": "Upright bundle of brass-gold reeds." },
+      { "name": "Giant Catfish", "role": "water-bound bruiser with a wide tail-sweep AoE", "description": "Huge whiskered grey-green fish." },
+      { "name": "Water Constrictor", "role": "large snake that coils to immobilize and crush over time", "description": "Thick brown-banded python." }
+    ]},
+    { "name": "BOSS", "description": "cost 10-15", "enemies": [
+      { "name": "Massive Crocodile", "role": "apex reptile with a devastating bite and sweeping tail", "description": "Scarred mountain of green scale." },
+      { "name": "Marsh Serpent", "role": "huge multi-tile river serpent that lunges and swallows weakened foes", "description": "Long green-gold body." },
+      { "name": "Reed Giant", "role": "towering hulk of woven reeds and mud, booming AoE blasts that knock enemies back", "description": "Humanoid mass of stalks." },
+      { "name": "Mud Behemoth", "role": "slow tank that slams the ground and spawns Mud Frogs each turn", "description": "Lumbering hill of living sludge." }
+    ]}
+  ],
+  "items": [
+    { "name": "Reed Cutter", "type": "sword", "rarity": "common", "description": "A light reed-handled shortsword, quick but weak." },
+    { "name": "Fishing Spear", "type": "spear", "rarity": "common", "description": "A barbed spear made for stabbing fish in the shallows." },
+    { "name": "Reed Bow", "type": "bow", "rarity": "common", "description": "A simple bow bent from a dried reed, fires fast." },
+    { "name": "Reed Staff", "type": "staff", "rarity": "common", "description": "A hollow reed staff that hums and cracks on impact." },
+    { "name": "Bog Maul", "type": "two-handed", "rarity": "common", "description": "A heavy mud-caked club, slow but hard-hitting." },
+    { "name": "Gator-Tooth Sword", "type": "sword", "rarity": "uncommon", "description": "A blade lined with crocodile teeth that tears wounds open." },
+    { "name": "Heron Spear", "type": "spear", "rarity": "uncommon", "description": "A long thin spear with extra reach to poke from afar." },
+    { "name": "Fowler's Bow", "type": "bow", "rarity": "uncommon", "description": "A short hunting bow built for rapid follow-up shots." },
+    { "name": "Marsh Staff", "type": "staff", "rarity": "uncommon", "description": "A staff topped with a heavy seed-pod that splashes mud and slows." },
+    { "name": "Boat Oar", "type": "two-handed", "rarity": "uncommon", "description": "A broad oar that sweeps several enemies in one swing." },
+    { "name": "Gator Jaw", "type": "two-handed", "rarity": "uncommon", "description": "A whole crocodile jaw on a haft, brutal crushing bite." },
+    { "name": "Trident", "type": "spear", "rarity": "uncommon", "description": "A three-pronged fishing fork that strikes targets in a line." },
+    { "name": "Bronze Saber", "type": "sword", "rarity": "rare", "description": "A curved brass-bright blade, keen and well balanced." },
+    { "name": "Horn Bow", "type": "bow", "rarity": "rare", "description": "A composite bow of horn and reed with long range and heavy draw." },
+    { "name": "Brass Horn", "type": "staff", "rarity": "rare", "description": "A great brass horn that blasts a wave of sound through nearby foes." },
+    { "name": "Bronze Greatsword", "type": "two-handed", "rarity": "rare", "description": "A massive bronze blade that crushes through wide arcs." }
+  ]
+}

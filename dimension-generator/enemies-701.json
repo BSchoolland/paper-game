@@ -1,0 +1,245 @@
+{
+  "mud-frog": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 170 },
+      { "id": "mud-frog-bite", "name": "Hop Bite", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 50, "halfAngle": 1.0471975511965976 }, "damage": 10, "knockback": 0, "visual": { "color": 9138759, "trailEffect": "slash", "screenShake": 0.1 } }
+    ],
+    "hp": 40,
+    "energy": { "red": 1, "blue": 1 },
+    "collisionRadius": 13,
+    "className": "Mud Frog",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 2,
+    "tags": ["melee", "swarm"]
+  },
+  "biting-gnats": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 160 },
+      { "id": "biting-gnats-swarm", "name": "Swarm Bite", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "point", "range": 180 }, "damage": 6, "knockback": 0, "visual": { "color": 2763306, "screenShake": 0.05 } }
+    ],
+    "hp": 18,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 10,
+    "className": "Biting Gnats",
+    "heightMeters": 1,
+    "strategy": "kite",
+    "cost": 1,
+    "tags": ["ranged", "swarm"]
+  },
+  "reed-snake": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 180 },
+      { "id": "reed-snake-dart", "name": "Dart Bite", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "rectangle", "length": 90, "width": 14 }, "damage": 11, "knockback": 0, "visual": { "color": 5025616, "trailEffect": "slash", "screenShake": 0.1 } }
+    ],
+    "hp": 28,
+    "energy": { "red": 1, "blue": 1 },
+    "collisionRadius": 11,
+    "className": "Reed Snake",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 2,
+    "tags": ["melee", "swarm"]
+  },
+  "leech": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 90 },
+      { "id": "leech-latch", "name": "Latch Drain", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 40, "halfAngle": 0.7853981633974483 }, "damage": 9, "knockback": 0, "visual": { "color": 1710618, "screenShake": 0.05 } }
+    ],
+    "hp": 48,
+    "energy": { "red": 1, "blue": 1 },
+    "collisionRadius": 12,
+    "className": "Leech",
+    "heightMeters": 1,
+    "strategy": "rush",
+    "cost": 2,
+    "tags": ["melee", "swarm"]
+  },
+  "bog-toad": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 120 },
+      { "id": "bog-toad-tongue", "name": "Tongue Lash", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "point", "range": 220 }, "damage": 14, "knockback": 0, "visual": { "color": 10266674, "trailEffect": "slash", "screenShake": 0.1 } },
+      { "id": "bog-toad-gulp", "name": "Gulp Bite", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 55, "halfAngle": 0.7853981633974483 }, "damage": 18, "knockback": 0, "visual": { "color": 10266674, "screenShake": 0.15 } }
+    ],
+    "hp": 85,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 16,
+    "className": "Bog Toad",
+    "heightMeters": 1.75,
+    "strategy": "kite",
+    "cost": 4,
+    "tags": ["ranged"]
+  },
+  "skipjack": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 170 },
+      { "id": "skipjack-leap", "name": "Leap Lunge", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "rectangle", "length": 110, "width": 18 }, "damage": 18, "knockback": 0, "visual": { "color": 8369621, "trailEffect": "slash", "screenShake": 0.15 } },
+      { "id": "skipjack-fin", "name": "Fin Slash", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 45, "halfAngle": 0.7853981633974483 }, "damage": 10, "knockback": 0, "visual": { "color": 8369621, "screenShake": 0.1 } }
+    ],
+    "hp": 55,
+    "energy": { "red": 1, "blue": 1 },
+    "collisionRadius": 13,
+    "className": "Skipjack",
+    "heightMeters": 1.5,
+    "strategy": "rush",
+    "cost": 3,
+    "tags": ["melee"]
+  },
+  "marsh-heron": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 140 },
+      { "id": "marsh-heron-stab", "name": "Beak Stab", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "rectangle", "length": 120, "width": 12 }, "damage": 20, "knockback": 0, "visual": { "color": 10133670, "trailEffect": "slash", "screenShake": 0.15 } },
+      { "id": "marsh-heron-buffet", "name": "Wing Buffet", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 50, "halfAngle": 1.0471975511965976 }, "damage": 10, "knockback": 25, "visual": { "color": 10133670, "screenShake": 0.1 } }
+    ],
+    "hp": 65,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 14,
+    "className": "Marsh Heron",
+    "heightMeters": 2,
+    "strategy": "kite",
+    "cost": 4,
+    "tags": ["ranged"]
+  },
+  "snapping-lily": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 40 },
+      { "id": "snapping-lily-snap", "name": "Snap Bite", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 60, "halfAngle": 1.0471975511965976 }, "damage": 26, "knockback": 0, "visual": { "color": 15245504, "screenShake": 0.2 } },
+      { "id": "snapping-lily-pollen", "name": "Pollen Spray", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 70, "range": 0 }, "damage": 10, "knockback": 0, "visual": { "color": 15245504, "screenShake": 0.1 } }
+    ],
+    "hp": 95,
+    "energy": { "red": 1, "blue": 1 },
+    "collisionRadius": 16,
+    "className": "Snapping Lily",
+    "heightMeters": 1,
+    "strategy": "threat",
+    "cost": 4,
+    "tags": ["melee", "tank"]
+  },
+  "marsh-crocodile": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 110 },
+      { "id": "marsh-crocodile-roll", "name": "Death Roll", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "rectangle", "length": 100, "width": 25 }, "damage": 40, "knockback": 0, "visual": { "color": 3890235, "trailEffect": "slash", "screenShake": 0.25 } },
+      { "id": "marsh-crocodile-grapple", "name": "Grapple Bite", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 60, "halfAngle": 1.0471975511965976 }, "damage": 18, "knockback": 0, "visual": { "color": 3890235, "screenShake": 0.15 } }
+    ],
+    "hp": 150,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 20,
+    "className": "Marsh Crocodile",
+    "heightMeters": 2,
+    "strategy": "rush",
+    "cost": 7,
+    "tags": ["melee", "elite"]
+  },
+  "boomreed": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 90 },
+      { "id": "boomreed-blast", "name": "Sound Blast", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "circle", "radius": 90, "range": 160 }, "damage": 22, "knockback": 20, "visual": { "color": 13214247, "screenShake": 0.2 } },
+      { "id": "boomreed-rattle", "name": "Reed Rattle", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 70, "range": 0 }, "damage": 12, "knockback": 0, "visual": { "color": 13214247, "screenShake": 0.1 } }
+    ],
+    "hp": 110,
+    "energy": { "red": 1, "blue": 2 },
+    "collisionRadius": 18,
+    "className": "Boomreed",
+    "heightMeters": 2.5,
+    "strategy": "kite",
+    "cost": 7,
+    "tags": ["ranged", "elite"]
+  },
+  "giant-catfish": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 120 },
+      { "id": "giant-catfish-sweep", "name": "Tail Sweep", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "sector", "radius": 90, "halfAngle": 1.5707963267948966 }, "damage": 30, "knockback": 45, "visual": { "color": 7027546, "trailEffect": "slash", "screenShake": 0.25 } },
+      { "id": "giant-catfish-maw", "name": "Maw Chomp", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 60, "halfAngle": 0.7853981633974483 }, "damage": 22, "knockback": 0, "visual": { "color": 7027546, "screenShake": 0.15 } }
+    ],
+    "hp": 190,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 24,
+    "className": "Giant Catfish",
+    "heightMeters": 2.5,
+    "strategy": "rush",
+    "cost": 8,
+    "tags": ["melee", "tank", "elite"]
+  },
+  "water-constrictor": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 140 },
+      { "id": "water-constrictor-crush", "name": "Coil Crush", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "rectangle", "length": 90, "width": 20 }, "damage": 28, "knockback": 0, "visual": { "color": 8016432, "trailEffect": "slash", "screenShake": 0.2 } },
+      { "id": "water-constrictor-constrict", "name": "Constrict", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 55, "halfAngle": 1.0471975511965976 }, "damage": 18, "knockback": 0, "visual": { "color": 8016432, "screenShake": 0.15 } }
+    ],
+    "hp": 130,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 18,
+    "className": "Water Constrictor",
+    "heightMeters": 2,
+    "strategy": "rush",
+    "cost": 7,
+    "tags": ["melee", "elite"]
+  },
+  "massive-crocodile": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 80 },
+      { "id": "massive-crocodile-bite", "name": "Devastating Bite", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "rectangle", "length": 130, "width": 30 }, "damage": 50, "knockback": 0, "visual": { "color": 3033646, "trailEffect": "slash", "screenShake": 0.35 } },
+      { "id": "massive-crocodile-tail", "name": "Sweeping Tail", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 90, "halfAngle": 1.5707963267948966 }, "damage": 35, "knockback": 45, "visual": { "color": 3033646, "screenShake": 0.3 } },
+      { "id": "massive-crocodile-roll", "name": "Death Roll", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "circle", "radius": 70, "range": 0 }, "damage": 30, "knockback": 0, "visual": { "color": 3033646, "screenShake": 0.3 } }
+    ],
+    "hp": 350,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 28,
+    "className": "Massive Crocodile",
+    "heightMeters": 4,
+    "strategy": "threat",
+    "cost": 13,
+    "tags": ["melee", "boss"]
+  },
+  "marsh-serpent": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 100 },
+      { "id": "marsh-serpent-lunge", "name": "Lunge Swallow", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "rectangle", "length": 140, "width": 28 }, "damage": 50, "knockback": 0, "visual": { "color": 7032355, "trailEffect": "slash", "screenShake": 0.35 } },
+      { "id": "marsh-serpent-coil", "name": "Coil Slam", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 90, "halfAngle": 1.0471975511965976 }, "damage": 35, "knockback": 0, "visual": { "color": 7032355, "screenShake": 0.3 } },
+      { "id": "marsh-serpent-spit", "name": "Venom Spit", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "point", "range": 250 }, "damage": 20, "knockback": 0, "visual": { "color": 7032355, "screenShake": 0.15 } }
+    ],
+    "hp": 400,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 26,
+    "className": "Marsh Serpent",
+    "heightMeters": 5,
+    "strategy": "threat",
+    "cost": 14,
+    "tags": ["melee", "boss"]
+  },
+  "reed-giant": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 70 },
+      { "id": "reed-giant-blast", "name": "Booming Blast", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "circle", "radius": 95, "range": 180 }, "damage": 30, "knockback": 50, "visual": { "color": 12095532, "screenShake": 0.3 } },
+      { "id": "reed-giant-smash", "name": "Reed Smash", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 80, "halfAngle": 1.0471975511965976 }, "damage": 40, "knockback": 40, "visual": { "color": 12095532, "screenShake": 0.3 } },
+      { "id": "reed-giant-sweep", "name": "Stalk Sweep", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 85, "halfAngle": 1.5707963267948966 }, "damage": 25, "knockback": 30, "visual": { "color": 12095532, "screenShake": 0.25 } }
+    ],
+    "hp": 300,
+    "energy": { "red": 2, "blue": 1 },
+    "collisionRadius": 28,
+    "className": "Reed Giant",
+    "heightMeters": 5,
+    "strategy": "threat",
+    "cost": 12,
+    "tags": ["melee", "tank", "boss"]
+  },
+  "mud-behemoth": {
+    "abilities": [
+      { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 60 },
+      { "id": "mud-behemoth-slam", "name": "Ground Slam", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "circle", "radius": 95, "range": 0 }, "damage": 35, "knockback": 40, "visual": { "color": 5917746, "screenShake": 0.35 } },
+      { "id": "mud-behemoth-hurl", "name": "Sludge Hurl", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 70, "range": 200 }, "damage": 25, "knockback": 0, "visual": { "color": 5917746, "screenShake": 0.2 } },
+      { "id": "mud-behemoth-fist", "name": "Crushing Fist", "kind": "attack", "cost": { "red": 2 }, "shape": { "kind": "sector", "radius": 80, "halfAngle": 1.0471975511965976 }, "damage": 45, "knockback": 30, "visual": { "color": 5917746, "screenShake": 0.35 } }
+    ],
+    "hp": 450,
+    "energy": { "red": 2, "blue": 2 },
+    "collisionRadius": 30,
+    "className": "Mud Behemoth",
+    "heightMeters": 5,
+    "strategy": "threat",
+    "cost": 15,
+    "tags": ["melee", "tank", "boss"],
+    "effects": [
+      { "trigger": "onDeath", "action": { "type": "spawn", "templateKey": "mud-frog", "count": 3 } }
+    ]
+  }
+}
