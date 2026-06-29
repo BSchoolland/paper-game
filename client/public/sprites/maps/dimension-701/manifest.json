@@ -1,0 +1,58 @@
+{
+  "dimensionId": 701,
+  "maps": {
+    "wilderness": [
+      "sprites/maps/dimension-701/wilderness-0.png",
+      "sprites/maps/dimension-701/wilderness-1.png",
+      "sprites/maps/dimension-701/wilderness-2.png",
+      "sprites/maps/dimension-701/wilderness-3.png"
+    ],
+    "dense-wilderness": [
+      "sprites/maps/dimension-701/dense-wilderness-0.png",
+      "sprites/maps/dimension-701/dense-wilderness-1.png",
+      "sprites/maps/dimension-701/dense-wilderness-2.png",
+      "sprites/maps/dimension-701/dense-wilderness-3.png"
+    ],
+    "enemy-camp": [
+      "sprites/maps/dimension-701/enemy-camp-0.png",
+      "sprites/maps/dimension-701/enemy-camp-1.png"
+    ],
+    "ruins": [
+      "sprites/maps/dimension-701/ruins-0.png",
+      "sprites/maps/dimension-701/ruins-1.png"
+    ],
+    "town": [
+      "sprites/maps/dimension-701/town-0.png",
+      "sprites/maps/dimension-701/town-1.png"
+    ],
+    "city": [
+      "sprites/maps/dimension-701/city-0.png",
+      "sprites/maps/dimension-701/city-1.png"
+    ],
+    "treasure": [
+      "sprites/maps/dimension-701/treasure-0.png",
+      "sprites/maps/dimension-701/treasure-1.png"
+    ],
+    "great-treasure": [
+      "sprites/maps/dimension-701/great-treasure-0.png"
+    ],
+    "great-ruins": [
+      "sprites/maps/dimension-701/great-ruins-0.png"
+    ],
+    "gateway": [
+      "sprites/maps/dimension-701/gateway-0.png"
+    ],
+    "gateway-city": [
+      "sprites/maps/dimension-701/gateway-city-0.png"
+    ],
+    "boss": [
+      "sprites/maps/dimension-701/boss-0.png"
+    ],
+    "calamity": [
+      "sprites/maps/dimension-701/calamity-0.png"
+    ],
+    "elite-encounter": [
+      "sprites/maps/dimension-701/elite-encounter-0.png"
+    ]
+  }
+}
