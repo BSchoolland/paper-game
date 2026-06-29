@@ -21,3 +21,8 @@ item-logs-dim-*/
 dim-*-spec.jsonl
 dim-*-enemy-agent.jsonl
 dim-*-item-agent.jsonl
+
+# Encounter map art is served from the CDN (CloudFront/S3), not git — too large
+# to version. Collision masks and manifests stay tracked (server reads masks).
+client/public/sprites/maps/**/*.png
+!client/public/sprites/maps/**/*.mask.png

@@ -7,7 +7,7 @@ import {
   createMapObjects,
   getBottomY,
 } from "./grid-renderer.js";
-import { assetUrl } from "./asset-url.js";
+import { assetUrl, mapAssetUrl } from "./asset-url.js";
 import { EntityManager } from "./entity-manager.js";
 import { drawTargetingPreview, drawEffectPreview, drawIncomingAttackPreview } from "./targeting-renderer.js";
 import { drawZones } from "./zone-renderer.js";
@@ -415,7 +415,7 @@ export class GameRenderer {
 
     const mapImage = state.mapDefinition.mapImage;
     this.backgroundLayer = new Container();
-    this.backgroundLayer.addChild(createBackground(grid, mapImage ? assetUrl(mapImage) : undefined));
+    this.backgroundLayer.addChild(createBackground(grid, mapImage ? mapAssetUrl(mapImage) : undefined));
     this.worldContainer.addChild(this.backgroundLayer);
 
     // Persistent zone discs sit on the ground, under entities.
