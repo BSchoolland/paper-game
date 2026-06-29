@@ -17,7 +17,9 @@ function loadMapManifest(dimId: number): MapManifest | null {
   }
 }
 
-const DB_PATH = process.env.GAME_DB_PATH ?? "hex-discovery.sqlite";
+// Default to the one canonical DB next to this file (server/hex-discovery.sqlite), resolved
+// absolutely so it never depends on the caller's CWD. GAME_DB_PATH overrides for tests/tools.
+const DB_PATH = process.env.GAME_DB_PATH ?? resolve(import.meta.dir, "../hex-discovery.sqlite");
 const db = new Database(DB_PATH, { create: true });
 db.exec("PRAGMA busy_timeout = 30000");
 db.exec("PRAGMA journal_mode = WAL");
@@ -37,6 +39,12 @@ db.exec(`
 `);
 try {
   db.exec("ALTER TABLE dimensions ADD COLUMN hex_decorations_path TEXT");
+} catch {
+  // column already exists
+}
+// migration: lifecycle status for dimensions
+try {
+  db.exec("ALTER TABLE dimensions ADD COLUMN status TEXT NOT NULL DEFAULT 'approved'");
 } catch {
   // column already exists
 }
@@ -619,7 +627,7 @@ export function verifySessionToken(token: string, clientId: string, salt: string
 // --- Dimension & Enemy Template Queries ---
 
 const insertDimensionStmt = db.prepare(
-  "INSERT OR REPLACE INTO dimensions (id, name, structures_json, background_path, hex_decorations_path) VALUES (?, ?, ?, ?, ?)"
+  "INSERT OR REPLACE INTO dimensions (id, name, structures_json, background_path, hex_decorations_path, status) VALUES (?, ?, ?, ?, ?, ?)"
 );
 const getDimensionStmt = db.prepare("SELECT * FROM dimensions WHERE id = ?");
 
@@ -639,8 +647,9 @@ export function saveDimension(
   structures: readonly StructureEntry[],
   backgroundPath?: string,
   hexDecorationsPath?: string,
+  status: string = 'approved',
 ): void {
-  insertDimensionStmt.run(id, name, JSON.stringify(structures), backgroundPath ?? null, hexDecorationsPath ?? null);
+  insertDimensionStmt.run(id, name, JSON.stringify(structures), backgroundPath ?? null, hexDecorationsPath ?? null, status);
 }
 
 /** Assigns each structure an `index` matching its position (sprite-sheet order). */
@@ -677,6 +686,7 @@ export function loadDimension(dimensionId: number): Dimension | null {
     structures_json: string;
     background_path: string | null;
     hex_decorations_path: string | null;
+    status: string;
   } | null;
   if (!row) return null;
 
@@ -693,11 +703,28 @@ export function loadDimension(dimensionId: number): Dimension | null {
     name: row.name,
     backgroundPath: row.background_path,
     hexDecorationsPath: row.hex_decorations_path,
+    status: row.status,
     enemies: templates.map((t) => JSON.parse(t.template_json) as UnitTemplate),
     structures: JSON.parse(row.structures_json) as StructureEntry[],
     maps: manifest?.maps,
     masks: manifest?.masks,
   };
+}
+
+const setDimensionStatusStmt = db.prepare(
+  "UPDATE dimensions SET status = ? WHERE id = ?"
+);
+
+export function setDimensionStatus(id: number, status: string): void {
+  setDimensionStatusStmt.run(status, id);
+}
+
+const listDimensionsStmt = db.prepare(
+  "SELECT id, name, status FROM dimensions ORDER BY id"
+);
+
+export function listDimensions(): { id: number; name: string; status: string }[] {
+  return listDimensionsStmt.all() as { id: number; name: string; status: string }[];
 }
 
 export function loadEnemyTemplateRegistry(

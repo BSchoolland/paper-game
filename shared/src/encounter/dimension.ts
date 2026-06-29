@@ -13,6 +13,7 @@ export interface Dimension {
   readonly name: string;
   readonly backgroundPath: string | null;
   readonly hexDecorationsPath: string | null;
+  readonly status: string;
   readonly enemies: readonly UnitTemplate[];
   readonly structures: readonly StructureEntry[];
   /** Pre-generated encounter maps, by encounter type. When present for a type,
