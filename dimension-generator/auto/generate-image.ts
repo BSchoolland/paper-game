@@ -19,7 +19,7 @@ import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 
 export type ImageBackend = "codex" | "api";
-export const ART_BACKEND = (process.env.ART_BACKEND ?? "codex").toLowerCase() as ImageBackend;
+export const ART_BACKEND = (process.env.ART_BACKEND ?? "api").toLowerCase() as ImageBackend;
 
 // Lazy so modules that only need the resize/extraction helpers import without OPENAI_API_KEY set.
 let openai: OpenAI | undefined;
@@ -66,14 +66,30 @@ async function viaCodex(o: GenerateImageOpts): Promise<void> {
   ].join("\n");
   const args = ["exec", "--dangerously-bypass-approvals-and-sandbox"];
   if (referencePath) args.push("-i", referencePath);
-  const proc = Bun.spawn(["codex", ...args], { stdin: Buffer.from(codexPrompt), stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  if (exitCode !== 0) throw new Error(`codex exec failed for ${label} (exit ${exitCode}): ${(stderr || stdout).slice(-600)}`);
-  if (!existsSync(outPath)) throw new Error(`codex produced no file at ${outPath} for ${label}. Output tail: ${stdout.slice(-600)}`);
+
+  // codex is a slow agent and occasionally flakes (non-zero exit, or finishes without saving the file).
+  // Retry once before giving up so one bad image doesn't fail a whole 25-map batch — still throws loud
+  // after the final attempt. The per-call token count is logged for cost tracking.
+  const MAX_ATTEMPTS = 2;
+  let lastErr = "";
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const proc = Bun.spawn(["codex", ...args], { stdin: Buffer.from(codexPrompt), stdout: "pipe", stderr: "pipe" });
+    const [stdout, stderr, exitCode] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ]);
+    if (exitCode === 0 && existsSync(outPath)) {
+      const tokens = stdout.match(/tokens used[:\s]+([\d,]+)/i)?.[1];
+      console.log(`    [codex] ${label}${tokens ? ` — ${tokens} tokens` : ""}`);
+      return;
+    }
+    lastErr = exitCode !== 0
+      ? `exit ${exitCode}: ${(stderr || stdout).slice(-400)}`
+      : `no file at ${outPath}: ${stdout.slice(-400)}`;
+    if (attempt < MAX_ATTEMPTS) console.warn(`    [codex] ${label} attempt ${attempt} failed (${lastErr.slice(0, 140)}); retrying…`);
+  }
+  throw new Error(`codex exec failed for ${label} after ${MAX_ATTEMPTS} attempts — ${lastErr}`);
 }
 
 // Generate an image to outPath via the configured backend. Does NOT resize — the caller owns any

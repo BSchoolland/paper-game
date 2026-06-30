@@ -7,7 +7,7 @@ img = Image.open(sys.argv[1]).convert("RGB")
 arr = np.array(img)
 h, w = arr.shape[:2]
 
-# Sample corners (same as process-sprites.py)
+# Sample corners (same as scripts/process-spritesheet.py)
 corners = np.concatenate([
     arr[0:20, 0:20].reshape(-1, 3),
     arr[0:20, w-20:w].reshape(-1, 3),

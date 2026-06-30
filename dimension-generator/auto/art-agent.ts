@@ -152,15 +152,24 @@ export async function generateArt(dimId: number, spec: any, bundlesRoot: string,
     console.log(`  Filtered to bundles matching "${onlyFilter}": ${bundleDirs.join(", ")}`);
   }
 
-  console.log(`  ${bundleDirs.length} bundles: ${bundleDirs.join(", ")}\n`);
+  const concurrency = Math.max(1, Number(process.env.ART_CONCURRENCY ?? 6));
+  console.log(`  ${bundleDirs.length} bundles (concurrency ${concurrency}): ${bundleDirs.join(", ")}\n`);
 
   const t0 = Date.now();
-  const results: BundleResult[] = [];
 
-  for (const dir of bundleDirs) {
-    const result = await generateBundle(join(bundlesRoot, dir));
-    results.push(result);
-  }
+  // Generate bundles with bounded concurrency — codex is slow (~2-4 min/sheet), so a sequential loop
+  // would run ~35 min and overrun the workflow shim's poll window. Results stay index-aligned with
+  // bundleDirs so extraction order is stable.
+  const results: BundleResult[] = new Array(bundleDirs.length);
+  let cursor = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, bundleDirs.length) }, async () => {
+      while (cursor < bundleDirs.length) {
+        const i = cursor++;
+        results[i] = await generateBundle(join(bundlesRoot, bundleDirs[i]!));
+      }
+    }),
+  );
 
   const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`\n  All ${results.length} images generated in ${elapsed}s\n`);

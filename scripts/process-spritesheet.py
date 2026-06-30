@@ -38,6 +38,10 @@ def parse_args():
     p.add_argument("--format", default="png", choices=["png", "webp"])
     p.add_argument("--quality", type=int, default=90, help="WebP quality (ignored for PNG)")
     p.add_argument("--foot-threshold", type=float, default=0.05, help="Fraction of row width to count as 'real' content")
+    p.add_argument("--strip-grid", action=argparse.BooleanOptionalAction, default=True,
+                   help="Whiten full-sheet-spanning dark separator lines before slicing (handles sheets the model drew with a grid)")
+    p.add_argument("--grid-dark", type=int, default=130, help="Max channel value for a pixel to count as part of a dark separator line")
+    p.add_argument("--grid-cover", type=float, default=0.7, help="Fraction of a full row/col that must be dark to call it a separator line")
     return p.parse_args()
 
 
@@ -47,6 +51,32 @@ def sample_background_color(img: Image.Image) -> np.ndarray:
         rgb[5, 5], rgb[5, -5], rgb[-5, 5], rgb[-5, -5]
     ]
     return np.mean(corners, axis=0).astype(float)
+
+
+def strip_grid_lines(pixels: np.ndarray, dark: int, cover: float) -> int:
+    """Whiten dark separator lines that span the whole sheet (cell-grid borders).
+
+    A grid line is the one thing nothing else here produces: a near-black run covering
+    most of a full row or column. We detect those rows/cols, then repaint only their
+    non-white pixels to white so the existing per-cell background removal deletes them.
+    Returns the number of pixels repainted (0 if the sheet has no full-span lines)."""
+    rgb = pixels[:, :, :3]
+    is_dark = rgb.max(axis=2) < dark
+    line_rows = is_dark.mean(axis=1) > cover
+    line_cols = is_dark.mean(axis=0) > cover
+    if not line_rows.any() and not line_cols.any():
+        return 0
+
+    # Widen each detected band by 1px to catch the line's anti-aliased fringe.
+    def grow1(a):
+        g = a.copy(); g[1:] |= a[:-1]; g[:-1] |= a[1:]; return g
+    line_rows, line_cols = grow1(line_rows), grow1(line_cols)
+
+    on_line = line_rows[:, None] | line_cols[None, :]
+    not_white = rgb.max(axis=2) < 220
+    mask = on_line & not_white
+    pixels[mask, 0:3] = 255
+    return int(mask.sum())
 
 
 def remove_background(pixels: np.ndarray, bg: np.ndarray, tolerance: int) -> np.ndarray:
@@ -102,6 +132,16 @@ def main():
 
     src = Image.open(args.input).convert("RGBA")
     w, h = src.size
+
+    if args.strip_grid:
+        arr = np.array(src)
+        painted = strip_grid_lines(arr, args.grid_dark, args.grid_cover)
+        if painted:
+            src = Image.fromarray(arr)
+            print(f"Stripped grid separator lines: {painted} px repainted to white")
+        else:
+            print("Grid strip: no full-span dark lines found")
+
     cell_w = w / args.cols
     cell_h = h / args.rows
     bg = sample_background_color(src)

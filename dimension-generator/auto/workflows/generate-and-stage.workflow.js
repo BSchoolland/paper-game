@@ -4,9 +4,7 @@ export const meta = {
     "Generate a complete v2 dimension (spec -> art -> balanced enemies & items -> baked image maps -> overworld art -> QA) and flip it to in_review. v2-only: every encounter renders from a generated map image (coverage is asserted), so no runtime structures are registered. Opus does all design reasoning; thin Haiku shims run the deterministic generator scripts; gpt-image-2 makes the art.",
   phases: [
     { title: "Spec" },
-    { title: "Art" },
-    { title: "Enemies + Items" },
-    { title: "Maps" },
+    { title: "Generate" },
     { title: "Overworld" },
     { title: "QA" },
     { title: "Stage" },
@@ -17,6 +15,12 @@ export const meta = {
 const input = typeof args === "string" ? JSON.parse(args) : (args ?? {});
 const dimId = input.dimId ?? 600;
 const dbPath = input.dbPath;
+const seed = input.seed;
+if (!seed) {
+  throw new Error(
+    "seed is REQUIRED: a short world-concept description to build the dimension from.",
+  );
+}
 if (!dbPath) {
   throw new Error(
     "dbPath is REQUIRED (absolute path). Generator and server must share ONE db; pass it explicitly.",
@@ -89,62 +93,21 @@ BANNED CONCEPTS:    Anything that sounds like a band name. Anything that require
 // ---------------------------------------------------------------------------
 phase("Spec");
 
-// 1a. Haiku prep shim: seed reference dimensions 0-3 into the shared db, list
-//     existing dimensions (for contrast), and pick 5 random inspiration nouns.
-const prep = await agent(
-  [
-    "You are a deterministic setup shim. Run exactly the commands described, then return the requested data. Do not design anything.",
-    "",
-    "STEP 1 — Seed the reference dimensions 0-3 into the shared game db (the balance tests reference dim-0 enemies and the design agents copy dim-3 templates). Run this single command verbatim:",
-    "",
-    `  cd ${ROOT}/server && ${ENV} bun -e 'import { seedDiscovery } from "./src/db.ts"; import { seedDimension0 } from "./src/seed.ts"; import { seedDimension1 } from "./src/seed-dimension-1.ts"; import { seedDimension2 } from "./src/seed-dimension-2.ts"; import { seedDimension3 } from "./src/seed-dimension-3.ts"; seedDiscovery(0, 15); seedDimension0(); seedDimension1(); seedDimension2(); seedDimension3(); console.log("seeded");'`,
-    "",
-    "STEP 2 — List the dimensions already in the db (so the spec can contrast against them). Run:",
-    "",
-    `  cd ${ROOT}/server && ${ENV} bun -e 'import { listDimensions } from "./src/db.ts"; console.log(JSON.stringify(listDimensions()));'`,
-    "",
-    `  Format the result as lines like: 'Dimension <id> — "<name>"', excluding dimension ${dimId}.`,
-    "",
-    "STEP 3 — Pick 5 distinct random inspiration nouns. Run:",
-    "",
-    `  cd ${GEN} && bun -e 'import fw from "friendly-words"; const p = fw.objects; const s = new Set(); while (s.size < 5) s.add(p[Math.floor(Math.random()*p.length)]); console.log(JSON.stringify([...s]));'`,
-    "",
-    "Return existingDimensions (the formatted multi-line string) and nouns (the 5-element array). Fail loud if any command errors — do not invent data.",
-  ].join("\n"),
-  {
-    label: "prep-seed-and-nouns",
-    phase: "Spec",
-    model: "haiku",
-    schema: {
-      type: "object",
-      required: ["existingDimensions", "nouns"],
-      additionalProperties: false,
-      properties: {
-        existingDimensions: { type: "string" },
-        nouns: { type: "array", items: { type: "string" }, minItems: 5, maxItems: 5 },
-      },
-    },
-  },
-);
-
-// 1b. Opus spec agent: draft -> self-critique -> revise, return the full spec.
+// 1a. Opus spec agent: runs its own setup (seed refs, list dims, pick nouns) via Bash,
+//     then draft -> self-critique -> revise, and returns the full structured spec.
 const spec = await agent(
   [
-    "You are a game designer creating a new dimension for a turn-based tactical combat game, AND your own toughest critic. Do the full draft -> critique -> revise loop yourself in one pass, then output only the final revised spec.",
+    "You are a game designer building out a given world concept into a full dimension for a turn-based tactical combat game, AND your own toughest critic. You have a Bash terminal. Run the SETUP command, then do the full draft -> critique -> revise loop in one pass, and output only the final revised spec.",
     "",
-    'A dimension is a whole world — an entire planet with diverse biomes, cultures, and ecosystems, not a single room. "Underwater caves" is too narrow; "an ocean world with reefs, trenches and floating kelp cities" is the right scale.',
+    "SETUP — run this command first; fail loud if it errors, and do not invent its output:",
+    `     cd ${ROOT}/server && ${ENV} bun -e 'import { seedDiscovery } from "./src/db.ts"; import { seedDimension0 } from "./src/seed.ts"; import { seedDimension1 } from "./src/seed-dimension-1.ts"; import { seedDimension2 } from "./src/seed-dimension-2.ts"; import { seedDimension3 } from "./src/seed-dimension-3.ts"; seedDiscovery(0, 15); seedDimension0(); seedDimension1(); seedDimension2(); seedDimension3(); console.log("seeded");'`,
     "",
-    "Existing dimensions (contrast with these so this one does not feel like a re-skin):",
-    prep.existingDimensions,
+    "WORLD CONCEPT — build the dimension faithfully from this; stay true to it, fill in the details it leaves open:",
+    seed,
+    "",
+    "The enemies are the threat and they come from this world's concept; the land is an interesting place to fight, not the thing killing the player.",
     "",
     VOICE_GUIDE,
-    "",
-    "INSPIRATION PROCESS:",
-    `Inspiration nouns: ${prep.nouns.join(", ")}`,
-    "  1. Pick ONE noun to DROP entirely — ignore it, don't reference it.",
-    "  2. Pick ONE noun to NEGATE — the world is explicitly NOT this; its absence helps define the world.",
-    "  3. Use the remaining 3 as mood seeds — not literal constraints, starting points.",
-    "Record the dropped and negated nouns in the spec fields.",
     "",
     "SELF-CRITIQUE PASS (do this before finalizing):",
     "Go through every enemy name and item name. For each, decide if it fits the voice or if it's slop.",
@@ -152,8 +115,9 @@ const spec = await agent(
     "",
     "OUTPUT REQUIREMENTS:",
     `- id MUST be ${dimId}.`,
-    "- enemies: a single freeform string covering all 16 enemies, grouped into 4 tiers (FODDER, STANDARD, ELITE, BOSS) of 4 each. For each: name, a 1-line mechanical role, and a brief visual description. Example line: '- Spear Runner — fast melee, runs in packs. A wiry desert nomad with a crude spear.'",
-    "- items: a single freeform string covering all 16 items (mostly weapons: sword/spear/bow/staff/two-handed; plus shields, accessories, consumables). For each: name, type, rarity (common/uncommon/rare), brief description. Example line: '- Spear (weapon (spear), common): A long polearm with superior reach.'",
+    `- droppedNoun and negatedNoun: set both to "" (unused).`,
+    "- enemyBatches: an array of EXACTLY 4 batches, in order FODDER, STANDARD, ELITE, BOSS. Each batch is { name: the tier word, description: a short cost note (e.g. 'cost 1-2, swarms'), enemies: an array of EXACTLY 4 enemies }. Each enemy is { name, role: a 1-line mechanical role, description: a brief visual description (~1 sentence) }. 16 enemies total. Example enemy: { \"name\": \"Spear Runner\", \"role\": \"fast melee that runs in packs and closes distance\", \"description\": \"A wiry desert nomad with a crude spear.\" }",
+    "- items: an array of EXACTLY 16 WEAPONS (no shields/accessories/consumables — the item system only supports weapons). Each item is { name, type: one of sword/spear/bow/staff/two-handed, rarity: common/uncommon/rare, description: brief (~1 sentence) }. Spread the types and rarities. Example: { \"name\": \"Spear\", \"type\": \"spear\", \"rarity\": \"common\", \"description\": \"A long polearm with superior reach.\" }",
     "- palette: three hex colors (primary, secondary, accent).",
     "- description: 2-3 sentences at the scale of a whole planet.",
     "- mood: 1-2 sentences. biome: a short tag, e.g. 'scrub flatlands pocked with meteor craters'.",
@@ -168,7 +132,7 @@ const spec = await agent(
       type: "object",
       required: [
         "id", "name", "description", "palette", "mood", "biome",
-        "droppedNoun", "negatedNoun", "enemies", "items",
+        "droppedNoun", "negatedNoun", "enemyBatches", "items",
       ],
       additionalProperties: false,
       properties: {
@@ -189,13 +153,62 @@ const spec = await agent(
         biome: { type: "string" },
         droppedNoun: { type: "string" },
         negatedNoun: { type: "string" },
-        enemies: { type: "string" },
-        items: { type: "string" },
+        enemyBatches: {
+          type: "array",
+          minItems: 4,
+          maxItems: 4,
+          items: {
+            type: "object",
+            required: ["name", "description", "enemies"],
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              description: { type: "string" },
+              enemies: {
+                type: "array",
+                minItems: 4,
+                maxItems: 4,
+                items: {
+                  type: "object",
+                  required: ["name", "role", "description"],
+                  additionalProperties: false,
+                  properties: {
+                    name: { type: "string" },
+                    role: { type: "string" },
+                    description: { type: "string" },
+                  },
+                },
+              },
+            },
+          },
+        },
+        items: {
+          type: "array",
+          minItems: 16,
+          maxItems: 16,
+          items: {
+            type: "object",
+            required: ["name", "type", "rarity", "description"],
+            additionalProperties: false,
+            properties: {
+              name: { type: "string" },
+              type: { type: "string" },
+              rarity: { type: "string" },
+              description: { type: "string" },
+            },
+          },
+        },
       },
     },
   },
 );
 spec.id = dimId;
+// Flatten the structured roster into readable text for the design-agent prompts below (the prompts
+// want guidance, not JSON; build-diffusion-bundles + art-agent consume the structured arrays directly).
+const enemyRoster = spec.enemyBatches
+  .map((b) => `${b.name} (${b.description}):\n` + b.enemies.map((e) => `- ${e.name} — ${e.role}. ${e.description}`).join("\n"))
+  .join("\n\n");
+const itemRoster = spec.items.map((i) => `- ${i.name} (${i.type}, ${i.rarity}) — ${i.description}`).join("\n");
 const dimName = spec.name;
 const slug = slugify(dimName);
 const bundlesRoot = `${GEN}/diffusion-bundles/${slug}`;
@@ -223,33 +236,25 @@ await agent(
 );
 
 // ---------------------------------------------------------------------------
-// Phase 2 — ART (gpt-image-2 + python sprite extraction)
+// Phases 2-4 — ART, ENEMIES + ITEMS, and MAPS all run CONCURRENTLY. Every one of them depends only on
+// the spec (Phase 1), never on each other, so they share a single parallel() barrier. The two Opus
+// balance loops are the long pole (~20 min); art and maps (gpt-image-2, fast) finish well inside that,
+// so all image generation is effectively free wall-clock. Overworld/QA (which need the art + maps) come
+// after the barrier.
 // ---------------------------------------------------------------------------
-phase("Art");
+phase("Generate");
 
-const artResult = await agent(
-  [
-    "You are a deterministic shim around the art generator. It calls gpt-image-2 on every diffusion bundle and runs the python sprite-extraction scripts. Run it once, then report.",
-    "",
-    "Run this command (it can take several minutes — wait for it to finish):",
-    "",
-    `  ${ENV} bun ${AUTO}/art-agent.ts ${slug}`,
-    "",
-    "The agent reads the spec file by matching its slug, generates one image per bundle, and extracts sprites to:",
-    `  - server/sprites/enemies/dimension-${dimId}/`,
-    `  - client/public/sprites/items/dimension-${dimId}/`,
-    `  - client/public/sprites/map-objects/dimension-${dimId}/ (background.png + decoration sprites + manifest.json)`,
-    `  - client/public/sprites/map-decorations/dimension-${dimId}/`,
-    "",
-    "Return a one-paragraph summary of which bundles were generated and which sprite directories were written. Fail loud if the command errors or no images are produced.",
-  ].join("\n"),
-  { label: "art-generate", phase: "Art", model: "haiku" },
-);
-
-// ---------------------------------------------------------------------------
-// Phase 3 — ENEMIES + ITEMS (two Opus agentic loops, in parallel)
-// ---------------------------------------------------------------------------
-phase("Enemies + Items");
+const artPrompt = [
+  "You are a deterministic shim around the art generator. It generates one sprite sheet per diffusion bundle via gpt-image-2 and runs the python sprite-extraction scripts.",
+  "",
+  "Run this command in the FOREGROUND (it takes a few minutes; set the Bash tool's timeout to 600000 ms so it isn't cut off). Do NOT background it.",
+  "",
+  `  ${ENV} bun ${AUTO}/art-agent.ts ${slug}`,
+  "",
+  `On success the sprites are extracted to server/sprites/enemies/dimension-${dimId}/, client/public/sprites/items/dimension-${dimId}/, client/public/sprites/map-objects/dimension-${dimId}/, and client/public/sprites/map-decorations/dimension-${dimId}/.`,
+  "",
+  "Return a one-paragraph summary of which bundles were generated and which sprite directories were written. Fail loud if the command errors or no images are produced.",
+].join("\n");
 
 const enemyPrompt = [
   "You are a game balance designer. Your job is to create and balance all 16 enemies for a new dimension in a turn-based tactical combat game, iterating against an automated balance test until they feel right. You have a Bash terminal; the generator scripts are your tools.",
@@ -260,7 +265,7 @@ const enemyPrompt = [
   `Mood: ${spec.mood}`,
   "",
   "ENEMY BATCHES FROM SPEC:",
-  spec.enemies,
+  enemyRoster,
   "",
   "REFERENCE DATA TO LOAD FIRST (run these before designing):",
   `  - Enemy template format (copy this shape exactly): dump dimension 3's reference enemies with:`,
@@ -314,7 +319,7 @@ const itemPrompt = [
   `Biome: ${spec.biome}`,
   "",
   "WEAPON SPECS FROM THE DIMENSION DESIGN:",
-  spec.items,
+  itemRoster,
   "",
   "REFERENCE DATA TO LOAD FIRST (run these before designing):",
   `  - Weapon definition format (copy this shape exactly): dump dimension 3's reference items with:`,
@@ -349,65 +354,44 @@ const itemPrompt = [
   "When done, return a brief summary of the final weapon ids (all d" + dimId + "- prefixed) and what you tuned and why.",
 ].join("\n");
 
-const [enemySummary, itemSummary] = await parallel([
-  () =>
-    agent(enemyPrompt, {
-      label: "enemy-balance-loop",
-      phase: "Enemies + Items",
-      model: "opus",
-    }),
-  () =>
-    agent(itemPrompt, {
-      label: "item-balance-loop",
-      phase: "Enemies + Items",
-      model: "opus",
-    }),
-]);
+// All four jobs depend only on the spec, so they share ONE barrier. The two Opus balance loops are the
+// long pole (~20 min); gpt-image-2 art and maps finish well inside that window, so image generation is
+// effectively free wall-clock. Overworld/QA (which need art + maps) come after this barrier.
+const mapsPrompt = [
+  "You are a deterministic shim around the map generator. Run three commands in order (all FOREGROUND; set the Bash tool's timeout to 600000 ms), then report. Do not design anything.",
+  "",
+  `IMPORTANT: the generator's .env (OpenRouter + OpenAI keys for the rewrite and collision passes) is loaded from ${GEN}, so every command below cd's there first.`,
+  "",
+  "STEP 1 — Generate the dimension reference + encounter maps + collision masks (gpt-image-2 for the maps, OpenAI for collision; takes a few minutes):",
+  `  cd ${GEN} && ${ENV} bun ${AUTO}/map-agent.ts --new ${dimId} ${JSON.stringify(dimName)} ${JSON.stringify(spec.description)}`,
+  `  It writes maps + manifest.json + collision masks to client/public/sprites/maps/dimension-${dimId}/.`,
+  "",
+  "STEP 2 — Assert full coverage. v2 dimensions have no structure fallback, so every encounter type MUST have a map. Exits non-zero if any are missing:",
+  `  cd ${GEN} && ${ENV} bun ${AUTO}/assert-map-coverage.ts ${dimId}`,
+  "",
+  "STEP 3 — Upload the map art to the CDN bucket. Masks + manifest stay local (the server reads masks for collision); only the large PNGs are pushed:",
+  `  cd ${GEN} && ${ENV} bun ${AUTO}/upload-maps-s3.ts ${dimId}`,
+  "",
+  "Set coverageOk=true ONLY if all three commands succeeded and STEP 2 printed its OK line. Otherwise coverageOk=false with the failing command's error in note. Do not invent success.",
+].join("\n");
 
-// ---------------------------------------------------------------------------
-// Phase 4 — MAPS (gpt-image-2; mandatory — v2 dimensions render every encounter
-// from a baked image, so full coverage is required and asserted)
-// ---------------------------------------------------------------------------
-phase("Maps");
-
-const mapsResult = await agent(
-  [
-    "You are a deterministic shim around the map generator. Run three commands in order, then report. Do not design anything.",
-    "",
-    `IMPORTANT: cd into ${GEN} first — the generator's .env (OpenRouter + OpenAI keys for the rewrite and collision passes) is loaded from that working directory. Running from elsewhere fails auth.`,
-    "",
-    "STEP 1 — Generate the encounter maps + collision masks (codex image_gen for art, OpenAI for collision; takes several minutes — wait for completion):",
-    "",
-    `  cd ${GEN} && ${ENV} bun ${AUTO}/map-agent.ts --new ${dimId} ${JSON.stringify(dimName)} ${JSON.stringify(spec.description)}`,
-    "",
-    `  It writes maps + manifest.json + collision masks to client/public/sprites/maps/dimension-${dimId}/.`,
-    "",
-    "STEP 2 — Assert full coverage. v2 dimensions have no structure fallback, so every encounter type MUST have a map. This exits non-zero if any are missing:",
-    "",
-    `  cd ${GEN} && ${ENV} bun ${AUTO}/assert-map-coverage.ts ${dimId}`,
-    "",
-    "STEP 3 — Upload the map art to the CDN bucket. Masks + manifest stay local (the server reads masks for collision); only the large PNGs are pushed:",
-    "",
-    `  cd ${GEN} && ${ENV} bun ${AUTO}/upload-maps-s3.ts ${dimId}`,
-    "",
-    "Set coverageOk=true ONLY if all three commands succeeded and STEP 2 printed its OK line. If anything errored, set coverageOk=false and put the failing command's error in note. Do not invent success.",
-  ].join("\n"),
-  {
-    label: "maps-generate",
-    phase: "Maps",
-    model: "haiku",
-    schema: {
-      type: "object",
-      required: ["coverageOk", "mapCount", "note"],
-      additionalProperties: false,
-      properties: {
-        coverageOk: { type: "boolean" },
-        mapCount: { type: "number" },
-        note: { type: "string" },
-      },
-    },
+const mapsSchema = {
+  type: "object",
+  required: ["coverageOk", "mapCount", "note"],
+  additionalProperties: false,
+  properties: {
+    coverageOk: { type: "boolean" },
+    mapCount: { type: "number" },
+    note: { type: "string" },
   },
-);
+};
+
+const [artResult, enemySummary, itemSummary, mapsResult] = await parallel([
+  () => agent(artPrompt, { label: "art-generate", phase: "Generate", model: "haiku" }),
+  () => agent(enemyPrompt, { label: "enemy-balance-loop", phase: "Generate", model: "opus" }),
+  () => agent(itemPrompt, { label: "item-balance-loop", phase: "Generate", model: "opus" }),
+  () => agent(mapsPrompt, { label: "maps-generate", phase: "Generate", model: "haiku", schema: mapsSchema }),
+]);
 
 // Fail the whole workflow if maps did not fully generate — a v2 dimension with
 // missing maps is unplayable, so it must never reach Overworld/QA/Stage.
