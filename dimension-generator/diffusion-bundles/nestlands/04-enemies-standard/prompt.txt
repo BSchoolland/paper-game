@@ -1,0 +1,24 @@
+Dimension: Nestlands
+Biome: berry-scrub savanna laced with gourd-vine river deltas and dinosaur nesting grounds
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "STANDARD" tier: cost 3, backbone of the fight
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Bone Spear — reach melee that holds the front line. A hunter leveling a long bone-tipped spear.
+
+  Raptor — fast flanker that pounces from the side. A waist-high pack predator with a hooked killing claw.
+
+  Net Hunter — ranged control that entangles and slows one target. A hunter swinging a weighted hide net overhead.
+
+  Hide Shield — slow tanky blocker that soaks hits up front. A hunter crouched behind a thick hide-and-bone shield.

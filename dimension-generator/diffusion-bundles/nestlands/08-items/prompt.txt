@@ -1,0 +1,26 @@
+Dimension: Nestlands
+Biome: berry-scrub savanna laced with gourd-vine river deltas and dinosaur nesting grounds
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Bone Knife (sword, common) — A short blade carved from a sharpened rib bone.
+  Obsidian Blade (sword, uncommon) — A glassy black blade knapped to a razor edge.
+  Tooth Sword (sword, rare) — A wooden blade set with rows of raptor teeth.
+  Bone Spear (spear, common) — A straight shaft tipped with sharpened bone.
+  Flint Spear (spear, uncommon) — A spear with a heavy flint point that punches through hide.
+  Goring Spear (spear, rare) — A long lance tipped with a curved horn.
+  Hunting Bow (bow, common) — A simple bow of bent wood and sinew.
+  Sinew Bow (bow, uncommon) — A recurve bow strung with twisted gut for extra snap.
+  Horn Bow (bow, rare) — A composite bow of layered horn that hits hard at range.
+  Ash Staff (staff, common) — A fire-charred staff that channels a shaman's spirit-calls.
+  Antler Staff (staff, uncommon) — A forked antler staff that crackles with spirit force.
+  Skull Staff (staff, rare) — A staff topped with a raptor skull that shrieks when swung.
+  Stone Club (two-handed, common) — A heavy stone head lashed to a thick haft.
+  Bone Maul (two-handed, uncommon) — A two-handed hammer of fused vertebrae.
+  Jaw Club (two-handed, uncommon) — A club made from a predator's tooth-lined jawbone.
+  Tail Club (two-handed, rare) — A great bludgeon cut from an armored dinosaur's tail.

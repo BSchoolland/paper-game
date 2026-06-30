@@ -1,0 +1,218 @@
+{
+  "id": 703,
+  "name": "Bloomwild",
+  "description": "A warm, low planet smothered in flowering grassland, from pollen-fogged plains and humid bloom-forests to dust basins worn smooth by migrating herds. Colossal grazers roam everywhere in great droves, trailed by the carnivorous flowers and stinging swarms that feed on them. Nothing here is stone, gem, or metal — the whole world is hide, sap, and petal.",
+  "palette": {
+    "primary": "#C76A93",
+    "secondary": "#B7C24E",
+    "accent": "#4A2E63"
+  },
+  "mood": "Warm, drowsy, and thick with sweet rot and the drone of insects. The ground trembles whenever the herds pass.",
+  "biome": "pollen-fogged flowering plains grazed by colossal herds",
+  "droppedNoun": "friday",
+  "negatedNoun": "crystal",
+  "enemyBatches": [
+    {
+      "name": "FODDER",
+      "description": "cost 1-2, cheap swarm filler",
+      "enemies": [
+        {
+          "name": "Grazer Calf",
+          "role": "weak melee that charges in small packs",
+          "description": "A knee-high, fuzzy grazing beast with stubby horns."
+        },
+        {
+          "name": "Pollen Wasp",
+          "role": "fast flier, weak, attacks in swarms",
+          "description": "A fat yellow wasp dusted thick with pollen."
+        },
+        {
+          "name": "Spore Pod",
+          "role": "slow; bursts into a poison cloud when killed",
+          "description": "A bulbous seed-pod swollen tight with spores."
+        },
+        {
+          "name": "Husk Beetle",
+          "role": "slow melee with light armor",
+          "description": "A drab beetle plated in a dry, papery husk."
+        }
+      ]
+    },
+    {
+      "name": "STANDARD",
+      "description": "cost 2-3, backbone of most fights",
+      "enemies": [
+        {
+          "name": "Grazer Bull",
+          "role": "sturdy melee bruiser that charges for heavy damage",
+          "description": "A shaggy, barrel-chested grazer with curved horns."
+        },
+        {
+          "name": "Hornet",
+          "role": "flier with a ranged sting that poisons on hit",
+          "description": "A big black-and-amber hornet with a wet stinger."
+        },
+        {
+          "name": "Trumpet Bloom",
+          "role": "rooted ranged attacker that spits acidic sap",
+          "description": "A tall flower with a wide, gaping trumpet mouth."
+        },
+        {
+          "name": "Snare Vine",
+          "role": "roots and slows one target, holding it in place",
+          "description": "A creeping vine bristling with grasping tendrils."
+        }
+      ]
+    },
+    {
+      "name": "ELITE",
+      "description": "cost 4-6, anchors a fight",
+      "enemies": [
+        {
+          "name": "Tusker",
+          "role": "armored bruiser with a heavy charge that knocks back",
+          "description": "A massive grazer with sweeping tusks and thick hide."
+        },
+        {
+          "name": "Hornet Queen",
+          "role": "spawns a Pollen Wasp each turn while stinging at range",
+          "description": "A swollen hornet trailing a cluster of drones."
+        },
+        {
+          "name": "Nightshade",
+          "role": "rooted caster that fills nearby tiles with poison clouds",
+          "description": "A dark, hooded flower dripping purple sap."
+        },
+        {
+          "name": "Pitcher Plant",
+          "role": "swallows one hero, holding them out of the fight",
+          "description": "A huge pitcher-shaped bloom brimming with sap."
+        }
+      ]
+    },
+    {
+      "name": "BOSS",
+      "description": "cost 8-12, one per encounter",
+      "enemies": [
+        {
+          "name": "Trampler",
+          "role": "huge bruiser; stampede strikes the whole front line",
+          "description": "A house-sized grazer that flattens everything underfoot."
+        },
+        {
+          "name": "Goliath Beetle",
+          "role": "armored tank that gores hard and shrugs off hits",
+          "description": "A car-sized beetle plated in glossy chitin."
+        },
+        {
+          "name": "Corpse Flower",
+          "role": "rooted boss; wide poison cloud and swallows close heroes",
+          "description": "A towering, reeking bloom ringed with sticky petals."
+        },
+        {
+          "name": "Hawk Moth",
+          "role": "flying boss that scatters pollen to blind and poison",
+          "description": "A giant moth with dusty, eye-spotted wings."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Bone Knife",
+      "type": "sword",
+      "rarity": "common",
+      "description": "A short blade chipped from a splintered bone."
+    },
+    {
+      "name": "Horn Dirk",
+      "type": "sword",
+      "rarity": "common",
+      "description": "A short stabbing blade of polished horn."
+    },
+    {
+      "name": "Chitin Blade",
+      "type": "sword",
+      "rarity": "uncommon",
+      "description": "A light sword with an edge cut from beetle shell."
+    },
+    {
+      "name": "Tusk Saber",
+      "type": "sword",
+      "rarity": "rare",
+      "description": "A curved blade ground from a grazer's tusk; cuts deep."
+    },
+    {
+      "name": "Cane Spear",
+      "type": "spear",
+      "rarity": "common",
+      "description": "A long spear of fire-hardened cane."
+    },
+    {
+      "name": "Stinger Pike",
+      "type": "spear",
+      "rarity": "uncommon",
+      "description": "A pike tipped with a hornet's stinger; wounds fester."
+    },
+    {
+      "name": "Bone Lance",
+      "type": "spear",
+      "rarity": "rare",
+      "description": "A heavy lance carved from a single great bone."
+    },
+    {
+      "name": "Sinew Bow",
+      "type": "bow",
+      "rarity": "common",
+      "description": "A short bow strung with twisted grazer sinew."
+    },
+    {
+      "name": "Horn Bow",
+      "type": "bow",
+      "rarity": "uncommon",
+      "description": "A recurve bow laminated from layered horn."
+    },
+    {
+      "name": "Quill Bow",
+      "type": "bow",
+      "rarity": "rare",
+      "description": "Looses venom-soaked quills that poison on hit."
+    },
+    {
+      "name": "Spore Staff",
+      "type": "staff",
+      "rarity": "common",
+      "description": "Lobs bursting pods that scatter choking spores."
+    },
+    {
+      "name": "Pollen Staff",
+      "type": "staff",
+      "rarity": "uncommon",
+      "description": "Puffs blinding clouds of pollen at range."
+    },
+    {
+      "name": "Nightshade Staff",
+      "type": "staff",
+      "rarity": "rare",
+      "description": "Hurls bolts of distilled nightshade toxin."
+    },
+    {
+      "name": "Shell Maul",
+      "type": "two-handed",
+      "rarity": "common",
+      "description": "A two-handed maul faced with thick beetle shell."
+    },
+    {
+      "name": "Jawbone Axe",
+      "type": "two-handed",
+      "rarity": "uncommon",
+      "description": "A great axe shaped from a beast's heavy jaw."
+    },
+    {
+      "name": "Tusk Cleaver",
+      "type": "two-handed",
+      "rarity": "rare",
+      "description": "A massive cleaver split from a bull's tusk."
+    }
+  ]
+}

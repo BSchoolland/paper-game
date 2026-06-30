@@ -1,0 +1,26 @@
+Dimension: Bloomwild
+Biome: pollen-fogged flowering plains grazed by colossal herds
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Bone Knife (sword, common) — A short blade chipped from a splintered bone.
+  Horn Dirk (sword, common) — A short stabbing blade of polished horn.
+  Chitin Blade (sword, uncommon) — A light sword with an edge cut from beetle shell.
+  Tusk Saber (sword, rare) — A curved blade ground from a grazer's tusk; cuts deep.
+  Cane Spear (spear, common) — A long spear of fire-hardened cane.
+  Stinger Pike (spear, uncommon) — A pike tipped with a hornet's stinger; wounds fester.
+  Bone Lance (spear, rare) — A heavy lance carved from a single great bone.
+  Sinew Bow (bow, common) — A short bow strung with twisted grazer sinew.
+  Horn Bow (bow, uncommon) — A recurve bow laminated from layered horn.
+  Quill Bow (bow, rare) — Looses venom-soaked quills that poison on hit.
+  Spore Staff (staff, common) — Lobs bursting pods that scatter choking spores.
+  Pollen Staff (staff, uncommon) — Puffs blinding clouds of pollen at range.
+  Nightshade Staff (staff, rare) — Hurls bolts of distilled nightshade toxin.
+  Shell Maul (two-handed, common) — A two-handed maul faced with thick beetle shell.
+  Jawbone Axe (two-handed, uncommon) — A great axe shaped from a beast's heavy jaw.
+  Tusk Cleaver (two-handed, rare) — A massive cleaver split from a bull's tusk.

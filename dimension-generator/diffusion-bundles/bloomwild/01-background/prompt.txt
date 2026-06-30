@@ -1,0 +1,12 @@
+Dimension: Bloomwild
+Biome: pollen-fogged flowering plains grazed by colossal herds
+Mood: Warm, drowsy, and thick with sweet rot and the drone of insects. The ground trembles whenever the herds pass.
+Palette: primary #C76A93, secondary #B7C24E, accent #4A2E63
+
+Description: A warm, low planet smothered in flowering grassland, from pollen-fogged plains and humid bloom-forests to dust basins worn smooth by migrating herds. Colossal grazers roam everywhere in great droves, trailed by the carnivorous flowers and stinging swarms that feed on them. Nothing here is stone, gem, or metal — the whole world is hide, sap, and petal.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

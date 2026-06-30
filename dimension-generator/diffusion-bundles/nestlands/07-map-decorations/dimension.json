@@ -1,0 +1,218 @@
+{
+  "id": 704,
+  "name": "Nestlands",
+  "description": "A warm, fertile supercontinent where colossal dinosaur herds nest and migrate across golden berry-scrub savanna, gourd-tangled river deltas, fern lowlands, and tar-pit flats. Its scattered human bands never forged metal, hunting the great beasts with bone, stone, and fire. When the herds move, the whole ground shakes.",
+  "palette": {
+    "primary": "#C9A24B",
+    "secondary": "#355E3B",
+    "accent": "#C24A2E"
+  },
+  "mood": "Sun-baked and teeming, beautiful and lethal. Every meal here is also hunting something far larger than you.",
+  "biome": "berry-scrub savanna laced with gourd-vine river deltas and dinosaur nesting grounds",
+  "droppedNoun": "redcurrant",
+  "negatedNoun": "computer",
+  "enemyBatches": [
+    {
+      "name": "FODDER",
+      "description": "cost 1-2, swarms",
+      "enemies": [
+        {
+          "name": "Hatchling",
+          "role": "fast weak melee that swarms and bites in numbers",
+          "description": "A knee-high dinosaur chick with too many teeth."
+        },
+        {
+          "name": "Scrub Lizard",
+          "role": "darting melee that closes fast then skitters back",
+          "description": "A dog-sized monitor lizard the color of dry grass."
+        },
+        {
+          "name": "Sling Hunter",
+          "role": "weak ranged poke with a stone sling",
+          "description": "A lean nomad whirling a loaded leather sling."
+        },
+        {
+          "name": "Carrion Bird",
+          "role": "flying harasser that pecks exposed targets",
+          "description": "A scrawny crested flyer with a blood-stained beak."
+        }
+      ]
+    },
+    {
+      "name": "STANDARD",
+      "description": "cost 3, backbone of the fight",
+      "enemies": [
+        {
+          "name": "Bone Spear",
+          "role": "reach melee that holds the front line",
+          "description": "A hunter leveling a long bone-tipped spear."
+        },
+        {
+          "name": "Raptor",
+          "role": "fast flanker that pounces from the side",
+          "description": "A waist-high pack predator with a hooked killing claw."
+        },
+        {
+          "name": "Net Hunter",
+          "role": "ranged control that entangles and slows one target",
+          "description": "A hunter swinging a weighted hide net overhead."
+        },
+        {
+          "name": "Hide Shield",
+          "role": "slow tanky blocker that soaks hits up front",
+          "description": "A hunter crouched behind a thick hide-and-bone shield."
+        }
+      ]
+    },
+    {
+      "name": "ELITE",
+      "description": "cost 5-6, anchors and threats",
+      "enemies": [
+        {
+          "name": "Horn Bull",
+          "role": "heavy bruiser that charges and knocks back",
+          "description": "A massive three-horned dinosaur with a wide bony frill."
+        },
+        {
+          "name": "Big Raptor",
+          "role": "strong pounce that buffs nearby raptors",
+          "description": "A scarred raptor twice the size of the rest of the pack."
+        },
+        {
+          "name": "Bone Shaman",
+          "role": "support that heals and enrages nearby allies",
+          "description": "A hunter draped in skulls, chanting over a low fire."
+        },
+        {
+          "name": "Spike Tail",
+          "role": "wide tail-sweep that hits several adjacent foes",
+          "description": "A plated dinosaur with a heavy, spiked swinging tail."
+        }
+      ]
+    },
+    {
+      "name": "BOSS",
+      "description": "cost high, 1-2 per fight",
+      "enemies": [
+        {
+          "name": "Tyrant",
+          "role": "massive single-target melee with a fearsome crushing bite",
+          "description": "A towering tyrannosaur that swallows hunters whole."
+        },
+        {
+          "name": "Nest Mother",
+          "role": "huge tank that tramples and calls in hatchlings",
+          "description": "An enormous herd-mother guarding a mound of eggs."
+        },
+        {
+          "name": "Pteranodon",
+          "role": "flying boss that dives and snatches isolated targets",
+          "description": "A giant crested flyer with a long spear-like beak."
+        },
+        {
+          "name": "Hunt Chief",
+          "role": "commander boss whose heavy club hits rally the hunters",
+          "description": "The hunt's leader, swinging a great tooth-studded club."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Bone Knife",
+      "type": "sword",
+      "rarity": "common",
+      "description": "A short blade carved from a sharpened rib bone."
+    },
+    {
+      "name": "Obsidian Blade",
+      "type": "sword",
+      "rarity": "uncommon",
+      "description": "A glassy black blade knapped to a razor edge."
+    },
+    {
+      "name": "Tooth Sword",
+      "type": "sword",
+      "rarity": "rare",
+      "description": "A wooden blade set with rows of raptor teeth."
+    },
+    {
+      "name": "Bone Spear",
+      "type": "spear",
+      "rarity": "common",
+      "description": "A straight shaft tipped with sharpened bone."
+    },
+    {
+      "name": "Flint Spear",
+      "type": "spear",
+      "rarity": "uncommon",
+      "description": "A spear with a heavy flint point that punches through hide."
+    },
+    {
+      "name": "Goring Spear",
+      "type": "spear",
+      "rarity": "rare",
+      "description": "A long lance tipped with a curved horn."
+    },
+    {
+      "name": "Hunting Bow",
+      "type": "bow",
+      "rarity": "common",
+      "description": "A simple bow of bent wood and sinew."
+    },
+    {
+      "name": "Sinew Bow",
+      "type": "bow",
+      "rarity": "uncommon",
+      "description": "A recurve bow strung with twisted gut for extra snap."
+    },
+    {
+      "name": "Horn Bow",
+      "type": "bow",
+      "rarity": "rare",
+      "description": "A composite bow of layered horn that hits hard at range."
+    },
+    {
+      "name": "Ash Staff",
+      "type": "staff",
+      "rarity": "common",
+      "description": "A fire-charred staff that channels a shaman's spirit-calls."
+    },
+    {
+      "name": "Antler Staff",
+      "type": "staff",
+      "rarity": "uncommon",
+      "description": "A forked antler staff that crackles with spirit force."
+    },
+    {
+      "name": "Skull Staff",
+      "type": "staff",
+      "rarity": "rare",
+      "description": "A staff topped with a raptor skull that shrieks when swung."
+    },
+    {
+      "name": "Stone Club",
+      "type": "two-handed",
+      "rarity": "common",
+      "description": "A heavy stone head lashed to a thick haft."
+    },
+    {
+      "name": "Bone Maul",
+      "type": "two-handed",
+      "rarity": "uncommon",
+      "description": "A two-handed hammer of fused vertebrae."
+    },
+    {
+      "name": "Jaw Club",
+      "type": "two-handed",
+      "rarity": "uncommon",
+      "description": "A club made from a predator's tooth-lined jawbone."
+    },
+    {
+      "name": "Tail Club",
+      "type": "two-handed",
+      "rarity": "rare",
+      "description": "A great bludgeon cut from an armored dinosaur's tail."
+    }
+  ]
+}

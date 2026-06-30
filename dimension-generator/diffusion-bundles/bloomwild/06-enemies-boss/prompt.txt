@@ -1,0 +1,24 @@
+Dimension: Bloomwild
+Biome: pollen-fogged flowering plains grazed by colossal herds
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "BOSS" tier: cost 8-12, one per encounter
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Trampler — huge bruiser; stampede strikes the whole front line. A house-sized grazer that flattens everything underfoot.
+
+  Goliath Beetle — armored tank that gores hard and shrugs off hits. A car-sized beetle plated in glossy chitin.
+
+  Corpse Flower — rooted boss; wide poison cloud and swallows close heroes. A towering, reeking bloom ringed with sticky petals.
+
+  Hawk Moth — flying boss that scatters pollen to blind and poison. A giant moth with dusty, eye-spotted wings.

@@ -1,0 +1,24 @@
+Dimension: Nestlands
+Biome: berry-scrub savanna laced with gourd-vine river deltas and dinosaur nesting grounds
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "FODDER" tier: cost 1-2, swarms
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Hatchling — fast weak melee that swarms and bites in numbers. A knee-high dinosaur chick with too many teeth.
+
+  Scrub Lizard — darting melee that closes fast then skitters back. A dog-sized monitor lizard the color of dry grass.
+
+  Sling Hunter — weak ranged poke with a stone sling. A lean nomad whirling a loaded leather sling.
+
+  Carrion Bird — flying harasser that pecks exposed targets. A scrawny crested flyer with a blood-stained beak.

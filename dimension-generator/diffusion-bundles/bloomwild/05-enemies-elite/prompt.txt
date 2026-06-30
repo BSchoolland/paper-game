@@ -1,0 +1,24 @@
+Dimension: Bloomwild
+Biome: pollen-fogged flowering plains grazed by colossal herds
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "ELITE" tier: cost 4-6, anchors a fight
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Tusker — armored bruiser with a heavy charge that knocks back. A massive grazer with sweeping tusks and thick hide.
+
+  Hornet Queen — spawns a Pollen Wasp each turn while stinging at range. A swollen hornet trailing a cluster of drones.
+
+  Nightshade — rooted caster that fills nearby tiles with poison clouds. A dark, hooded flower dripping purple sap.
+
+  Pitcher Plant — swallows one hero, holding them out of the fight. A huge pitcher-shaped bloom brimming with sap.

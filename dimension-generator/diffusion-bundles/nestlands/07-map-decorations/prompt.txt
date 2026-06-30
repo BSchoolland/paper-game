@@ -1,0 +1,12 @@
+Dimension: Nestlands
+Biome: berry-scrub savanna laced with gourd-vine river deltas and dinosaur nesting grounds
+Mood: Sun-baked and teeming, beautiful and lethal. Every meal here is also hunting something far larger than you.
+Palette: primary #C9A24B, secondary #355E3B, accent #C24A2E
+
+Description: A warm, fertile supercontinent where colossal dinosaur herds nest and migrate across golden berry-scrub savanna, gourd-tangled river deltas, fern lowlands, and tar-pit flats. Its scattered human bands never forged metal, hunting the great beasts with bone, stone, and fire. When the herds move, the whole ground shakes.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color saturation, isometric three-quarter perspective, and drop shadows. Ignore the reference's parchment background.
+
+Important: Use a variety of colors across the decorations — not everything should be the same color as the dimension palette. Natural environments have diverse coloring, so include variety (e.g. different plant greens, browns, grays for rocks, varied flower colors).

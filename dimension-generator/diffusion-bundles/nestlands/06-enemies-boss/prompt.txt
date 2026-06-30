@@ -1,0 +1,24 @@
+Dimension: Nestlands
+Biome: berry-scrub savanna laced with gourd-vine river deltas and dinosaur nesting grounds
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "BOSS" tier: cost high, 1-2 per fight
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Tyrant — massive single-target melee with a fearsome crushing bite. A towering tyrannosaur that swallows hunters whole.
+
+  Nest Mother — huge tank that tramples and calls in hatchlings. An enormous herd-mother guarding a mound of eggs.
+
+  Pteranodon — flying boss that dives and snatches isolated targets. A giant crested flyer with a long spear-like beak.
+
+  Hunt Chief — commander boss whose heavy club hits rally the hunters. The hunt's leader, swinging a great tooth-studded club.

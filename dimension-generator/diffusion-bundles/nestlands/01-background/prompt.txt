@@ -1,0 +1,12 @@
+Dimension: Nestlands
+Biome: berry-scrub savanna laced with gourd-vine river deltas and dinosaur nesting grounds
+Mood: Sun-baked and teeming, beautiful and lethal. Every meal here is also hunting something far larger than you.
+Palette: primary #C9A24B, secondary #355E3B, accent #C24A2E
+
+Description: A warm, fertile supercontinent where colossal dinosaur herds nest and migrate across golden berry-scrub savanna, gourd-tangled river deltas, fern lowlands, and tar-pit flats. Its scattered human bands never forged metal, hunting the great beasts with bone, stone, and fire. When the herds move, the whole ground shakes.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.
