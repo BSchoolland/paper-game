@@ -122,8 +122,8 @@ export const PRESETS = {
   crafty:  { ...DEFAULT_PARAMS, topFraction: 0.20 },
   /** Tight (top 10%). Sharp picks, low variance. Use for bosses, named rivals, prestige fights. */
   genius:  { ...DEFAULT_PARAMS, topFraction: 0.10 },
-  /** Engine — widest search, deterministic top pick. For tournament-tier "this NPC plays
-   *  optimally" contexts. Beats agent-06 in head-to-head; not recommended for normal gameplay. */
+  /** Engine — widest search, deterministic top pick. For maximal-strength "this NPC plays
+   *  optimally" contexts; not recommended for normal gameplay. */
   engine:  { maxSteps: 8, beamWidth: 24, finalists: 60, nodeBudget: 600_000, kiteRing: 0.85,
              topFraction: 0, safetyMs: 100, softBudgetMs: 8000 },
 } as const satisfies Record<string, SearchParams>;
@@ -336,7 +336,7 @@ interface EvalCtx {
 }
 
 /**
- * Adversarial rollout (copied from agent-06's Overlord — replyLevels=3).
+ * Adversarial rollout (replyLevels=3).
  * Considers 4 enemy reply lines and blends scripted with the worst of the smart lines:
  *   1. Scripted: every enemy runs its built-in strategy (rush/kite/threat)
  *   2. Best-reply: enemy hero picks the plan that minimizes MY eval (3 steps deep)

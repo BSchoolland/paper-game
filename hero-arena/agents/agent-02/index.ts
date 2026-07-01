@@ -3,8 +3,6 @@
  * See `sovereign.ts` for the design notes; `tune.ts` for the weight tuner.
  *
  * Test:
- *   bun hero-arena/src/harness.ts agent-02 baseline       # vs the dumb baseline (T1)
- *   bun hero-arena/src/harness.ts agent-02 agent-01 42    # head to head, T1, seed 42
  *   bun hero-arena/agents/agent-02/tune.ts                # self-play weight tuning
  *
  *   bun -e "import { runSoloChallenge } from './hero-arena/src/t2/challenge-solo.js'; \
