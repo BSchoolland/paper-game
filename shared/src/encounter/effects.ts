@@ -5,6 +5,7 @@ import { applyDamage } from "../combat/combat.js";
 import { normalize, sub, add, scale, distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds, findWalkablePosition } from "../map/collision-grid.js";
 import { moveRadiusOf } from "../combat/movement.js";
+import { createReactionBus, on, type ReactionHandler } from "../combat/reaction-bus.js";
 
 let activeTemplateRegistry: Record<string, UnitTemplate> | null = null;
 
@@ -38,77 +39,75 @@ function entitiesOverlap(
   return false;
 }
 
-export function processEffects(result: ActionResult, defenseMap?: ReadonlyMap<string, number>): ActionResult {
-  let { state } = result;
-  const events = [...result.events];
+const attackReaction: ReactionHandler<"attack"> = (event, state, ctx) => {
+  let current = state;
+  const events: GameEvent[] = [];
 
-  for (const event of result.events) {
-    if (event.type !== "attack") continue;
-
-    const ability = event.ability;
-    for (const hit of event.hits) {
-      // A defended hit attenuates displacement-style consequences in equal measure: perfect block
-      // (multiplier 0) eats all knockback and on-hit pull, decent reduces them proportionally,
-      // unblocked hits behave as normal.
-      const defMult = defenseMap?.get(hit.targetId) ?? 1;
-      const scaledKnockback = ability.knockback * defMult;
-      if (scaledKnockback > 0) {
-        const applied = knockbackTarget(hit.targetId, event.attackerPosition, scaledKnockback, state);
-        state = applied.state;
-        events.push(...applied.events);
-        // Knocked into a wall, an edge, or another body: pay the slam toll.
-        if (applied.blocked && ability.wallSlamDamage && ability.wallSlamDamage > 0) {
-          const target = state.entities.get(hit.targetId);
-          if (target && !target.dead) {
-            const slamDamage = Math.round(ability.wallSlamDamage * defMult);
-            if (slamDamage > 0) {
-              const slam = applyDamage(state, [target], slamDamage);
-              state = slam.state;
-              events.push({ type: "collision", entityId: target.id, at: target.position, damage: slamDamage, killed: slam.hits[0]!.killed });
-            }
+  const ability = event.ability;
+  for (const hit of event.hits) {
+    // A defended hit attenuates displacement-style consequences in equal measure: perfect block
+    // (multiplier 0) eats all knockback and on-hit pull, decent reduces them proportionally,
+    // unblocked hits behave as normal.
+    const defMult = ctx.defenseMap?.get(hit.targetId) ?? 1;
+    const scaledKnockback = ability.knockback * defMult;
+    if (scaledKnockback > 0) {
+      const applied = knockbackTarget(hit.targetId, event.attackerPosition, scaledKnockback, current);
+      current = applied.state;
+      events.push(...applied.events);
+      // Knocked into a wall, an edge, or another body: pay the slam toll.
+      if (applied.blocked && ability.wallSlamDamage && ability.wallSlamDamage > 0) {
+        const target = current.entities.get(hit.targetId);
+        if (target && !target.dead) {
+          const slamDamage = Math.round(ability.wallSlamDamage * defMult);
+          if (slamDamage > 0) {
+            const slam = applyDamage(current, [target], slamDamage);
+            current = slam.state;
+            events.push({ type: "collision", entityId: target.id, at: target.position, damage: slamDamage, killed: slam.hits[0]!.killed });
           }
         }
       }
-      if (ability.onHit) {
-        for (const effect of ability.onHit) {
-          const applied = applyWeaponEffect(effect, hit.targetId, event.attackerPosition, state, defMult);
-          state = applied.state;
-          events.push(...applied.events);
-        }
-      }
     }
-
-    // Attacker repositioning: recoil shoves the attacker back along the reverse of the aim
-    // line whether or not the swing connected; lungeThrough carries the attacker forward only
-    // when it did. Both surface as ordinary "move" events, so the renderer animates and
-    // previews them with no special-casing.
-    const asMove = (entityId: string, from: Vec2, to: Vec2): GameEvent => ({ type: "move", entityId, from, to });
-    if (ability.recoil && ability.recoil > 0) {
-      const recoiled = slideEntity(event.attackerId, scale(event.aimDirection, -1), ability.recoil, asMove, state);
-      state = recoiled.state;
-      events.push(...recoiled.events);
-    }
-    if (ability.lungeThrough && ability.lungeThrough > 0 && event.hits.length > 0) {
-      const lunged = slideEntity(event.attackerId, event.aimDirection, ability.lungeThrough, asMove, state);
-      state = lunged.state;
-      events.push(...lunged.events);
-    }
-
-    for (const hit of event.hits) {
-      if (!hit.killed) continue;
-      const dead = state.entities.get(hit.targetId);
-      if (!dead?.effects) continue;
-      const deathEffects = dead.effects.filter((e) => e.trigger === "onDeath");
-      for (const effect of deathEffects) {
-        const spawned = applyEntityEffect(effect, dead.position, dead.teamId, state);
-        state = spawned.state;
-        events.push(...spawned.events);
+    if (ability.onHit) {
+      for (const effect of ability.onHit) {
+        const applied = applyWeaponEffect(effect, hit.targetId, event.attackerPosition, current, defMult);
+        current = applied.state;
+        events.push(...applied.events);
       }
     }
   }
 
-  return { state, events };
-}
+  // Attacker repositioning: recoil shoves the attacker back along the reverse of the aim
+  // line whether or not the swing connected; lungeThrough carries the attacker forward only
+  // when it did. Both surface as ordinary "move" events, so the renderer animates and
+  // previews them with no special-casing.
+  const asMove = (entityId: string, from: Vec2, to: Vec2): GameEvent => ({ type: "move", entityId, from, to });
+  if (ability.recoil && ability.recoil > 0) {
+    const recoiled = slideEntity(event.attackerId, scale(event.aimDirection, -1), ability.recoil, asMove, current);
+    current = recoiled.state;
+    events.push(...recoiled.events);
+  }
+  if (ability.lungeThrough && ability.lungeThrough > 0 && event.hits.length > 0) {
+    const lunged = slideEntity(event.attackerId, event.aimDirection, ability.lungeThrough, asMove, current);
+    current = lunged.state;
+    events.push(...lunged.events);
+  }
+
+  for (const hit of event.hits) {
+    if (!hit.killed) continue;
+    const dead = current.entities.get(hit.targetId);
+    if (!dead?.effects) continue;
+    const deathEffects = dead.effects.filter((e) => e.trigger === "onDeath");
+    for (const effect of deathEffects) {
+      const spawned = applyEntityEffect(effect, dead.position, dead.teamId, current);
+      current = spawned.state;
+      events.push(...spawned.events);
+    }
+  }
+
+  return { state: current, events };
+};
+
+export const coreReactionBus = createReactionBus([on("attack", attackReaction)]);
 
 function applyWeaponEffect(
   effect: WeaponEffect,

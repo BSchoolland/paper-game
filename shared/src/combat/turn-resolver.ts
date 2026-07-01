@@ -4,7 +4,8 @@ import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { canEntityOccupy } from "./movement.js";
 import { playerMovePath } from "../map/pathfinding.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
-import { processEffects } from "../encounter/effects.js";
+import { runReactions } from "./reaction-bus.js";
+import { coreReactionBus } from "../encounter/effects.js";
 import { getEffectiveDistance, getEffectiveRegen } from "./status-modifiers.js";
 import { createZone, canPlaceWallZone, tickZones } from "./zones.js";
 import { powerToMultiplier, scaleAttack } from "./power.js";
@@ -123,7 +124,7 @@ function resolveAttack(
     }],
   };
 
-  result = processEffects(result, defenseMap);
+  result = runReactions(result, coreReactionBus, { defenseMap });
 
   return {
     state: { ...result.state, winner: checkWinner(result.state) },

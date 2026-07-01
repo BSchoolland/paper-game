@@ -1,0 +1,260 @@
+{
+  "s01-knockback-wallslam": {
+    "hash": "ade44fa57e6385e4f5740f78e7ae24c0708a79b72b4b365cff6ecbb27def6dee",
+    "summary": {
+      "events": 4,
+      "eventTypes": {
+        "attack": 1,
+        "collision": 1,
+        "endTurn": 1,
+        "turnStart": 1
+      },
+      "winner": null,
+      "turnNumber": 2,
+      "entities": 2,
+      "actionCount": 1
+    }
+  },
+  "s02-pull": {
+    "hash": "6c926df6ba2b32e6bd67c14175c4d821a4cbe2aed90d60cda04af973ca09f5cf",
+    "summary": {
+      "events": 6,
+      "eventTypes": {
+        "attack": 1,
+        "endTurn": 2,
+        "pull": 1,
+        "turnStart": 2
+      },
+      "winner": null,
+      "turnNumber": 3,
+      "entities": 2,
+      "actionCount": 1
+    }
+  },
+  "s03-status-all-and-tick": {
+    "hash": "1d12ffddd6be7a07a762891e076e8b2e7500332cc9edb81cad20ba51b461d3e5",
+    "summary": {
+      "events": 13,
+      "eventTypes": {
+        "attack": 1,
+        "endTurn": 4,
+        "statusApplied": 4,
+        "turnStart": 4
+      },
+      "winner": null,
+      "turnNumber": 5,
+      "entities": 2,
+      "actionCount": 1
+    }
+  },
+  "s04-recoil": {
+    "hash": "9d6a99a3e5709171a205a8838d3cc333d31cc88e881782b9c7b79266ab5cc990",
+    "summary": {
+      "events": 4,
+      "eventTypes": {
+        "attack": 1,
+        "endTurn": 1,
+        "move": 1,
+        "turnStart": 1
+      },
+      "winner": null,
+      "turnNumber": 2,
+      "entities": 2,
+      "actionCount": 1
+    }
+  },
+  "s05-lunge": {
+    "hash": "3023d25c99f1d2f16775bce683eb48b994ed5f2ad4ada3a1e0109a5dfd727a4c",
+    "summary": {
+      "events": 4,
+      "eventTypes": {
+        "attack": 1,
+        "endTurn": 1,
+        "move": 1,
+        "turnStart": 1
+      },
+      "winner": null,
+      "turnNumber": 2,
+      "entities": 2,
+      "actionCount": 1
+    }
+  },
+  "s06-barrier-regen": {
+    "hash": "4ec654c495175a130f33641883c96a26d6ee139719d3d639f53351eda949b314",
+    "summary": {
+      "events": 5,
+      "eventTypes": {
+        "barrier": 1,
+        "endTurn": 2,
+        "turnStart": 2
+      },
+      "winner": null,
+      "turnNumber": 3,
+      "entities": 2,
+      "actionCount": 1
+    }
+  },
+  "s07-ondeath-spawn": {
+    "hash": "a89cc131668609d4ac72a4fea474657b016c8828246d1d04240fe68412f371dc",
+    "summary": {
+      "events": 5,
+      "eventTypes": {
+        "attack": 1,
+        "endTurn": 1,
+        "spawn": 2,
+        "turnStart": 1
+      },
+      "winner": null,
+      "turnNumber": 2,
+      "entities": 4,
+      "actionCount": 1
+    }
+  },
+  "s08-zone-damage-tick-expire": {
+    "hash": "9a8ff0fb0c851de56707f6821c3a07b331ecfad4a04a6d490e8f2cb38649457c",
+    "summary": {
+      "events": 12,
+      "eventTypes": {
+        "endTurn": 4,
+        "turnStart": 4,
+        "zoneCreated": 1,
+        "zoneExpired": 1,
+        "zoneTick": 2
+      },
+      "winner": null,
+      "turnNumber": 5,
+      "entities": 2,
+      "actionCount": 1
+    }
+  },
+  "s09-zone-variety-and-stamps": {
+    "hash": "45ddde1c916c6c775ab703cacb1f682edeaa6d380108eee640cc238492f5447d",
+    "summary": {
+      "events": 14,
+      "eventTypes": {
+        "endTurn": 2,
+        "turnStart": 2,
+        "zoneCreated": 4,
+        "zoneExpired": 2,
+        "zoneTick": 4
+      },
+      "winner": null,
+      "turnNumber": 3,
+      "entities": 2,
+      "actionCount": 4
+    }
+  },
+  "s10-wall-blocked-knockback": {
+    "hash": "dc2c5c13db274facf16b585f23ade5634ad5c5a1f75438743357ddacbebb1fa2",
+    "summary": {
+      "events": 4,
+      "eventTypes": {
+        "attack": 1,
+        "endTurn": 1,
+        "knockback": 1,
+        "turnStart": 1
+      },
+      "winner": null,
+      "turnNumber": 2,
+      "entities": 2,
+      "actionCount": 1
+    }
+  },
+  "ai01-sovereign-vs-rush": {
+    "hash": "74547c63ff7c5b042d4e92edf4ba3ad8dc03be828e56f75242a13fffe0e1e873",
+    "summary": {
+      "events": 8,
+      "eventTypes": {
+        "attack": 3,
+        "collision": 3,
+        "knockback": 1,
+        "move": 1
+      },
+      "winner": "red",
+      "turnNumber": 1,
+      "entities": 2,
+      "actionCount": 4
+    }
+  },
+  "ai02-sovereign-vs-kite": {
+    "hash": "fbd5cde93c8328f380d5b2d2a109def09343c3238dd85156cb837a3d13d86097",
+    "summary": {
+      "events": 8,
+      "eventTypes": {
+        "attack": 3,
+        "collision": 3,
+        "knockback": 1,
+        "move": 1
+      },
+      "winner": "red",
+      "turnNumber": 1,
+      "entities": 2,
+      "actionCount": 4
+    }
+  },
+  "ai03-sovereign-vs-sovereign": {
+    "hash": "41476072dac86547b1b697523bddedd575f0d91a4d28263f403b5d084f860cc8",
+    "summary": {
+      "events": 8,
+      "eventTypes": {
+        "attack": 3,
+        "collision": 3,
+        "knockback": 1,
+        "move": 1
+      },
+      "winner": "red",
+      "turnNumber": 1,
+      "entities": 2,
+      "actionCount": 4
+    }
+  },
+  "ai04-two-sovereigns-vs-rush-squad": {
+    "hash": "929f26f4b6ff1b49aa16de43bab836c55be0fce3e3f328ad9bbc6ff81cbd56b9",
+    "summary": {
+      "events": 11,
+      "eventTypes": {
+        "attack": 4,
+        "collision": 3,
+        "knockback": 2,
+        "move": 2
+      },
+      "winner": "red",
+      "turnNumber": 1,
+      "entities": 4,
+      "actionCount": 6
+    }
+  },
+  "ai05-sovereign-vs-ondeath-spawner": {
+    "hash": "6f954485dc36ed17f2d10bde1dedbd5345f6cc0f0f2ef81d28d5d402abd8cc15",
+    "summary": {
+      "events": 10,
+      "eventTypes": {
+        "attack": 3,
+        "collision": 2,
+        "knockback": 2,
+        "move": 1,
+        "spawn": 2
+      },
+      "winner": "red",
+      "turnNumber": 1,
+      "entities": 4,
+      "actionCount": 4
+    }
+  },
+  "ai06-sovereign-knockback-near-wall": {
+    "hash": "2447efee1826ef02c16eb9a2ec01d10c2d0869696a7ef6d485a6ea54c880b89b",
+    "summary": {
+      "events": 9,
+      "eventTypes": {
+        "attack": 3,
+        "collision": 1,
+        "knockback": 3,
+        "move": 2
+      },
+      "winner": "red",
+      "turnNumber": 1,
+      "entities": 2,
+      "actionCount": 5
+    }
+  }
+}

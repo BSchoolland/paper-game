@@ -23,7 +23,6 @@ import type { EntityId as _EntityId, GameState as _GameState, PlayerAction as _P
 export interface HeroContext {
   readonly state: _GameState;
   readonly heroId: _EntityId;
-  readonly deadlineMs: number;
   readonly turnIndex: number;
 }
 export type HeroController = (ctx: HeroContext) => _PlayerAction[];
@@ -81,22 +80,26 @@ export interface SearchParams {
   finalists: number;
   /** Yardstick for "are the enemies clustered" — defaults to the hero's biggest AoE radius. */
   aoeRadius?: number;
-  /** Stop searching this far before the deadline (ms). */
-  safetyMs: number;
+  /** Deterministic search cap: max work-units (candidate expansions + rollout steps) per turn.
+   *  Replaces wall-clock termination so search depth is a pure function of the position, not
+   *  machine speed. Calibrated well above normal per-turn work so it only bounds runaways. */
+  nodeBudget: number;
   /** When repositioning to fire, aim for this fraction of our attack range. */
   kiteRing: number;
   /** Randomly choose from the top-N fraction of scored plans (e.g. 0.20 = top 20%) instead of
    *  always picking the best. Pool size is `max(1, ceil(scored.length * topFraction))`. */
   topFraction: number;
-  /** Self-imposed wall-clock cap per turn (ms). */
+  /** Wall-clock hints consumed only by the dev measure/profile/replay harnesses (they size their
+   *  own timing budgets off these). The sovereign search itself no longer reads them. */
+  safetyMs: number;
   softBudgetMs: number;
 }
 
 // Deterministic top-1 pick. The MultiFormatAgent in agent-02 was tournament-tuned with this
 // exact behavior; the three game-facing presets opt into top-fraction randomness explicitly.
 export const DEFAULT_PARAMS: SearchParams = {
-  maxSteps: 6, beamWidth: 12, finalists: 112, safetyMs: 60, kiteRing: 0.85,
-  topFraction: 0, softBudgetMs: 2000,
+  maxSteps: 6, beamWidth: 12, finalists: 112, nodeBudget: 150_000, kiteRing: 0.85,
+  topFraction: 0, safetyMs: 60, softBudgetMs: 2000,
 };
 // Backwards-compat alias for older multi-hero contexts.
 export const FAST_PARAMS: SearchParams = DEFAULT_PARAMS;
@@ -121,8 +124,8 @@ export const PRESETS = {
   genius:  { ...DEFAULT_PARAMS, topFraction: 0.10 },
   /** Engine — widest search, deterministic top pick. For tournament-tier "this NPC plays
    *  optimally" contexts. Beats agent-06 in head-to-head; not recommended for normal gameplay. */
-  engine:  { maxSteps: 8, beamWidth: 24, finalists: 60, safetyMs: 100, kiteRing: 0.85,
-             topFraction: 0, softBudgetMs: 8000 },
+  engine:  { maxSteps: 8, beamWidth: 24, finalists: 60, nodeBudget: 600_000, kiteRing: 0.85,
+             topFraction: 0, safetyMs: 100, softBudgetMs: 8000 },
 } as const satisfies Record<string, SearchParams>;
 
 export type IntelligencePreset = keyof typeof PRESETS;
@@ -224,15 +227,20 @@ interface PartialPlan {
   done: boolean;
 }
 
+/** Deterministic per-turn work counter. `work` is bumped once per candidate expansion / rollout
+ *  step; the search stops when it reaches `limit`. Same inputs => same number of steps everywhere. */
+interface Budget {
+  work: number;
+  readonly limit: number;
+}
+
 export function makeSovereign(w: Weights, params: SearchParams = DEFAULT_PARAMS): HeroController {
   return (ctx) => {
     const myTeam = teamOf(ctx.state, ctx.heroId);
     const heroStart = ctx.state.entities.get(ctx.heroId);
     if (!heroStart || heroStart.dead) return [];
-    const start = Date.now();
-    const softCap = params.softBudgetMs !== undefined ? start + params.softBudgetMs : ctx.deadlineMs;
-    const deadline = Math.min(ctx.deadlineMs, softCap) - params.safetyMs;
-    const timeUp = () => Date.now() >= deadline;
+    const budget: Budget = { work: 0, limit: params.nodeBudget };
+    const overBudget = () => budget.work >= budget.limit;
     // The clustering yardstick: this hero's biggest AoE radius (Sector/Circle), falling back to
     // 90 (greatsword) if the kit is point-only.
     const aoeRadius = params.aoeRadius ?? bestAoeRadius(heroStart) ?? 90;
@@ -246,7 +254,7 @@ export function makeSovereign(w: Weights, params: SearchParams = DEFAULT_PARAMS)
     let beam: PartialPlan[] = [{ state: ctx.state, plan: [], done: false }];
     const finals: PartialPlan[] = [];
 
-    for (let step = 0; step < params.maxSteps && !timeUp(); step++) {
+    for (let step = 0; step < params.maxSteps && !overBudget(); step++) {
       const next: PartialPlan[] = [];
       let anyExpanded = false;
       for (const node of beam) {
@@ -255,7 +263,8 @@ export function makeSovereign(w: Weights, params: SearchParams = DEFAULT_PARAMS)
         const hero = node.state.entities.get(ctx.heroId);
         if (!hero || hero.dead) continue;
         for (const action of heroCandidates(node.state, hero, params.kiteRing)) {
-          if (timeUp()) break;
+          budget.work++;
+          if (overBudget()) break;
           const after = tryAction(node.state, action);
           if (!after) continue;
           anyExpanded = true;
@@ -283,18 +292,31 @@ export function makeSovereign(w: Weights, params: SearchParams = DEFAULT_PARAMS)
     // --- phase 2: rollout each finalist ----------
     let scored: Array<{ plan: PartialPlan; value: number }> = [];
     for (const c of candidates) {
-      const v = c.state.winner === myTeam ? 1e6 : rolloutValue(c.state, ctxEval, timeUp, params);
+      budget.work++;
+      const v = c.state.winner === myTeam ? 1e6 : rolloutValue(c.state, ctxEval, budget, params);
       scored.push({ plan: c, value: v });
-      if (timeUp()) break;
+      if (overBudget()) break;
     }
     if (scored.length === 0) return passNode.plan;
 
     scored.sort((a, b) => b.value - a.value);
     const topN = Math.max(1, Math.ceil(scored.length * params.topFraction));
     const pool = scored.slice(0, Math.min(topN, scored.length));
-    const pick = pool[Math.floor(Math.random() * pool.length)]!;
+    const idx = pool.length === 1 ? 0 : hashPick(ctx.state.actionCount, ctx.heroId) % pool.length;
+    const pick = pool[idx]!;
     return pick.plan.plan;
   };
+}
+
+/** Deterministic replacement for the old Math.random tie-break: a pure hash of the global action
+ *  counter (bumped on every applied action, so it varies each turn and between a squad hero's own
+ *  sequential actions) XOR-mixed with the hero id (decorrelates heroes sharing an actionCount).
+ *  Draws near-uniformly from the same top-N pool the RNG used, but reproducibly. */
+function hashPick(actionCount: number, heroId: EntityId): number {
+  let h = (0x811c9dc5 ^ actionCount) >>> 0;
+  const key = String(heroId);
+  for (let i = 0; i < key.length; i++) { h ^= key.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h >>> 0;
 }
 
 /** Default export wrapper used by `index.ts` and `tune.ts`. */
@@ -322,7 +344,7 @@ interface EvalCtx {
  *   4. Hunt-weakest-ally: enemy hero specifically tries to kill my weakest ally
  * Worst = min over these four. Blend 50/50 with scripted so the bot isn't paranoid.
  */
-function rolloutValue(state: GameState, ec: EvalCtx, timeUp: () => boolean, params: SearchParams): number {
+function rolloutValue(state: GameState, ec: EvalCtx, budget: Budget, params: SearchParams): number {
   const afterAllies = simulateMyAlliesTurn(state, ec.heroId);
   const afterEnd = resolveAction(afterAllies, { type: "endTurn" });
   if (afterEnd.winner) return staticEval(afterEnd, ec);
@@ -335,22 +357,22 @@ function rolloutValue(state: GameState, ec: EvalCtx, timeUp: () => boolean, para
   const scriptedVal = staticEval(simulateScriptedTurn(afterEnd), ec);
   let worst = scriptedVal;
 
-  if (enemyHero && !timeUp()) {
-    const plan = bestReplyPlan(afterEnd, enemyHero.id, ec, params, timeUp);
+  if (enemyHero && budget.work < budget.limit) {
+    const plan = bestReplyPlan(afterEnd, enemyHero.id, ec, params, budget);
     worst = Math.min(worst, staticEval(enemyTurnWithHeroPlan(afterEnd, enemyHero.id, plan), ec));
   }
-  if (enemyHero && !timeUp()) {
-    const plan = huntPlan(afterEnd, enemyHero.id, ec.heroId, params);
+  if (enemyHero && budget.work < budget.limit) {
+    const plan = huntPlan(afterEnd, enemyHero.id, ec.heroId, params, budget);
     worst = Math.min(worst, staticEval(enemyTurnWithHeroPlan(afterEnd, enemyHero.id, plan), ec));
   }
-  if (enemyHero && !timeUp()) {
+  if (enemyHero && budget.work < budget.limit) {
     const myAllies = [...afterEnd.entities.values()].filter(
       e => !e.dead && e.teamId === ec.myTeam && e.id !== ec.heroId,
     );
     if (myAllies.length > 0) {
       const weak = myAllies.reduce((a, b) =>
         (a.hp + a.barrier) / a.maxHp <= (b.hp + b.barrier) / b.maxHp ? a : b);
-      const plan = huntPlan(afterEnd, enemyHero.id, weak.id, params);
+      const plan = huntPlan(afterEnd, enemyHero.id, weak.id, params, budget);
       worst = Math.min(worst, staticEval(enemyTurnWithHeroPlan(afterEnd, enemyHero.id, plan), ec));
     }
   }
@@ -367,10 +389,12 @@ function enemyTurnWithHeroPlan(state: GameState, enemyHeroId: EntityId, plan: Pl
 }
 
 /** Greedy "kill this target" plan for the enemy hero. Biggest-damage attack first; close if needed. */
-function huntPlan(state: GameState, attackerId: EntityId, victimId: EntityId, params: SearchParams): PlayerAction[] {
+function huntPlan(state: GameState, attackerId: EntityId, victimId: EntityId, params: SearchParams, budget: Budget): PlayerAction[] {
   const plan: PlayerAction[] = [];
   let s = state;
   for (let step = 0; step < Math.min(3, params.maxSteps); step++) {
+    budget.work++;
+    if (budget.work >= budget.limit) break;
     const a = s.entities.get(attackerId);
     const v = s.entities.get(victimId);
     if (!a || a.dead || !v || v.dead || s.winner) break;
@@ -400,17 +424,18 @@ function huntPlan(state: GameState, attackerId: EntityId, victimId: EntityId, pa
 }
 
 /** Enemy hero greedily searches the action that *minimizes my eval*. Up to 3 steps deep. */
-function bestReplyPlan(state: GameState, attackerId: EntityId, ec: EvalCtx, params: SearchParams, timeUp: () => boolean): PlayerAction[] {
+function bestReplyPlan(state: GameState, attackerId: EntityId, ec: EvalCtx, params: SearchParams, budget: Budget): PlayerAction[] {
   const plan: PlayerAction[] = [];
   let s = state;
   const maxSteps = Math.min(3, params.maxSteps);
   for (let step = 0; step < maxSteps; step++) {
     const a = s.entities.get(attackerId);
-    if (!a || a.dead || s.winner || timeUp()) break;
+    if (!a || a.dead || s.winner || budget.work >= budget.limit) break;
     let bestAct: PlayerAction | null = null;
     let bestVal = staticEval(s, ec);
     for (const action of heroCandidates(s, a, params.kiteRing)) {
-      if (timeUp()) break;
+      budget.work++;
+      if (budget.work >= budget.limit) break;
       const after = tryAction(s, action);
       if (!after) continue;
       const v = after.winner && after.winner !== ec.myTeam ? -1e6 : staticEval(after, ec);

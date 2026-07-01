@@ -3,9 +3,9 @@
  * scripted strategies (rush/kite/threat) implement. The `AiController` dispatches to this
  * for any entity whose `strategy` is "crazy", "crafty", or "genius".
  *
- * Sovereign needs `deadlineMs` and `turnIndex` that the basic `AiStrategy.planActions(entity,
- * state)` doesn't carry — we compute them from a budget pulled off the preset and an internal
- * per-instance turn counter.
+ * Sovereign needs a `turnIndex` that the basic `AiStrategy.planActions(entity, state)` doesn't
+ * carry — we supply it from an internal per-instance turn counter. The search budget is
+ * deterministic (SearchParams.nodeBudget), so no wall-clock deadline is plumbed in.
  */
 import type { AiStrategy } from "./strategy.js";
 import type { AiStrategyType, Entity, GameState, PlayerAction } from "../core/types.js";
@@ -36,14 +36,13 @@ function pickWeights(entity: Entity) {
 
 class SovereignAiStrategy implements AiStrategy {
   private turnCount = 0;
-  constructor(private readonly brain: HeroController, private readonly budgetMs: number) {}
+  constructor(private readonly brain: HeroController) {}
 
   planActions(entity: Entity, state: GameState): PlayerAction[] {
     this.turnCount++;
     const actions = this.brain({
       state,
       heroId: entity.id,
-      deadlineMs: Date.now() + this.budgetMs,
       turnIndex: this.turnCount,
     });
     // Sovereign only emits ability actions for its own hero. Filter defensively.
@@ -59,6 +58,5 @@ export function makeSovereignAiStrategy(preset: SovereignStrategyName, entity: E
   const params = SOVEREIGN_PRESETS[preset];
   const weights = pickWeights(entity);
   const brain = makeSovereign(weights, params);
-  const budget = (params.softBudgetMs ?? 2000) + 500;
-  return new SovereignAiStrategy(brain, budget);
+  return new SovereignAiStrategy(brain);
 }
