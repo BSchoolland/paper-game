@@ -1,0 +1,12 @@
+Dimension: The Sundered Crowns
+Biome: war-torn plains, forests, and mountains carved up between a dozen kingdoms
+Mood: Grounded medieval grit shot through with bright, dangerous magic. Every field is a battlefield, and the sky belongs to dragons.
+Palette: primary #3B5541, secondary #8A3A2E, accent #E0B44A
+
+Description: A continent where a dozen kingdoms have warred so long that borders have dissolved into a patchwork of contested ground. Forests, mountains, and open plains are the arenas, and every crossing risks running into someone else's army. Above the squabbling thrones, dragons hunt the chaos as apex predators.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

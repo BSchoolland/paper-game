@@ -1,0 +1,24 @@
+Dimension: The Sundered Crowns
+Biome: war-torn plains, forests, and mountains carved up between a dozen kingdoms
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "BOSS" tier: cost high, one apex dragon per field
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Red Dragon — apex boss with a wide fire-breath cone. A mountain-sized red dragon wreathed in smoke and flame.
+
+  Frost Dragon — boss whose ice breath slows and freezes targets. A pale dragon rimed in frost, its breath fogging the cold air.
+
+  Green Dragon — boss whose poison breath deals damage over time. A moss-scaled dragon dripping caustic green venom.
+
+  Black Dragon — largest, tankiest boss with a knockback wing buffet. A vast black-scaled dragon whose shadow darkens the whole field.

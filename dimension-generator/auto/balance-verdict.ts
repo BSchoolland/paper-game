@@ -90,7 +90,7 @@ function normalizeOverall(raw: Record<string, unknown>): Overall {
 
 // ---- Dim-0 baseline computation ----
 // Dim-0 has no summary section. The raw results use winner:"red"/"blue" (red = heroes).
-// Scenarios: solo-sovereign-* = expert, solo-bad-* = dumb. Exclude encounter-* rows.
+// Scenarios: solo-expert-* = expert, solo-dumb-* = dumb. Exclude encounter-* rows.
 
 function computeDim0DumbBaseline(
   results: Array<{ scenario: string; result: { winner: string | null } }>,
@@ -98,12 +98,12 @@ function computeDim0DumbBaseline(
   let dumbW = 0, dumbT = 0;
   for (const r of results) {
     if (r.scenario.startsWith("encounter-")) continue;
-    if (r.scenario.startsWith("solo-bad-")) {
+    if (r.scenario.startsWith("solo-dumb-")) {
       dumbT++;
       if (r.result.winner === "red") dumbW++;
     }
   }
-  if (dumbT === 0) throw new Error("dim-0 report has no solo-bad-* results to compute baseline");
+  if (dumbT === 0) throw new Error("dim-0 report has no solo-dumb-* results to compute baseline");
   return Math.round((dumbW / dumbT) * 1000) / 10;
 }
 

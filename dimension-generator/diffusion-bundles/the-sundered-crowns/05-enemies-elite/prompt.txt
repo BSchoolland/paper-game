@@ -1,0 +1,24 @@
+Dimension: The Sundered Crowns
+Biome: war-torn plains, forests, and mountains carved up between a dozen kingdoms
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "ELITE" tier: cost 4-5, rare officers and leashed war-beasts
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Banner Captain — aura that buffs attack of nearby allied troops. A plumed officer holding his kingdom's war banner high.
+
+  Champion — elite duelist with heavy single-target damage. A scarred knight in gilded armor with a bastard sword.
+
+  Court Wizard — high-damage mage with large area nukes. A richly robed sorcerer wreathed in fire and light.
+
+  Young Dragon — flying beast with a short-range fire breath. A cart-sized dragon chained at the neck, straining against its handlers.

@@ -1,0 +1,24 @@
+Dimension: The Sundered Crowns
+Biome: war-torn plains, forests, and mountains carved up between a dozen kingdoms
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.
+
+The image must be a 4×4 grid:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "FODDER" tier: cost 1-2, swarms in numbers
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Footsoldier — basic melee that attacks in numbers. A helmeted levy in a padded gambeson with a short sword.
+
+  Pikeman — reach melee that strikes from the second rank. A soldier in mail shouldering a long iron-tipped pike.
+
+  Crossbowman — ranged attacker, slow to reload between shots. A leather-clad trooper cranking a heavy crossbow.
+
+  Shieldman — tanky front-liner that blocks and soaks hits. A footman crouched behind a tall painted kite shield.

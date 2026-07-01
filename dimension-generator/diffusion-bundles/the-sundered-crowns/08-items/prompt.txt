@@ -1,0 +1,26 @@
+Dimension: The Sundered Crowns
+Biome: war-torn plains, forests, and mountains carved up between a dozen kingdoms
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.
+
+The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Arming Sword (sword, common) — A plain one-handed knightly blade.
+  Longsword (sword, uncommon) — A long double-edged blade for one or two hands.
+  Sabre (sword, uncommon) — A curved cavalry sword built for fast slashing.
+  Bastard Sword (sword, rare) — A heavy hand-and-a-half sword with brutal reach.
+  Pike (spear, common) — A very long polearm for holding a line.
+  Lance (spear, uncommon) — A couched cavalry lance for charging strikes.
+  Halberd (spear, rare) — A polearm with an axe head and a reaching spike.
+  Longbow (bow, common) — A tall wooden bow with steady range.
+  Crossbow (bow, uncommon) — A cranked bow that punches through armor.
+  Heavy Crossbow (bow, rare) — A windlass crossbow firing armor-piercing bolts.
+  Oak Staff (staff, common) — A simple wooden staff for channeling magic.
+  War Staff (staff, uncommon) — An iron-shod staff that hurls battle magic.
+  Crozier (staff, rare) — A cleric's crooked staff that heals allies and smites foes.
+  War Hammer (two-handed, common) — A two-handed hammer that dents plate armor.
+  Greatsword (two-handed, uncommon) — A massive two-handed blade with sweeping arcs.
+  Poleaxe (two-handed, rare) — A two-handed axe-hammer that splits knights open.

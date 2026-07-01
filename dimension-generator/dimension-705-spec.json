@@ -1,0 +1,218 @@
+{
+  "id": 705,
+  "name": "The Sundered Crowns",
+  "description": "A continent where a dozen kingdoms have warred so long that borders have dissolved into a patchwork of contested ground. Forests, mountains, and open plains are the arenas, and every crossing risks running into someone else's army. Above the squabbling thrones, dragons hunt the chaos as apex predators.",
+  "palette": {
+    "primary": "#3B5541",
+    "secondary": "#8A3A2E",
+    "accent": "#E0B44A"
+  },
+  "mood": "Grounded medieval grit shot through with bright, dangerous magic. Every field is a battlefield, and the sky belongs to dragons.",
+  "biome": "war-torn plains, forests, and mountains carved up between a dozen kingdoms",
+  "droppedNoun": "",
+  "negatedNoun": "",
+  "enemyBatches": [
+    {
+      "name": "FODDER",
+      "description": "cost 1-2, swarms in numbers",
+      "enemies": [
+        {
+          "name": "Footsoldier",
+          "role": "basic melee that attacks in numbers",
+          "description": "A helmeted levy in a padded gambeson with a short sword."
+        },
+        {
+          "name": "Pikeman",
+          "role": "reach melee that strikes from the second rank",
+          "description": "A soldier in mail shouldering a long iron-tipped pike."
+        },
+        {
+          "name": "Crossbowman",
+          "role": "ranged attacker, slow to reload between shots",
+          "description": "A leather-clad trooper cranking a heavy crossbow."
+        },
+        {
+          "name": "Shieldman",
+          "role": "tanky front-liner that blocks and soaks hits",
+          "description": "A footman crouched behind a tall painted kite shield."
+        }
+      ]
+    },
+    {
+      "name": "STANDARD",
+      "description": "cost 2-3, the backbone of any kingdom's army",
+      "enemies": [
+        {
+          "name": "Knight",
+          "role": "armored melee bruiser with high HP",
+          "description": "A full-plate warrior with a visored helm and longsword."
+        },
+        {
+          "name": "Battle Wizard",
+          "role": "ranged magic dealing area damage",
+          "description": "A robed mage with hands crackling with battlefield magic."
+        },
+        {
+          "name": "War Cleric",
+          "role": "heals and shields nearby allies",
+          "description": "An armored priest with a holy symbol and heavy mace."
+        },
+        {
+          "name": "Horseman",
+          "role": "fast cavalry that charges to close distance",
+          "description": "A lance-wielding rider on a barded warhorse."
+        }
+      ]
+    },
+    {
+      "name": "ELITE",
+      "description": "cost 4-5, rare officers and leashed war-beasts",
+      "enemies": [
+        {
+          "name": "Banner Captain",
+          "role": "aura that buffs attack of nearby allied troops",
+          "description": "A plumed officer holding his kingdom's war banner high."
+        },
+        {
+          "name": "Champion",
+          "role": "elite duelist with heavy single-target damage",
+          "description": "A scarred knight in gilded armor with a bastard sword."
+        },
+        {
+          "name": "Court Wizard",
+          "role": "high-damage mage with large area nukes",
+          "description": "A richly robed sorcerer wreathed in fire and light."
+        },
+        {
+          "name": "Young Dragon",
+          "role": "flying beast with a short-range fire breath",
+          "description": "A cart-sized dragon chained at the neck, straining against its handlers."
+        }
+      ]
+    },
+    {
+      "name": "BOSS",
+      "description": "cost high, one apex dragon per field",
+      "enemies": [
+        {
+          "name": "Red Dragon",
+          "role": "apex boss with a wide fire-breath cone",
+          "description": "A mountain-sized red dragon wreathed in smoke and flame."
+        },
+        {
+          "name": "Frost Dragon",
+          "role": "boss whose ice breath slows and freezes targets",
+          "description": "A pale dragon rimed in frost, its breath fogging the cold air."
+        },
+        {
+          "name": "Green Dragon",
+          "role": "boss whose poison breath deals damage over time",
+          "description": "A moss-scaled dragon dripping caustic green venom."
+        },
+        {
+          "name": "Black Dragon",
+          "role": "largest, tankiest boss with a knockback wing buffet",
+          "description": "A vast black-scaled dragon whose shadow darkens the whole field."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Arming Sword",
+      "type": "sword",
+      "rarity": "common",
+      "description": "A plain one-handed knightly blade."
+    },
+    {
+      "name": "Longsword",
+      "type": "sword",
+      "rarity": "uncommon",
+      "description": "A long double-edged blade for one or two hands."
+    },
+    {
+      "name": "Sabre",
+      "type": "sword",
+      "rarity": "uncommon",
+      "description": "A curved cavalry sword built for fast slashing."
+    },
+    {
+      "name": "Bastard Sword",
+      "type": "sword",
+      "rarity": "rare",
+      "description": "A heavy hand-and-a-half sword with brutal reach."
+    },
+    {
+      "name": "Pike",
+      "type": "spear",
+      "rarity": "common",
+      "description": "A very long polearm for holding a line."
+    },
+    {
+      "name": "Lance",
+      "type": "spear",
+      "rarity": "uncommon",
+      "description": "A couched cavalry lance for charging strikes."
+    },
+    {
+      "name": "Halberd",
+      "type": "spear",
+      "rarity": "rare",
+      "description": "A polearm with an axe head and a reaching spike."
+    },
+    {
+      "name": "Longbow",
+      "type": "bow",
+      "rarity": "common",
+      "description": "A tall wooden bow with steady range."
+    },
+    {
+      "name": "Crossbow",
+      "type": "bow",
+      "rarity": "uncommon",
+      "description": "A cranked bow that punches through armor."
+    },
+    {
+      "name": "Heavy Crossbow",
+      "type": "bow",
+      "rarity": "rare",
+      "description": "A windlass crossbow firing armor-piercing bolts."
+    },
+    {
+      "name": "Oak Staff",
+      "type": "staff",
+      "rarity": "common",
+      "description": "A simple wooden staff for channeling magic."
+    },
+    {
+      "name": "War Staff",
+      "type": "staff",
+      "rarity": "uncommon",
+      "description": "An iron-shod staff that hurls battle magic."
+    },
+    {
+      "name": "Crozier",
+      "type": "staff",
+      "rarity": "rare",
+      "description": "A cleric's crooked staff that heals allies and smites foes."
+    },
+    {
+      "name": "War Hammer",
+      "type": "two-handed",
+      "rarity": "common",
+      "description": "A two-handed hammer that dents plate armor."
+    },
+    {
+      "name": "Greatsword",
+      "type": "two-handed",
+      "rarity": "uncommon",
+      "description": "A massive two-handed blade with sweeping arcs."
+    },
+    {
+      "name": "Poleaxe",
+      "type": "two-handed",
+      "rarity": "rare",
+      "description": "A two-handed axe-hammer that splits knights open."
+    }
+  ]
+}
