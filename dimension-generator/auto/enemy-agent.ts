@@ -3,6 +3,7 @@ import type { DimensionSpec } from "./generate-spec.js";
 import { join } from "node:path";
 import { enemyTemplate, upsertEnemySchema } from "./schemas.js";
 import type { EnemyTemplate } from "./schemas.js";
+import { withEnemySprites } from "./enemy-sprites.js";
 
 const ROOT = join(import.meta.dir, "..", "..");
 const HERO_ARENA = join(ROOT, "hero-arena/src/t2");
@@ -86,7 +87,7 @@ export async function runEnemyAgent(dimId: number, spec: DimensionSpec, modelOve
       enemies[id] = template;
       const { saveEnemyTemplate, saveDimension } = await import("../../server/src/db.js");
       saveDimension(dimId, spec.name, [], undefined, undefined);
-      saveEnemyTemplate(id, dimId, template as any);
+      saveEnemyTemplate(id, dimId, withEnemySprites(dimId, id, template) as any);
       upsertCount++;
       const abilityNames = template.abilities.filter(a => a.kind !== "move").map(a => a.name).join(", ");
       log(`Upserted [${upsertCount}]: ${id} (cost=${template.cost} hp=${template.hp} strategy=${template.strategy} abilities=[${abilityNames}])`);

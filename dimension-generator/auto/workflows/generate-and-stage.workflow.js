@@ -452,6 +452,41 @@ const verdict = await agent(
 log(`QA verdict: ${verdict.verdict} (${verdict.summary?.flagCount ?? 0} flags)`);
 
 // ---------------------------------------------------------------------------
+// Phase 6.5 — PLAYABLE GATE (every enemy/item sprite resolves on disk)
+// Balance-tested is not the same as loadable. This is the check whose absence let dims ship with
+// blank enemy images; it must pass before we flip to in_review.
+// ---------------------------------------------------------------------------
+phase("QA");
+
+const playable = await agent(
+  [
+    "You are a deterministic shim. Assert the dimension is actually playable (every enemy template has sprite files on disk, every item sprite exists). Run exactly this command and return its JSON stdout verbatim:",
+    "",
+    `  cd ${ROOT}/server && ${ENV} bun ${AUTO}/assert-dimension-playable.ts ${dimId}`,
+    "",
+    "The command exits non-zero and lists `problems` if anything is missing. If it fails, DO NOT swallow the error — return the report with playable:false so the run stops before staging a broken dimension.",
+  ].join("\n"),
+  {
+    label: "qa-playable",
+    phase: "QA",
+    model: "haiku",
+    schema: {
+      type: "object",
+      required: ["playable", "problems"],
+      additionalProperties: true,
+      properties: {
+        playable: { type: "boolean" },
+        problems: { type: "array", items: { type: "string" } },
+      },
+    },
+  },
+);
+if (!playable.playable) {
+  throw new Error(`Dimension ${dimId} is not playable — refusing to stage:\n  - ${playable.problems.join("\n  - ")}`);
+}
+log(`Playable gate: passed (${playable.enemies ?? "?"} enemies, ${playable.items ?? "?"} items)`);
+
+// ---------------------------------------------------------------------------
 // Phase 7 — STAGE (flip status to in_review)
 // ---------------------------------------------------------------------------
 phase("Stage");

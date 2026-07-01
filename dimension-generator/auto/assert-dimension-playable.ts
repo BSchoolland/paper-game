@@ -16,7 +16,8 @@ const problems: string[] = [];
 const dim = loadDimension(dimId);
 if (!dim) throw new Error(`dimension ${dimId} not found in DB`);
 if (!dim.backgroundPath) problems.push("no backgroundPath registered");
-if (!dim.structures || dim.structures.length === 0) problems.push("no structures registered");
+// v2 dimensions render every encounter from a baked map image, so they register no runtime
+// structures — an empty structures list is expected, not a problem.
 
 const enemies = loadEnemyTemplateRegistry(dimId);
 const enemyIds = Object.keys(enemies);

@@ -3,6 +3,7 @@
 // Respects GAME_DB_PATH env var.
 
 import { enemyTemplate } from "../schemas.js";
+import { withEnemySprites } from "../enemy-sprites.js";
 import { saveEnemyTemplate } from "../../../server/src/db.js";
 
 const [dimIdArg, enemyId] = process.argv.slice(2);
@@ -26,6 +27,6 @@ if (!result.success) {
   throw new Error(`Invalid enemy template:\n${JSON.stringify(result.error.issues, null, 2)}`);
 }
 
-saveEnemyTemplate(enemyId, dimId, result.data as any);
+saveEnemyTemplate(enemyId, dimId, withEnemySprites(dimId, enemyId, result.data) as any);
 
 console.log(JSON.stringify({ saved: enemyId }));
