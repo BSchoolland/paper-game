@@ -1,6 +1,10 @@
 import type { Screen } from "./screen-manager.js";
 import type { RoomConnection } from "../net/connection.js";
 import type { SeatContext } from "../state/seat-context.js";
+import type { AccountStore } from "../state/account-store.js";
+import type { AuthMode } from "./auth-modal.js";
+import { ProfileCard } from "./profile-card.js";
+import { FriendsPanel } from "./friends-panel.js";
 import { clearStoredSeat, getStoredSeat } from "../net/player-token.js";
 import type { RoomBrowserEntry, RoomCapacity } from "shared";
 import { assetUrl } from "../renderer/asset-url.js";
@@ -15,6 +19,7 @@ import {
   heading,
   seatPips,
   mapIconDot,
+  errorNote,
 } from "./ui-kit.js";
 
 const LIST_POLL_MS = 3000;
@@ -34,6 +39,11 @@ export class HomeScreen implements Screen {
   /** Persistent room-browser list, repopulated in place on each `roomList` so a poll never rebuilds
    *  (and blurs / wipes) the join-by-code input or the rest of the card. */
   private browserList: HTMLDivElement;
+  /** Persistent community elements (same discipline as browserList): built once, re-mounted per
+   *  render, self-updating on AccountStore notify. */
+  private profileCard: ProfileCard;
+  private friendsPanel: FriendsPanel;
+  private authNotice: HTMLDivElement;
   private rooms: readonly RoomBrowserEntry[] = [];
   private joinError = "";
   private capacity: RoomCapacity = 2;
@@ -43,6 +53,8 @@ export class HomeScreen implements Screen {
     private conn: RoomConnection,
     private seat: SeatContext,
     private dimensionId: number,
+    private account: AccountStore,
+    openAuth: (mode: AuthMode) => void,
   ) {
     this.container = document.createElement("div");
     this.container.id = "home-screen";
@@ -61,6 +73,15 @@ export class HomeScreen implements Screen {
 
     this.browserList = document.createElement("div");
     this.browserList.style.cssText = "display:flex; flex-direction:column; gap:12px; margin-top:18px; flex:1; overflow-y:auto;";
+
+    this.profileCard = new ProfileCard(this.conn, this.account, openAuth);
+    this.profileCard.root.style.marginBottom = "22px";
+    this.friendsPanel = new FriendsPanel(this.conn, this.account, this.seat, openAuth);
+    this.friendsPanel.root.style.cssText += "flex:0 0 auto; margin-top:16px;";
+    this.authNotice = document.createElement("div");
+    this.authNotice.style.marginBottom = "12px";
+    this.account.subscribe(() => this.populateAuthNotice());
+    this.populateAuthNotice();
 
     this.conn.on("error", (msg) => {
       switch (msg.code) {
@@ -93,6 +114,20 @@ export class HomeScreen implements Screen {
 
   private rerenderIfVisible(): void {
     if (this.container.style.display !== "none") this.render();
+  }
+
+  /** Populated in place (persistent node): the login-again note when a saved token was rejected. */
+  private populateAuthNotice(): void {
+    this.authNotice.innerHTML = "";
+    const rejected = this.account.authRejected;
+    if (!rejected) return;
+    this.authNotice.appendChild(
+      errorNote(
+        rejected === "expired"
+          ? "Your session expired — log in again to restore your account."
+          : "Your saved login was not accepted — log in again to restore your account.",
+      ),
+    );
   }
 
   private requestList(): void {
@@ -138,9 +173,12 @@ export class HomeScreen implements Screen {
   private leftColumn(): HTMLDivElement {
     const left = document.createElement("div");
     left.style.cssText = `
-      padding:48px 48px 44px; display:flex; flex-direction:column; justify-content:center;
+      padding:38px 48px 44px; display:flex; flex-direction:column; justify-content:center;
       overflow-y:auto;
     `;
+
+    left.appendChild(this.authNotice);
+    left.appendChild(this.profileCard.root);
 
     left.appendChild(eyebrow("Cooperative Expedition"));
     const title = heading("Gather Your Warband", "hero");
@@ -313,19 +351,8 @@ export class HomeScreen implements Screen {
   }
 
   private errorBox(): HTMLDivElement {
-    const err = document.createElement("div");
-    err.style.cssText = `
-      display:flex; align-items:center; gap:8px; margin-top:2px;
-      padding:10px 14px; border-radius:8px;
-      background:rgba(139,58,58,.18); border:1px solid rgba(199,90,74,.4);
-      color:#f0c0b8; font:13px ${FONT.body};
-    `;
-    const x = document.createElement("span");
-    x.textContent = "✕";
-    x.style.cssText = `font-weight:700; flex:0 0 auto; color:${THEME.danger};`;
-    const text = document.createElement("span");
-    text.textContent = this.joinError;
-    err.append(x, text);
+    const err = errorNote(this.joinError);
+    err.style.marginTop = "2px";
     return err;
   }
 
@@ -352,6 +379,8 @@ export class HomeScreen implements Screen {
 
     this.populateBrowser();
     right.appendChild(this.browserList);
+
+    right.appendChild(this.friendsPanel.root);
 
     const status = document.createElement("div");
     status.style.cssText = `

@@ -15,6 +15,7 @@ import type {
   AttackAbility,
   AimDirection,
   Vec2,
+  ChatEntry,
 } from "shared";
 import { BAG_SIZE, getAnimSet, getPreset, DEFAULT_PRESET_ID } from "shared";
 import type { CombatRuntime } from "./combat-runtime.js";
@@ -42,6 +43,10 @@ export interface SocketData {
   roomCode: RoomCode | null;
   seatId: SeatId | null;
   seq: number;
+  /** Resolved account for this connection (set in hello, swapped by login/logout). */
+  accountId: string | null;
+  /** Raw account bearer token, memory-only, so later welcomes can embed auth. Never persisted. */
+  authToken: string | null;
 }
 
 export interface Seat {
@@ -57,6 +62,12 @@ export interface Seat {
   presetId: string | null; // the starter preset last chosen in the lobby (null once hand-edited/unknown)
   animSet: AnimSet;
   displayName: string;
+  /** Attribution: the account this seat's outcomes credit (never overwritten once set, §4.6). */
+  accountId: string | null;
+  /** Cached roster card data — broadcastRoomState fires constantly and must not hit the DB. */
+  cardProfile: { level: number; equippedTitleId: string | null } | null;
+  /** Accepted chat timestamps for the per-seat rate limit (5 msgs / 10s). */
+  chatTimestamps: number[];
   // --- combat orchestration (player phase); driven by the Phase 5 machine ---
   ready: boolean; // passed this player phase
   exhausted: boolean; // dead or no affordable action (recomputed)
@@ -124,6 +135,9 @@ export interface Room {
   session: EncounterSession | null; // null off-combat
   defendRound: DefendRound | null;
   vote: MovementVote | null;
+
+  /** In-memory room chat (lobby + overworld), cap 100 — lost on crash/reap by design (flag #8). */
+  chatLog: ChatEntry[];
 
   reapTimer: Timer | null;
   lastActivityMs: number;
@@ -234,6 +248,9 @@ export function createOpenSeats(capacity: number, dimensionId: number): Seat[] {
       presetId: DEFAULT_PRESET_ID,
       animSet: getAnimSet(inventory.equipped),
       displayName: `Player ${i + 1}`,
+      accountId: null,
+      cardProfile: null,
+      chatTimestamps: [],
       ready: false,
       exhausted: false,
       actedThisPhase: false,

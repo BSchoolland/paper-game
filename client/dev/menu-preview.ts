@@ -10,6 +10,7 @@
  */
 import type { RoomConnection } from "../src/net/connection.js";
 import { SeatContext } from "../src/state/seat-context.js";
+import { AccountStore } from "../src/state/account-store.js";
 import { HomeScreen } from "../src/screens/home-screen.js";
 import { LobbyScreen } from "../src/screens/lobby-screen.js";
 import { GameOverScreen } from "../src/screens/game-over-screen.js";
@@ -32,7 +33,7 @@ function renderReal(which: MenuScreen) {
   // Screens only ever call conn.on(...) and conn.send(...); both are inert in the harness.
   const conn = { on() {}, send() {} } as unknown as RoomConnection;
   if (which === "home" || which === "home-rooms") {
-    const home = new HomeScreen(conn, new SeatContext(), 1);
+    const home = new HomeScreen(conn, new SeatContext(), 1, new AccountStore(), () => {});
     home.enter();
     home.setRooms(which === "home-rooms" ? mockRooms : []);
   } else if (which === "lobby") {

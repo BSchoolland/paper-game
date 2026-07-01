@@ -12,6 +12,9 @@ export function seatInfo(id: SeatId, state: SeatState, over: Partial<SeatInfo> =
     heroEntityId: null,
     ready: false,
     presetId: null,
+    accountId: null,
+    level: null,
+    equippedTitleId: null,
     ...over,
   };
 }

@@ -189,12 +189,17 @@ export function connectClient(server: HarnessServer, clientId?: ClientId): Promi
   });
 }
 
-/** hello -> welcome handshake; returns the welcome payload. */
+/** hello -> welcome handshake; returns the welcome payload (carries `auth` since protocol v3). */
 export async function hello(
   client: MockClient,
-  displayName?: string,
+  opts?: { authToken?: string },
 ): Promise<Extract<ServerMessage, { type: "welcome" }>> {
-  client.send({ type: "hello", protocolVersion: PROTOCOL_VERSION, clientId: client.clientId, ...(displayName ? { displayName } : {}) });
+  client.send({
+    type: "hello",
+    protocolVersion: PROTOCOL_VERSION,
+    clientId: client.clientId,
+    ...(opts?.authToken ? { authToken: opts.authToken } : {}),
+  });
   return client.nextOf("welcome");
 }
 

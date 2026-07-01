@@ -68,8 +68,8 @@ describe("co-op integration lifecycle", () => {
   it("create + join: roster shows two humans; start bot-fills the empty seat; party reaches overworld", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
-    await hello(host, "Host");
-    await hello(guest, "Guest");
+    await hello(host);
+    await hello(guest);
 
     const { code, roomState } = await createRoom(host, 3);
     expect(roomState.room.seats[0]!.state).toBe("human-connected");
@@ -78,7 +78,7 @@ describe("co-op integration lifecycle", () => {
 
     // guest joins by code
     guest.mark();
-    guest.send({ type: "joinRoom", code, displayName: "Guest" });
+    guest.send({ type: "joinRoom", code });
     await guest.nextOf("welcome");
     const guestRs = await guest.waitFor(isRoomState);
     expect(guestRs.room.yourSeatId).toBe("s1");
@@ -102,9 +102,52 @@ describe("co-op integration lifecycle", () => {
     guest.close();
   });
 
+  it("lobby leave clears the seat's account identity; bot-fill + host reset survive it", async () => {
+    const host = await connectClient(server);
+    const guest = await connectClient(server);
+    await hello(host);
+    const guestWelcome = await hello(guest);
+    const guestAccountId = guestWelcome.auth.accountId;
+
+    const { code } = await createRoom(host, 2);
+    guest.send({ type: "joinRoom", code });
+    await guest.nextOf("welcome");
+    await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+        m.type === "roomState" && m.room.seats[1]?.accountId === guestAccountId,
+    );
+
+    // Leaver's identity must not linger on the reopened seat (accountId/level/title all null).
+    host.mark();
+    guest.send({ type: "leaveRoom" });
+    await guest.nextOf("leftRoom");
+    const reopened = await host.nextOf("roomState", { fromNow: true });
+    expect(reopened.room.seats[1]!.state).toBe("open");
+    expect(reopened.room.seats[1]!.accountId).toBeNull();
+    expect(reopened.room.seats[1]!.level).toBeNull();
+    expect(reopened.room.seats[1]!.equippedTitleId).toBeNull();
+
+    // Start bot-fills the reopened seat; the host reset re-persists every seat and must complete
+    // (a stale accountId on the bot seat would throw in upsertRunSeat mid-run-swap).
+    const overworld = await startAndReachOverworld(host);
+    const oldRunId = overworld.room.runId;
+    host.send({ type: "reset" });
+    const afterReset = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+        m.type === "roomState" && m.room.runId !== oldRunId,
+      { consumeBuffered: false },
+    );
+    expect(afterReset.room.phase).toBe("overworld");
+    expect(afterReset.room.seats[1]!.state).toBe("bot");
+    expect(afterReset.room.seats[1]!.accountId).toBeNull();
+
+    host.close();
+    guest.close();
+  });
+
   it("solo: create + start with bot-fill, enter combat with per-seat heroes carrying controllerId", async () => {
     const host = await connectClient(server);
-    await hello(host, "Solo");
+    await hello(host);
     await createRoom(host, 2);
     await startAndReachOverworld(host);
 
@@ -143,7 +186,7 @@ describe("co-op integration lifecycle", () => {
 
     // Run A: enter combat at TARGET, win it, return to overworld -> TARGET is community-discovered.
     const a = await connectClient(server);
-    await hello(a, "Pioneer");
+    await hello(a);
     const { code: codeA } = await createRoom(a, 2);
     await startAndReachOverworld(a);
     a.mark();
@@ -162,7 +205,7 @@ describe("co-op integration lifecycle", () => {
     // Run B: a brand-new room in the SAME dimension. Its hexMapState already shows TARGET explored
     // (community-shared), even though run B has fought nothing.
     const b = await connectClient(server);
-    await hello(b, "Newcomer");
+    await hello(b);
     const { code: codeB } = await createRoom(b, 2);
     const overworld = await startAndReachOverworld(b);
     expect(overworld.room.code).toBe(codeB);
@@ -189,7 +232,7 @@ describe("co-op integration lifecycle", () => {
     // endCombat -> exploreHex -> commitExplore(firstEver) -> hexDiscovered broadcast path.
     const UNCHARTED = { q: 99, r: -7 };
     const host = await connectClient(server);
-    await hello(host, "Cartographer");
+    await hello(host);
     const { code } = await createRoom(host, 2);
     await startAndReachOverworld(host);
     host.mark();
@@ -212,7 +255,7 @@ describe("co-op integration lifecycle", () => {
 
   it("shared player phase: human acts + passes, phase ends only when all ready, then enemy phase runs; reach a win", async () => {
     const host = await connectClient(server);
-    await hello(host, "Fighter");
+    await hello(host);
     await createRoom(host, 2);
     await startAndReachOverworld(host);
 
@@ -269,11 +312,11 @@ describe("co-op integration lifecycle", () => {
   it("disconnect mid-combat flips the seat to a bot and the phase still progresses; reconnect reclaims", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
-    await hello(host, "Host");
-    await hello(guest, "Guest");
+    await hello(host);
+    await hello(guest);
     const { code } = await createRoom(host, 2);
 
-    guest.send({ type: "joinRoom", code, displayName: "Guest" });
+    guest.send({ type: "joinRoom", code });
     await guest.nextOf("welcome");
     await guest.waitFor(isRoomState);
     const guestSeatId: SeatId = "s1";
@@ -323,7 +366,7 @@ describe("co-op integration lifecycle", () => {
 
     // Guest reconnects with the SAME clientId -> auto-reclaims its seat (socket was dead).
     const guest2 = await connectClient(server, guest.clientId);
-    const w2 = await hello(guest2, "Guest");
+    const w2 = await hello(guest2);
     expect(w2.reconnected).toBeTruthy();
     expect(w2.reconnected!.seatId).toBe(guestSeatId);
 
@@ -342,10 +385,10 @@ describe("co-op integration lifecycle", () => {
     // room-machine defend round + WS delivery without depending on slow/organic AI pathing.
     const host = await connectClient(server);
     const guest = await connectClient(server);
-    await hello(host, "Host");
-    await hello(guest, "Guest");
+    await hello(host);
+    await hello(guest);
     const { code } = await createRoom(host, 2);
-    guest.send({ type: "joinRoom", code, displayName: "Guest" });
+    guest.send({ type: "joinRoom", code });
     await guest.nextOf("welcome");
     await guest.waitFor(isRoomState);
     await startAndReachOverworld(host);
@@ -426,10 +469,10 @@ describe("co-op integration lifecycle", () => {
   it("reconnecting mid-defend-round re-sends the pending defendPrompt to the reclaiming human (R11/§5)", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
-    await hello(host, "Host");
-    await hello(guest, "Guest");
+    await hello(host);
+    await hello(guest);
     const { code } = await createRoom(host, 2);
-    guest.send({ type: "joinRoom", code, displayName: "Guest" });
+    guest.send({ type: "joinRoom", code });
     await guest.nextOf("welcome");
     await guest.waitFor(isRoomState);
     await startAndReachOverworld(host);
@@ -478,7 +521,7 @@ describe("co-op integration lifecycle", () => {
     guest.close();
     await guest.closed;
     const guest2 = await connectClient(server, guest.clientId);
-    const w2 = await hello(guest2, "Guest");
+    const w2 = await hello(guest2);
     expect(w2.reconnected!.seatId).toBe("s1");
 
     const rePrompt = await guest2.waitFor(
@@ -502,12 +545,12 @@ describe("co-op integration lifecycle", () => {
 
   it("reclaim of a LIVE seat is rejected SEAT_IN_USE; force closes the old socket and sends displaced", async () => {
     const owner = await connectClient(server);
-    await hello(owner, "Owner");
+    await hello(owner);
     const { code } = await createRoom(owner, 2);
 
     // A second connection with the SAME clientId hello's -> welcome (no reconnect since seat is live).
     const intruder = await connectClient(server, owner.clientId);
-    const w = await hello(intruder, "Owner2");
+    const w = await hello(intruder);
     // The owner's seat is live, so hello does NOT auto-reclaim; client is room-less.
     expect(w.reconnected).toBeUndefined();
 
@@ -532,7 +575,7 @@ describe("co-op integration lifecycle", () => {
 
   it("abandon a lobby room then create another with the SAME clientId succeeds (R32, no UNIQUE crash)", async () => {
     const client = await connectClient(server);
-    await hello(client, "Replayer");
+    await hello(client);
 
     // Room A (lobby). Then leave it explicitly.
     const a = await createRoom(client, 2);
@@ -553,7 +596,7 @@ describe("co-op integration lifecycle", () => {
 
   it("createRoom while already seated in a lobby room (same socket) switches rooms without closing it (R32)", async () => {
     const client = await connectClient(server);
-    await hello(client, "Switcher");
+    await hello(client);
     const a = await createRoom(client, 2);
 
     // Create room B on the SAME socket without leaving A first. The prior seat must be abandoned and
@@ -573,7 +616,7 @@ describe("co-op integration lifecycle", () => {
   it("create a room, abandon by closing the socket, then create again with the same clientId (R32)", async () => {
     const id = `replay-${Math.random().toString(36).slice(2)}`;
     const c1 = await connectClient(server, id);
-    await hello(c1, "R");
+    await hello(c1);
     await createRoom(c1, 2);
     c1.close();
     await c1.closed;
@@ -581,7 +624,7 @@ describe("co-op integration lifecycle", () => {
 
     // A fresh socket with the same clientId can create again (no UNIQUE-live crash, no silent hang).
     const c2 = await connectClient(server, id);
-    await hello(c2, "R");
+    await hello(c2);
     c2.mark();
     c2.send({ type: "createRoom", capacity: 2, dimensionId: DIM });
     const w = await c2.nextOf("welcome", { fromNow: true, timeoutMs: 4000 });
@@ -594,7 +637,7 @@ describe("co-op integration lifecycle", () => {
     // attacks it. The defend round has no human target -> resolves with the neutral default, which
     // MUST be full damage (the bug made it zero = invulnerable). Assert s1-hero loses HP.
     const host = await connectClient(server);
-    await hello(host, "SoloDefend");
+    await hello(host);
     const { code } = await createRoom(host, 2);
     await startAndReachOverworld(host);
 
@@ -647,8 +690,8 @@ describe("co-op integration lifecycle", () => {
   it("a join to an already-started room is rejected ALREADY_STARTED", async () => {
     const host = await connectClient(server);
     const late = await connectClient(server);
-    await hello(host, "Host");
-    await hello(late, "Late");
+    await hello(host);
+    await hello(late);
     const { code } = await createRoom(host, 2);
     await startAndReachOverworld(host);
 
@@ -659,5 +702,313 @@ describe("co-op integration lifecycle", () => {
 
     host.close();
     late.close();
+  });
+});
+
+// =====================================================================================
+// Accounts & community (docs/meta-loop/01-accounts.md §9 integration additions)
+// =====================================================================================
+
+let acctSeq = 0;
+function uniqueName(prefix: string): string {
+  return `${prefix}${++acctSeq}${Math.random().toString(36).slice(2, 6)}`.slice(0, 20);
+}
+
+async function claim(client: MockClient, username: string) {
+  client.mark();
+  client.send({ type: "claimAccount", username, password: "password123" });
+  return client.nextOf("authState", { fromNow: true, timeoutMs: 8000 });
+}
+
+function isFriendsList(m: ServerMessage): m is Extract<ServerMessage, { type: "friendsList" }> {
+  return m.type === "friendsList";
+}
+
+/** Next friendsList (from the client's mark() cursor) matching `pred` — buffered pushes included,
+ *  so a push that landed before the waiter registered is not missed. */
+async function nextFriendsListMatching(
+  client: MockClient,
+  pred: (m: Extract<ServerMessage, { type: "friendsList" }>) => boolean,
+): Promise<Extract<ServerMessage, { type: "friendsList" }>> {
+  const deadline = Date.now() + 4000;
+  while (true) {
+    const msg = await client.nextOf("friendsList", { fromNow: true, timeoutMs: Math.max(50, deadline - Date.now()) });
+    if (pred(msg)) return msg;
+    if (Date.now() > deadline) throw new Error("no friendsList matched the predicate in time");
+  }
+}
+
+describe("accounts & community integration", () => {
+  it("hello mints a guest with a token; the token restores the SAME account; sans token the same clientId re-resolves the same guest (J1)", async () => {
+    const a = await connectClient(server);
+    const w1 = await hello(a);
+    expect(w1.auth.isGuest).toBe(true);
+    expect(w1.auth.username).toBeNull();
+    expect(w1.auth.authToken.length).toBeGreaterThan(0);
+    expect(w1.auth.authRejected).toBeUndefined();
+    expect(w1.auth.profile.displayName.startsWith("Wanderer-")).toBe(true);
+    a.close();
+    await a.closed;
+
+    const b = await connectClient(server, a.clientId);
+    const w2 = await hello(b, { authToken: w1.auth.authToken });
+    expect(w2.auth.accountId).toBe(w1.auth.accountId);
+    expect(w2.auth.authRejected).toBeUndefined();
+    b.close();
+    await b.closed;
+
+    const c = await connectClient(server, a.clientId);
+    const w3 = await hello(c);
+    expect(w3.auth.accountId).toBe(w1.auth.accountId); // mint is idempotent per clientId
+    c.close();
+  });
+
+  it("a garbage token is surfaced as authRejected 'invalid' with a usable guest; a claimed seat's attribution survives the authRejected reclaim (never-overwrite)", async () => {
+    const dbmod = await import("../db.js");
+    const owner = await connectClient(server);
+    await hello(owner);
+    const auth = await claim(owner, uniqueName("Keeper_"));
+    expect(auth.auth.isGuest).toBe(false);
+    const claimedId = auth.auth.accountId;
+
+    const { roomState } = await createRoom(owner, 2);
+    const runId = roomState.room.runId;
+    expect(dbmod.loadRunSeats(runId)[0]!.account_id).toBe(claimedId);
+    await startAndReachOverworld(owner); // a started seat survives a disconnect (reclaimable)
+    owner.close();
+    await owner.closed;
+
+    const back = await connectClient(server, owner.clientId);
+    const w2 = await hello(back, { authToken: "garbage-token" });
+    expect(w2.auth.authRejected).toBe("invalid");
+    expect(w2.auth.isGuest).toBe(true); // downgraded connection identity, claimed account untouched
+    expect(w2.auth.accountId).not.toBe(claimedId);
+    expect(w2.reconnected).toBeTruthy(); // the HMAC seat-reclaim path is orthogonal and intact
+
+    // Never-overwrite: the seat still credits the claimed account, in memory and durably.
+    const room = rooms.get(w2.reconnected!.code)!;
+    expect(room.seats[0]!.accountId).toBe(claimedId);
+    expect(dbmod.loadRunSeats(runId)[0]!.account_id).toBe(claimedId);
+    back.close();
+  });
+
+  it("claim upgrades in place (J2); login while seated is AUTH_IN_ROOM; a second device logs into the same account (J3) and a friend sees presence flip", async () => {
+    const alice = await connectClient(server);
+    const wA = await hello(alice);
+    const aliceName = uniqueName("Alice_");
+    const authA = await claim(alice, aliceName);
+    expect(authA.auth.isGuest).toBe(false);
+    expect(authA.auth.username).toBe(aliceName);
+    expect(authA.auth.accountId).toBe(wA.auth.accountId); // guest upgraded in place, not swapped
+    const aliceId = authA.auth.accountId;
+
+    const bob = await connectClient(server);
+    await hello(bob);
+    const authB = await claim(bob, uniqueName("Bob_"));
+    const bobId = authB.auth.accountId;
+
+    // Befriend: bob requests by username, alice accepts.
+    alice.mark();
+    bob.mark();
+    bob.send({ type: "friendRequest", username: aliceName });
+    const incoming = await alice.nextOf("friendsList", { fromNow: true, timeoutMs: 4000 });
+    expect(incoming.friends.incoming.map((r) => r.accountId)).toEqual([bobId]);
+    alice.send({ type: "friendAccept", accountId: bobId });
+    const bobList = await nextFriendsListMatching(bob, (m) =>
+      m.friends.friends.some((f) => f.accountId === aliceId && f.online),
+    );
+    expect(bobList.friends.friends.find((f) => f.accountId === aliceId)!.displayName).toBe(aliceName);
+
+    // Seated auth switches are frozen: login from a seated socket -> AUTH_IN_ROOM.
+    await createRoom(alice, 2);
+    alice.mark();
+    alice.send({ type: "login", username: aliceName, password: "password123" });
+    const err = await alice.nextOf("error", { fromNow: true, timeoutMs: 4000 });
+    expect(err.code).toBe("AUTH_IN_ROOM");
+
+    // Alice's device disappears -> bob's friends panel flips her offline.
+    bob.mark();
+    alice.close();
+    await alice.closed;
+    await nextFriendsListMatching(bob, (m) =>
+      m.friends.friends.some((f) => f.accountId === aliceId && !f.online),
+    );
+
+    // A brand-new device (fresh clientId, fresh guest) logs into the claimed account.
+    const device2 = await connectClient(server);
+    const w2 = await hello(device2);
+    expect(w2.auth.accountId).not.toBe(aliceId); // throwaway guest first
+    bob.mark();
+    device2.mark();
+    device2.send({ type: "login", username: aliceName, password: "password123" });
+    const auth2 = await device2.nextOf("authState", { fromNow: true, timeoutMs: 8000 });
+    expect(auth2.auth.accountId).toBe(aliceId); // same account, passwordless next time via the token
+    expect(auth2.auth.isGuest).toBe(false);
+    await nextFriendsListMatching(bob, (m) =>
+      m.friends.friends.some((f) => f.accountId === aliceId && f.online),
+    );
+
+    bob.close();
+    device2.close();
+  });
+
+  it("chat relays in lobby + overworld, replays chatHistory on reconnect, and is BAD_PHASE in combat (J5)", async () => {
+    const host = await connectClient(server);
+    const guest = await connectClient(server);
+    await hello(host);
+    await hello(guest);
+    const { code } = await createRoom(host, 2);
+    guest.send({ type: "joinRoom", code });
+    await guest.nextOf("welcome");
+    await guest.waitFor(isRoomState);
+
+    // Lobby chat reaches every seat (including the sender).
+    guest.mark();
+    host.mark();
+    host.send({ type: "chatSend", text: "hello lobby" });
+    const atGuest = await guest.nextOf("chat", { fromNow: true, timeoutMs: 4000 });
+    expect(atGuest.entry.text).toBe("hello lobby");
+    expect(atGuest.entry.seatId).toBe("s0");
+    await host.nextOf("chat", { fromNow: true, timeoutMs: 4000 });
+
+    await startAndReachOverworld(host);
+    guest.mark();
+    guest.send({ type: "chatSend", text: "onward" });
+    const overworldChat = await guest.nextOf("chat", { fromNow: true, timeoutMs: 4000 });
+    expect(overworldChat.entry.seatId).toBe("s1");
+
+    // Reconnect replays the room's chat history.
+    guest.close();
+    await guest.closed;
+    const guest2 = await connectClient(server, guest.clientId);
+    const w2 = await hello(guest2);
+    expect(w2.reconnected).toBeTruthy();
+    const history = await guest2.nextOf("chatHistory", { timeoutMs: 4000 });
+    expect(history.entries.map((e) => e.text)).toEqual(["hello lobby", "onward"]);
+
+    // Combat blocks chat with BAD_PHASE.
+    host.mark();
+    host.send({ type: "proposeMove", target: { q: 1, r: 0 } });
+    const vote = await host.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
+    guest2.send({ type: "castVote", proposalId: vote.vote!.proposalId, vote: "yes" });
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    host.mark();
+    host.send({ type: "chatSend", text: "mid-combat" });
+    const err = await host.nextOf("error", { fromNow: true, timeoutMs: 4000 });
+    expect(err.code).toBe("BAD_PHASE");
+
+    host.send({ type: "debugWin" });
+    await host.waitFor((m): m is ServerMessage => m.type === "combatEnd", { consumeBuffered: false, timeoutMs: 8000 }).catch(() => null);
+    host.close();
+    guest2.close();
+  }, 30000);
+
+  it("the 6th chat message inside 10s is RATE_LIMITED", async () => {
+    const host = await connectClient(server);
+    await hello(host);
+    await createRoom(host, 2);
+
+    host.mark();
+    for (let i = 0; i < 5; i++) host.send({ type: "chatSend", text: `msg ${i}` });
+    for (let i = 0; i < 5; i++) await host.nextOf("chat", { fromNow: true, timeoutMs: 4000 });
+    host.send({ type: "chatSend", text: "one too many" });
+    const err = await host.nextOf("error", { fromNow: true, timeoutMs: 4000 });
+    expect(err.code).toBe("RATE_LIMITED");
+    host.close();
+  });
+
+  it("an encounter win awards 25 XP + greenhorn PRIVATELY, the roster carries the level, a wipe bumps wipes; bot seats stay null (§6)", async () => {
+    const host = await connectClient(server);
+    const w = await hello(host); // fresh clientId -> fresh guest at 0 XP
+    const accountId = w.auth.accountId;
+    await createRoom(host, 2);
+    await startAndReachOverworld(host);
+
+    host.mark();
+    await enterCombat(host);
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    host.mark();
+    host.send({ type: "debugWin" });
+
+    const xp = await host.nextOf("xpAward", { fromNow: true, timeoutMs: 8000 });
+    expect(xp).toMatchObject({ amount: 25, xp: 25, level: 1, leveledUp: false });
+    const titles = await host.nextOf("titlesEarned", { fromNow: true, timeoutMs: 4000 });
+    expect(titles.titleIds).toEqual(["greenhorn"]);
+
+    // The post-award roomState carries account/level on the human seat; the bot seat is all-null.
+    const rs = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "overworld",
+      { consumeBuffered: false, timeoutMs: 8000 },
+    );
+    const s0 = rs.room.seats[0]!;
+    const s1 = rs.room.seats[1]!;
+    expect(s0.accountId).toBe(accountId);
+    expect(s0.level).toBe(1);
+    expect(s1.state).toBe("bot");
+    expect(s1.accountId).toBeNull();
+    expect(s1.level).toBeNull();
+    expect(s1.equippedTitleId).toBeNull();
+
+    host.mark();
+    host.send({ type: "getProfile" });
+    const prof = await host.nextOf("profile", { fromNow: true, timeoutMs: 4000 });
+    expect(prof.profile.xp).toBe(25);
+    expect(prof.profile.stats.encountersWon).toBe(1);
+    expect(prof.profile.stats.hexesCharted).toBe(1);
+    expect(prof.profile.stats.dimensionsDiscovered).toBe(1); // recorded at startGame
+    expect(prof.profile.titles).toContain("greenhorn");
+
+    // Now wipe on a fresh encounter -> wipes+1.
+    host.mark();
+    host.send({ type: "proposeMove", target: { q: 1, r: 1 } });
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    host.send({ type: "debugLose" });
+    await host.waitFor((m): m is ServerMessage => m.type === "gameOver", { consumeBuffered: false, timeoutMs: 8000 });
+    host.mark();
+    host.send({ type: "getProfile" });
+    const prof2 = await host.nextOf("profile", { fromNow: true, timeoutMs: 4000 });
+    expect(prof2.profile.stats.wipes).toBe(1);
+    expect(prof2.profile.stats.encountersWon).toBe(1);
+    host.close();
+  }, 30000);
+
+  it("friendInvite reaches the room-less friend's socket with the right code; Join seats them under their profile name (J4)", async () => {
+    const a = await connectClient(server);
+    const b = await connectClient(server);
+    await hello(a);
+    await hello(b);
+    const aName = uniqueName("Host_");
+    const bName = uniqueName("Pal_");
+    const authA = await claim(a, aName);
+    const authB = await claim(b, bName);
+
+    b.send({ type: "friendRequest", username: aName });
+    a.mark();
+    await a.nextOf("friendsList", { fromNow: true, timeoutMs: 4000 });
+    a.mark();
+    a.send({ type: "friendAccept", accountId: authB.auth.accountId });
+    await a.waitFor(
+      (m): m is Extract<ServerMessage, { type: "friendsList" }> =>
+        isFriendsList(m) && m.friends.friends.some((f) => f.accountId === authB.auth.accountId),
+      { consumeBuffered: false, timeoutMs: 4000 },
+    );
+
+    const { code } = await createRoom(a, 2);
+    b.mark();
+    a.send({ type: "friendInvite", accountId: authB.auth.accountId });
+    const invite = await b.nextOf("roomInvite", { fromNow: true, timeoutMs: 4000 });
+    expect(invite.code).toBe(code);
+    expect(invite.from.accountId).toBe(authA.auth.accountId);
+    expect(invite.from.displayName).toBe(aName);
+
+    b.send({ type: "joinRoom", code: invite.code });
+    const wb = await b.nextOf("welcome", { fromNow: true, timeoutMs: 4000 });
+    expect(wb.reconnected!.code).toBe(code);
+    const rs = await b.waitFor(isRoomState, { timeoutMs: 4000 });
+    expect(rs.room.seats[1]!.displayName).toBe(bName); // profiles are the single name source
+    expect(rs.room.seats[1]!.accountId).toBe(authB.auth.accountId);
+
+    a.close();
+    b.close();
   });
 });

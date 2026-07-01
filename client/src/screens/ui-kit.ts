@@ -8,6 +8,7 @@
  */
 
 import type { StarterPreset } from "shared";
+import { titleById } from "shared";
 import { assetUrl, mapAssetUrl } from "../renderer/asset-url.js";
 
 export const THEME = {
@@ -236,6 +237,80 @@ export function heading(text: string, size: "hero" | "section" = "section"): HTM
     h.style.cssText = `font:600 20px ${cinzel}; letter-spacing:0.04em; color:${THEME.parch};`;
   }
   return h;
+}
+
+/** Dark form input (the join-code field's skin, generalized): deep fill, gold keyline, gold focus ring. */
+export function textInput(placeholder: string): HTMLInputElement {
+  const input = document.createElement("input");
+  input.placeholder = placeholder;
+  input.style.cssText = `
+    box-sizing:border-box; min-width:0;
+    padding:11px 13px; border-radius:8px;
+    font:14px ${body}; color:${THEME.parch};
+    background:rgba(11,9,6,0.5); border:1px solid ${THEME.goldLine};
+    box-shadow:inset 0 2px 6px rgba(0,0,0,0.4); outline:none;
+  `;
+  input.addEventListener("focus", () => {
+    input.style.borderColor = THEME.gold;
+  });
+  input.addEventListener("blur", () => {
+    input.style.borderColor = THEME.goldLine;
+  });
+  return input;
+}
+
+/** Danger-tinted inline error note (✕ + message). */
+export function errorNote(text: string): HTMLDivElement {
+  const err = document.createElement("div");
+  err.style.cssText = `
+    display:flex; align-items:center; gap:8px;
+    padding:10px 14px; border-radius:8px; box-sizing:border-box;
+    background:rgba(139,58,58,.18); border:1px solid rgba(199,90,74,.4);
+    color:#f0c0b8; font:13px ${body};
+  `;
+  const x = document.createElement("span");
+  x.textContent = "✕";
+  x.style.cssText = `font-weight:700; flex:0 0 auto; color:${THEME.danger};`;
+  const msg = document.createElement("span");
+  msg.textContent = text;
+  err.append(x, msg);
+  return err;
+}
+
+/** "LV n" account-level pill. */
+export function levelChip(level: number): HTMLDivElement {
+  const chip = document.createElement("div");
+  chip.textContent = `LV ${level}`;
+  chip.style.cssText = `
+    flex:0 0 auto; font:700 11px ${cinzel}; letter-spacing:0.08em; color:${THEME.gold};
+    border:1px solid ${THEME.goldLine}; border-radius:5px; padding:1px 6px;
+  `;
+  return chip;
+}
+
+/** Equipped-title tag; resolves the display name via the shared catalog. Throws on an unknown id. */
+export function titleTag(titleId: string): HTMLDivElement {
+  const tag = document.createElement("div");
+  tag.textContent = titleById(titleId).name;
+  tag.style.cssText = `flex:0 0 auto; font:italic 12px ${body}; color:${THEME.goldDeep};`;
+  return tag;
+}
+
+/** 6px XP progress bar; `pct` is clamped to [0, 1]. */
+export function xpBar(pct: number): HTMLDivElement {
+  const track = document.createElement("div");
+  track.style.cssText = `
+    width:100%; height:6px; border-radius:3px; overflow:hidden; box-sizing:border-box;
+    background:rgba(11,9,6,0.5); border:1px solid rgba(184,137,58,0.25);
+  `;
+  const fill = document.createElement("div");
+  const clamped = Math.max(0, Math.min(1, pct));
+  fill.style.cssText = `
+    width:${(clamped * 100).toFixed(1)}%; height:100%;
+    background:linear-gradient(90deg, ${THEME.gold}, ${THEME.goldDeep});
+  `;
+  track.appendChild(fill);
+  return track;
 }
 
 const CLASS_ART: Record<string, string> = {

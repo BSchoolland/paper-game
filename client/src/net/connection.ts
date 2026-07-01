@@ -1,6 +1,6 @@
 import type { ClientMessage, ServerEnvelope, ServerMessage, ServerMessageType, WireLogRecord } from "shared";
 import { PROTOCOL_VERSION, summarizeEvent } from "shared";
-import { getClientId, setStoredSeat } from "./player-token.js";
+import { getAuthToken, getClientId, setAuthToken, setStoredSeat } from "./player-token.js";
 import { clientEventLog } from "./client-event-log.js";
 
 /** A handler for one server message variant, narrowed to that variant's shape. */
@@ -32,10 +32,7 @@ export class RoomConnection {
   private lastSeq = 0;
   private dispatchEnvelope: ServerEnvelope | null = null;
 
-  constructor(
-    private url: string,
-    private displayName?: string,
-  ) {
+  constructor(private url: string) {
     this._ready = new Promise((resolve, reject) => {
       this.resolveReady = resolve;
       this.rejectReady = reject;
@@ -73,7 +70,7 @@ export class RoomConnection {
   }
 
   private sendHello(): void {
-    this.send({ type: "hello", protocolVersion: PROTOCOL_VERSION, clientId: getClientId(), displayName: this.displayName });
+    this.send({ type: "hello", protocolVersion: PROTOCOL_VERSION, clientId: getClientId(), authToken: getAuthToken() ?? undefined });
   }
 
   private handleMessage(event: MessageEvent): void {
@@ -93,6 +90,7 @@ export class RoomConnection {
     }
     if (msg.type === "welcome") {
       this._sessionToken = msg.sessionToken;
+      setAuthToken(msg.auth.authToken);
       if (msg.reconnected) setStoredSeat(msg.reconnected);
       if (!this._welcomed) {
         this._welcomed = true;

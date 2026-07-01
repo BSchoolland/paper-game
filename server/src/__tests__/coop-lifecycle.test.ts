@@ -4,7 +4,7 @@ import { startServer, connectClient, hello, sleep, type HarnessServer, type Mock
 import { rooms } from "../room-registry.js";
 import { disposeRoom } from "../room.js";
 import { recoverActiveRuns } from "../room-machine.js";
-import { loadRun, finalizeRun } from "../db.js";
+import { loadRun, finalizeRun, loadRunSeats, db as rawDb } from "../db.js";
 
 /**
  * Lifecycle-redesign coverage: mortal games (wipe -> held Game Over), any-player Play Again, mid-game
@@ -61,7 +61,7 @@ async function enterCombatSolo(host: MockClient) {
 describe("co-op lifecycle redesign", () => {
   it("party wipe enters a held Game Over end state (run inactive, room NOT recycled)", async () => {
     const host = await connectClient(server);
-    await hello(host, "Solo");
+    await hello(host);
     const { code, runId } = await createRoom(host, 2);
     await startOverworld(host);
     await enterCombatSolo(host);
@@ -87,11 +87,11 @@ describe("co-op lifecycle redesign", () => {
   it("Play Again funnels each clicker into one shared, fresh PRIVATE rematch lobby", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
-    await hello(host, "Host");
-    await hello(guest, "Guest");
+    await hello(host);
+    await hello(guest);
     const { code, runId: wipedRun } = await createRoom(host, 2);
 
-    guest.send({ type: "joinRoom", code, displayName: "Guest" });
+    guest.send({ type: "joinRoom", code });
     await guest.nextOf("welcome");
     await guest.waitFor(isRoomState);
 
@@ -143,10 +143,10 @@ describe("co-op lifecycle redesign", () => {
   it("mid-game leave converts the seat to a permanent bot; the leaver does NOT reclaim (goes HOME)", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
-    await hello(host, "Host");
-    await hello(guest, "Guest");
+    await hello(host);
+    await hello(guest);
     const { code } = await createRoom(host, 2);
-    guest.send({ type: "joinRoom", code, displayName: "Guest" });
+    guest.send({ type: "joinRoom", code });
     await guest.nextOf("welcome");
     await guest.waitFor(isRoomState);
     await startOverworld(host);
@@ -168,7 +168,7 @@ describe("co-op lifecycle redesign", () => {
 
     // The leaver reconnecting with the SAME clientId is NOT auto-reclaimed — it lands on HOME.
     const guest2 = await connectClient(server, guest.clientId);
-    const w2 = await hello(guest2, "Guest");
+    const w2 = await hello(guest2);
     expect(w2.reconnected).toBeUndefined();
 
     host.close();
@@ -178,10 +178,10 @@ describe("co-op lifecycle redesign", () => {
   it("when the host leaves mid-game, host migrates to another connected human", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
-    await hello(host, "Host");
-    await hello(guest, "Guest");
+    await hello(host);
+    await hello(guest);
     const { code } = await createRoom(host, 2);
-    guest.send({ type: "joinRoom", code, displayName: "Guest" });
+    guest.send({ type: "joinRoom", code });
     await guest.nextOf("welcome");
     await guest.waitFor(isRoomState);
     await startOverworld(host);
@@ -201,7 +201,7 @@ describe("co-op lifecycle redesign", () => {
 
   it("combat pauses when the last human leaves and resumes on reconnect (no unwatched cascade)", async () => {
     const host = await connectClient(server);
-    await hello(host, "Solo");
+    await hello(host);
     const { code } = await createRoom(host, 2);
     await startOverworld(host);
     await enterCombatSolo(host);
@@ -220,7 +220,7 @@ describe("co-op lifecycle redesign", () => {
 
     // A human reconnects -> combat resumes.
     const host2 = await connectClient(server, host.clientId);
-    const w2 = await hello(host2, "Solo");
+    const w2 = await hello(host2);
     expect(w2.reconnected).toBeTruthy();
     await host2.nextOf("coopStatus", { timeoutMs: 6000 });
     expect(rooms.get(code)!.combat?.suspended).toBe(false);
@@ -232,7 +232,7 @@ describe("co-op lifecycle redesign", () => {
 
   it("graceful empty reap finalizes the run -> a later reconnect lands on HOME", async () => {
     const host = await connectClient(server);
-    await hello(host, "Solo");
+    await hello(host);
     const { code, runId } = await createRoom(host, 2);
     await startOverworld(host);
 
@@ -251,14 +251,14 @@ describe("co-op lifecycle redesign", () => {
 
     // Same clientId reconnect: the run is inactive, so hello welcomes room-less (HOME), no reclaim.
     const host2 = await connectClient(server, host.clientId);
-    const w2 = await hello(host2, "Solo");
+    const w2 = await hello(host2);
     expect(w2.reconnected).toBeUndefined();
     host2.close();
   });
 
   it("crash recovery: an active run with no in-memory room is rebuilt at boot and resumes", async () => {
     const host = await connectClient(server);
-    await hello(host, "Solo");
+    await hello(host);
     const { code, runId } = await createRoom(host, 2);
     await startOverworld(host);
     host.close();
@@ -278,7 +278,7 @@ describe("co-op lifecycle redesign", () => {
 
     // The player reconnects and resumes the recovered run at the overworld.
     const host2 = await connectClient(server, host.clientId);
-    const w2 = await hello(host2, "Solo");
+    const w2 = await hello(host2);
     expect(w2.reconnected).toBeTruthy();
     expect(w2.reconnected!.seatId).toBe("s0" as SeatId);
     const rs = await host2.waitFor(isRoomState, { timeoutMs: 4000 });
@@ -288,7 +288,7 @@ describe("co-op lifecycle redesign", () => {
 
   it("crash recovery does NOT resurrect a never-started lobby run (it is abandoned -> HOME)", async () => {
     const host = await connectClient(server);
-    await hello(host, "Lobbyer");
+    await hello(host);
     const { code, runId } = await createRoom(host, 2); // lobby — NOT started
     expect(loadRun(runId)?.phase).toBe("lobby"); // the durable lifecycle SSOT (subsumes the started_at patch)
 
@@ -302,14 +302,14 @@ describe("co-op lifecycle redesign", () => {
     expect(rooms.getByRun(runId)).toBeNull(); // no room rebuilt
 
     const host2 = await connectClient(server, host.clientId);
-    const w2 = await hello(host2, "Lobbyer");
+    const w2 = await hello(host2);
     expect(w2.reconnected).toBeUndefined(); // routed HOME
     host2.close();
   });
 
   it("a 'defeat' outcome survives a later empty-reap (finalization is idempotent)", async () => {
     const host = await connectClient(server);
-    await hello(host, "Solo");
+    await hello(host);
     const { code, runId } = await createRoom(host, 2);
     await startOverworld(host);
     await enterCombatSolo(host);
@@ -328,13 +328,49 @@ describe("co-op lifecycle redesign", () => {
     host.close();
   });
 
+  it("crash recovery rehydrates seat.accountId from run_seats; connectSeat backfills a NULL row on resume (J6)", async () => {
+    const host = await connectClient(server);
+    const w = await hello(host);
+    const accountId = w.auth.accountId; // the device's guest account
+    const { code, runId } = await createRoom(host, 2);
+    await startOverworld(host);
+    expect(loadRunSeats(runId)[0]!.account_id).toBe(accountId); // attributed at bind
+
+    host.close();
+    await host.closed;
+    await sleep(150);
+
+    // Model a crash: in-memory room gone, run row still active=1.
+    const room = rooms.get(code)!;
+    disposeRoom(room);
+    rooms.remove(room);
+
+    recoverActiveRuns(() => {});
+    const rebuilt = rooms.getByRun(runId)!;
+    expect(rebuilt.seats[0]!.accountId).toBe(accountId); // rehydrated from run_seats.account_id
+
+    // J6 pre-accounts shape: NULL the durable attribution and the in-memory cache, then resume.
+    // The connectSeat backfill must attribute the row to the device's guest on first reclaim.
+    rawDb.prepare("UPDATE run_seats SET account_id = NULL WHERE run_id = ?").run(runId);
+    rebuilt.seats[0]!.accountId = null;
+    rebuilt.seats[0]!.cardProfile = null;
+
+    const host2 = await connectClient(server, host.clientId);
+    const w2 = await hello(host2);
+    expect(w2.reconnected).toBeTruthy();
+    expect(w2.auth.accountId).toBe(accountId); // same guest account resolved for the device
+    expect(rooms.getByRun(runId)!.seats[0]!.accountId).toBe(accountId); // backfilled in memory
+    expect(loadRunSeats(runId)[0]!.account_id).toBe(accountId); // ...and durably
+    host2.close();
+  });
+
   it("matchmaking: listRooms shows a joinable lobby room and drops it once started", async () => {
     const host = await connectClient(server);
-    await hello(host, "Host");
+    await hello(host);
     const { code } = await createRoom(host, 3);
 
     const browser = await connectClient(server);
-    await hello(browser, "Browser");
+    await hello(browser);
     browser.send({ type: "listRooms" });
     const list1 = await browser.nextOf("roomList", { timeoutMs: 4000 });
     const mine1 = list1.rooms.find((r) => r.code === code);
@@ -355,11 +391,11 @@ describe("co-op lifecycle redesign", () => {
 
   it("matchmaking: quickMatch seats a player into an open room", async () => {
     const host = await connectClient(server);
-    await hello(host, "Host");
+    await hello(host);
     await createRoom(host, 3); // guarantee at least one joinable lobby room exists
 
     const seeker = await connectClient(server);
-    await hello(seeker, "Seeker");
+    await hello(seeker);
     seeker.mark(); // skip the hello-welcome so we read the quickMatch welcome
     seeker.send({ type: "quickMatch", dimensionId: DIM });
     const w = await seeker.nextOf("welcome", { fromNow: true, timeoutMs: 4000 });

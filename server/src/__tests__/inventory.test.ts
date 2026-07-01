@@ -63,11 +63,11 @@ describe("per-seat inventory", () => {
   it("equip on one seat does not change another seat's bag (isolation)", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
-    await hello(host, "Host");
-    await hello(guest, "Guest");
+    await hello(host);
+    await hello(guest);
 
     const { code, inv: hostInv } = await createRoom(host, 2);
-    guest.send({ type: "joinRoom", code, displayName: "Guest" });
+    guest.send({ type: "joinRoom", code });
     await guest.nextOf("welcome");
     await guest.waitFor(isRoomState);
     const guestInv = await guest.waitFor(isInventory);
@@ -103,7 +103,7 @@ describe("per-seat inventory", () => {
 
   it("equip is durable through a reconnect within the live room (saveSeatInventory round-trip)", async () => {
     const owner = await connectClient(server);
-    await hello(owner, "Owner");
+    await hello(owner);
     const { code, inv } = await createRoom(owner, 2);
 
     // Equip an item, capturing what should persist.
@@ -132,7 +132,7 @@ describe("per-seat inventory", () => {
     // Reconnect with the SAME clientId. hello finds the reconstructed live room (boot recovery rebuilt
     // it) and auto-reclaims; the seat's persisted bag was rehydrated from run_seat_items.
     const owner2 = await connectClient(server, owner.clientId);
-    const w2 = await hello(owner2, "Owner");
+    const w2 = await hello(owner2);
     expect(w2.reconnected).toBeTruthy();
     const reInv = await owner2.waitFor(isInventory, { timeoutMs: 4000 });
     expect(reInv.inventory.equipped.map((i) => i.id)).toContain(equippedId);
@@ -144,7 +144,7 @@ describe("per-seat inventory", () => {
 
   it("unequip is durable through a reconnect (bag/equipped round-trip)", async () => {
     const owner = await connectClient(server);
-    await hello(owner, "Owner2");
+    await hello(owner);
     const { code, inv } = await createRoom(owner, 2);
 
     // equip then unequip; the item should return to the bag and stay there after reconnect.
@@ -173,7 +173,7 @@ describe("per-seat inventory", () => {
     restartRoom(code);
 
     const owner2 = await connectClient(server, owner.clientId);
-    await hello(owner2, "Owner2");
+    await hello(owner2);
     const reInv = await owner2.waitFor(isInventory, { timeoutMs: 4000 });
     expect(reInv.inventory.equipped.map((i) => i.id)).not.toContain(itemId);
     expect(reInv.inventory.bag.some((it) => it?.id === itemId)).toBe(true);

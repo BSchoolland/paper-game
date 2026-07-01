@@ -63,6 +63,9 @@ import {
   loadRunCleared,
   loadSeatInventory,
 } from "./db.js";
+import { setSeatAccountIfNull } from "./db.js";
+import { loadCardProfile } from "./accounts.js";
+import { awardEncounterWin, recordWipe } from "./awards.js";
 import { rooms } from "./room-registry.js";
 import { buildPresetInventory, freshRoomCode, heroEntityIdFor, seatIdForIndex } from "./room.js";
 
@@ -114,6 +117,10 @@ function seatInfo(room: Room, seat: Seat): SeatInfo {
     ready: seat.ready,
     loadoutSummary: { equippedIds: seat.inventory.equipped.map((i) => i.id) },
     presetId: seat.presetId,
+    // From the in-memory seat cache, never a DB read (this fires on every broadcast).
+    accountId: seat.accountId,
+    level: seat.cardProfile?.level ?? null,
+    equippedTitleId: seat.cardProfile?.equippedTitleId ?? null,
   };
 }
 
@@ -1081,6 +1088,9 @@ export function endCombat(room: Room, io: RoomIO): void {
     room.pendingHex = null;
     room.phase = "overworld";
     setRunPhase(room.runId, "overworld"); // back to overworld after a win (durable SSOT)
+    // XP/stat/title recorder (§6): after exploreHex, before the broadcast so it carries new levels.
+    // A separate synchronous transaction — never joined to the R13.2 commitExplore transaction.
+    awardEncounterWin(room, io);
     broadcastRoomState(room, io);
     broadcastHexMapState(room, io);
     // First-ever discovery in this dimension is a community KEY MOMENT — celebrate it.
@@ -1093,6 +1103,7 @@ export function endCombat(room: Room, io: RoomIO): void {
     room.pendingHex = null;
     room.phase = "gameover";
     finalizeRun(room.runId, "defeat"); // the single run-end owner (also persists phase='gameover')
+    recordWipe(room, io); // wipes stat + title check (§6) before the broadcast
     broadcastRoomState(room, io);
     io.broadcast(room, { type: "gameOver", outcome: "defeat" });
   }
@@ -1168,6 +1179,7 @@ function persistSeat(room: Room, seat: Seat): void {
     displayName: seat.displayName,
     controllerKind: seat.state === "bot" ? "bot" : seat.clientId ? "human" : "bot",
     tokenSalt: seat.tokenSalt,
+    accountId: seat.accountId,
   });
   // Inventory persistence is handled by the equip/bind write points (index.ts); for run swap we
   // refresh starter inventory durably too (synchronous, R35).
@@ -1279,6 +1291,8 @@ export function leaveSeatPermanently(
   seat.state = "bot";
   seat.clientId = null;
   seat.tokenSalt = null;
+  seat.accountId = null; // a permanent leaver earns nothing from here on (§6 eligibility)
+  seat.cardProfile = null;
   seat.brain = sovereignFor(seat);
 
   upsertRunSeat(room.runId, seat.seatIndex, {
@@ -1286,6 +1300,7 @@ export function leaveSeatPermanently(
     displayName: seat.displayName,
     controllerKind: "bot",
     tokenSalt: null,
+    accountId: null,
   });
 
   migrateHost(room);
@@ -1345,6 +1360,19 @@ export function connectSeat(
   }
 
   rebuildHeroBrains(room);
+
+  // §4.6 attribution backfill: fill an unattributed seat from the socket's account; NEVER overwrite.
+  // A seat attributed to a claimed account stays that account's even across an authRejected reclaim
+  // (seat access was already clientId-gated by the HMAC token regardless of account auth).
+  if (seat.accountId === null && socket.data.accountId) {
+    seat.accountId = socket.data.accountId;
+    setSeatAccountIfNull(room.runId, seat.seatIndex, seat.accountId);
+  }
+  if (seat.accountId !== null) {
+    const card = loadCardProfile(seat.accountId);
+    seat.displayName = card.displayName;
+    seat.cardProfile = { level: card.level, equippedTitleId: card.equippedTitleId };
+  }
 
   // Re-derive host: first connected human becomes host if there is none (R14 stays-migrated).
   if (room.hostSeatId === null) {
@@ -1421,6 +1449,9 @@ export function reconstructRoomForRun(
       presetId: null, // rehydrated from durable rows; the original preset choice isn't persisted
       animSet: getAnimSet(inventory.equipped),
       displayName: row?.display_name || `Player ${i + 1}`,
+      accountId: isHuman ? (row?.account_id ?? null) : null,
+      cardProfile: null,
+      chatTimestamps: [],
       ready: false,
       exhausted: false,
       actedThisPhase: false,
@@ -1428,6 +1459,11 @@ export function reconstructRoomForRun(
       afkTimer: null,
     };
     seat.brain = sovereignFor(seat); // R31: bot-driven from t0
+    // Crash-recovery attribution survives: rehydrate the roster-card cache per attributed human seat.
+    if (seat.accountId !== null) {
+      const card = loadCardProfile(seat.accountId);
+      seat.cardProfile = { level: card.level, equippedTitleId: card.equippedTitleId };
+    }
     seats.push(seat);
   }
 
@@ -1450,6 +1486,7 @@ export function reconstructRoomForRun(
     session: null,
     defendRound: null,
     vote: null,
+    chatLog: [],
     reapTimer: null,
     lastActivityMs: Date.now(),
   };

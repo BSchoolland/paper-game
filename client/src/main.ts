@@ -21,9 +21,15 @@ import { CombatScreen } from "./screens/combat-screen.js";
 import { InventoryScreen } from "./screens/inventory-screen.js";
 import { ReplayScreen } from "./screens/replay-screen.js";
 import { ReplayStore } from "./state/replay-store.js";
-import { clearStoredSeat } from "./net/player-token.js";
-import type { HexMapState, RoomPhase } from "shared";
-import { getAnimSet } from "shared";
+import { AccountStore } from "./state/account-store.js";
+import { ChatStore } from "./state/chat-store.js";
+import { ChatPanel } from "./screens/chat-panel.js";
+import { AuthModal, AUTH_ERROR_CODES } from "./screens/auth-modal.js";
+import { FriendsDock } from "./screens/friends-panel.js";
+import { THEME, FONT } from "./screens/ui-kit.js";
+import { clearStoredSeat, setAuthToken } from "./net/player-token.js";
+import type { HexMapState, RoomCode, RoomPhase } from "shared";
+import { getAnimSet, titleById } from "shared";
 
 function showBanner(text: string): void {
   const el = document.createElement("div");
@@ -92,6 +98,33 @@ function makeToast(): (text: string) => void {
   };
 }
 
+/**
+ * A bottom-right stack of gold reward/notice toasts (XP, titles, room invites). Unlike the
+ * refusal toast these are interactive (pointer-events on) so an invite can carry a Join button.
+ * `content` is either plain text or a builder handed a dismiss callback.
+ */
+function makeToastStack(): (content: string | ((dismiss: () => void) => HTMLElement), opts?: { ttlMs?: number }) => void {
+  const wrap = document.createElement("div");
+  wrap.style.cssText = `
+    position: fixed; right: 16px; bottom: 16px; z-index: 1090;
+    display: flex; flex-direction: column; gap: 8px; align-items: flex-end;
+  `;
+  document.body.appendChild(wrap);
+  return (content, opts) => {
+    const el = document.createElement("div");
+    el.style.cssText = `
+      padding: 10px 16px; font: 13px ${FONT.body}; color: ${THEME.parch};
+      background: rgba(17,13,9,0.92); border: 1px solid ${THEME.goldLine}; border-radius: 8px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.5); pointer-events: auto;
+    `;
+    const dismiss = () => el.remove();
+    if (typeof content === "string") el.textContent = content;
+    else el.appendChild(content(dismiss));
+    wrap.appendChild(el);
+    window.setTimeout(dismiss, opts?.ttlMs ?? 4500);
+  };
+}
+
 /** A fixed "Leave game" button for a started game (overworld/combat). Returns a visibility setter. */
 function makeLeaveButton(onLeave: () => void): (visible: boolean) => void {
   const b = document.createElement("button");
@@ -133,12 +166,91 @@ async function init() {
     return;
   }
 
-  const conn = new RoomConnection(`ws://${window.location.hostname}:3001/ws`);
+  // Credentials (passwords, long-lived authTokens) ride this socket — never plaintext ws
+  // from a TLS page (browsers block it as mixed content anyway).
+  const wsScheme = window.location.protocol === "https:" ? "wss" : "ws";
+  const conn = new RoomConnection(`${wsScheme}://${window.location.hostname}:3001/ws`);
   const seat = new SeatContext();
   const combatStore = new CombatStore(conn, seat);
+  const accountStore = new AccountStore();
+  const chatStore = new ChatStore();
+  const authModal = new AuthModal(conn);
 
   conn.on("roomState", (msg) => seat.setRoom(msg.room));
   conn.on("coopStatus", (msg) => seat.setCoop(msg.coop));
+
+  // Account/social state (docs/meta-loop/01-accounts.md §7.1). A rejected saved token still
+  // resolves to a usable guest underneath; the modal is a dismissable "log back in" prompt.
+  // Skipped when the same welcome auto-reclaimed a live seat: login is server-rejected while
+  // seated (AUTH_IN_ROOM), so the prompt could never succeed — the HOME profile card carries
+  // the authRejected notice for after the run.
+  conn.on("welcome", (msg) => {
+    accountStore.setAuth(msg.auth);
+    if (msg.auth.authRejected && !msg.reconnected) authModal.open("login");
+  });
+  conn.on("authState", (msg) => {
+    setAuthToken(msg.auth.authToken);
+    accountStore.setAuth(msg.auth);
+  });
+  conn.on("profile", (msg) => accountStore.setProfile(msg.profile));
+  conn.on("friendsList", (msg) => accountStore.setFriends(msg.friends));
+
+  // Room chat: scoped to one room — replaced by the reconnect replay, cleared on room change.
+  conn.on("chat", (msg) => chatStore.append(msg.entry));
+  conn.on("chatHistory", (msg) => chatStore.replaceAll(msg.entries));
+  let chatRoomCode: RoomCode | null = null;
+  conn.on("roomState", (msg) => {
+    if (msg.room.code !== chatRoomCode) {
+      chatRoomCode = msg.room.code;
+      chatStore.clear();
+    }
+  });
+
+  // Private reward pushes + friend room invites (gold toast stack, bottom-right).
+  const pushToast = makeToastStack();
+  conn.on("xpAward", (msg) =>
+    pushToast(msg.leveledUp ? `+${msg.amount} XP — Level up! Now LV ${msg.level}` : `+${msg.amount} XP`),
+  );
+  conn.on("titlesEarned", (msg) => {
+    for (const id of msg.titleIds) pushToast(`Title earned — ${titleById(id).name}`);
+  });
+  conn.on("roomInvite", (msg) =>
+    pushToast(
+      (dismiss) => {
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex; align-items:center; gap:12px;";
+        const text = document.createElement("span");
+        const who = document.createElement("b");
+        who.textContent = msg.from.displayName;
+        who.style.color = THEME.gold;
+        text.append(who, document.createTextNode(` invited you to room ${msg.code}`));
+        row.appendChild(text);
+        // joinRoom while seated abandons the live run server-side — same room-less gate as
+        // FriendsPanel's Join, re-checked at click because the toast outlives room changes.
+        if (seat.room === null) {
+          const join = document.createElement("button");
+          join.textContent = "Join";
+          join.tabIndex = -1;
+          join.style.cssText = `
+            padding: 5px 14px; font: 600 12px ${FONT.cinzel}; letter-spacing: 0.06em; cursor: pointer;
+            color: #221a0c; background: linear-gradient(180deg, ${THEME.gold}, ${THEME.goldDeep});
+            border: 1px solid ${THEME.gold}; border-radius: 6px;
+          `;
+          join.addEventListener("click", () => {
+            dismiss();
+            if (seat.room !== null) {
+              pushToast("Leave your current game before joining another room.");
+              return;
+            }
+            conn.send({ type: "joinRoom", code: msg.code });
+          });
+          row.appendChild(join);
+        }
+        return row;
+      },
+      { ttlMs: 15000 },
+    ),
+  );
   conn.on("protocolMismatch", (msg) =>
     showBanner(`Protocol mismatch — refresh to update (server v${msg.serverVersion}, client v${msg.clientVersion}).`),
   );
@@ -153,11 +265,15 @@ async function init() {
   });
 
   // Recoverable refusals not owned by the lobby (rejected move/vote/host action/loadout) toast so
-  // the player learns why an action did nothing. The lobby owns its own join/create error display.
+  // the player learns why an action did nothing. The lobby owns its own join/create error display;
+  // the friends panels own friend-request errors; the auth modal owns auth errors while open.
   const toast = makeToast();
   const lobbyOwnedErrors = new Set(["ROOM_NOT_FOUND", "ROOM_FULL", "ALREADY_STARTED", "ROOM_CREATE_FAILED", "SEAT_IN_USE", "NOT_YOUR_SEAT"]);
+  const friendsOwnedErrors = new Set(["NO_SUCH_USER", "CLAIM_REQUIRED"]);
   conn.on("error", (msg) => {
     if (lobbyOwnedErrors.has(msg.code)) return;
+    if (friendsOwnedErrors.has(msg.code)) return;
+    if (authModal.isOpen() && AUTH_ERROR_CODES.has(msg.code)) return;
     toast(msg.message);
   });
 
@@ -228,16 +344,19 @@ async function init() {
 
   let hexMapState: HexMapState | null = null;
 
-  // HUDs (in-combat party panel + overworld vote panel)
+  // HUDs (in-combat party panel + overworld vote panel + floating chat/friends panels — the
+  // latter live outside every screen's DOM so lobby re-renders can never blur their inputs)
   const partyHud = new PartyHud(seat, clientState);
   new VotePanel(conn, seat);
+  new ChatPanel(conn, seat, chatStore);
+  new FriendsDock(conn, accountStore, seat, (mode) => authModal.open(mode));
 
   // Inventory (own bag; loadout-editable only off-combat)
   const inventoryScreen = new InventoryScreen(conn, () => seat.room?.phase !== "combat");
 
   // Screen manager + registration
   const screens = new ScreenManager();
-  const homeScreen = new HomeScreen(conn, seat, dim);
+  const homeScreen = new HomeScreen(conn, seat, dim, accountStore, (mode) => authModal.open(mode));
   screens.register("home", homeScreen);
   screens.register("lobby", new LobbyScreen(conn, seat, () => screens.switchTo("inventory")));
   screens.register("gameover", new GameOverScreen(conn));
@@ -320,6 +439,8 @@ async function init() {
   conn.on("leftRoom", () => {
     seat.setRoom(null);
     clearStoredSeat();
+    chatStore.clear();
+    chatRoomCode = null;
     route();
   });
 

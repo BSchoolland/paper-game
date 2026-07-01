@@ -20,7 +20,9 @@ function loadMapManifest(dimId: number): MapManifest | null {
 // Default to the one canonical DB next to this file (server/hex-discovery.sqlite), resolved
 // absolutely so it never depends on the caller's CWD. GAME_DB_PATH overrides for tests/tools.
 const DB_PATH = process.env.GAME_DB_PATH ?? resolve(import.meta.dir, "../hex-discovery.sqlite");
-const db = new Database(DB_PATH, { create: true });
+// Exported so accounts.ts shares this one connection — two `new Database(":memory:")` would be
+// two separate databases, which breaks tests. db.ts stays the single migration owner.
+export const db = new Database(DB_PATH, { create: true });
 db.exec("PRAGMA busy_timeout = 30000");
 db.exec("PRAGMA journal_mode = WAL");
 db.exec(`
@@ -210,6 +212,89 @@ const SCHEMA_VERSION = 3;
       "UPDATE runs SET phase = CASE WHEN active = 0 THEN 'gameover' WHEN started_at IS NOT NULL THEN 'overworld' ELSE 'lobby' END",
     );
     db.exec("PRAGMA user_version = 5");
+  }
+}
+
+// v6: accounts & community foundation (docs/meta-loop/01-accounts.md).
+{
+  const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
+  if (user_version < 6) {
+    const migrate = db.transaction(() => {
+      db.exec(`CREATE TABLE IF NOT EXISTS accounts (
+        id              TEXT PRIMARY KEY,
+        username        TEXT,                 -- as typed; NULL until claimed; ci-unique via index
+        password_hash   TEXT,                 -- Bun.password argon2id; NULL for guests
+        email           TEXT,
+        is_guest        INTEGER NOT NULL DEFAULT 1,
+        guest_client_id TEXT UNIQUE,          -- localStorage clientId that minted this guest; NULL once claimed
+        created_at      TEXT NOT NULL,
+        updated_at      TEXT NOT NULL,
+        CHECK (is_guest IN (0,1)),
+        CHECK (is_guest = 1 OR (username IS NOT NULL AND password_hash IS NOT NULL))
+      )`);
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_accounts_username_ci
+        ON accounts(lower(username)) WHERE username IS NOT NULL`);
+      db.exec(`CREATE TABLE IF NOT EXISTS account_sessions (
+        id           TEXT PRIMARY KEY,
+        account_id   TEXT NOT NULL,           -- -> accounts(id), app-enforced
+        token_hash   TEXT NOT NULL UNIQUE,    -- sha256 hex of the bearer token (raw token never stored)
+        created_at   TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        expires_at   TEXT NOT NULL            -- sliding, 365d
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_account_sessions_account ON account_sessions(account_id)`);
+      db.exec(`CREATE TABLE IF NOT EXISTS profiles (
+        account_id        TEXT PRIMARY KEY,   -- 1:1 with accounts
+        display_name      TEXT NOT NULL,
+        xp                INTEGER NOT NULL DEFAULT 0,
+        equipped_title_id TEXT,               -- -> titles(id), app-enforced against account_titles; NULL = none
+        created_at        TEXT NOT NULL,
+        updated_at        TEXT NOT NULL
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS friends (
+        account_id TEXT NOT NULL,             -- requester (direction is meaningful while pending)
+        friend_id  TEXT NOT NULL,
+        status     TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (account_id, friend_id),
+        CHECK (status IN ('pending','accepted')),
+        CHECK (account_id <> friend_id)
+      )`);
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_friends_friend ON friends(friend_id)`);
+      db.exec(`CREATE TABLE IF NOT EXISTS titles (
+        id          TEXT PRIMARY KEY,         -- slug, e.g. 'pathfinder'
+        name        TEXT NOT NULL,
+        description TEXT NOT NULL,
+        sort_order  INTEGER NOT NULL DEFAULT 0
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS account_titles (
+        account_id TEXT NOT NULL,
+        title_id   TEXT NOT NULL,
+        earned_at  TEXT NOT NULL,
+        PRIMARY KEY (account_id, title_id)
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS account_stats (
+        account_id TEXT NOT NULL,
+        stat       TEXT NOT NULL,             -- 'encounters_won' | 'hexes_charted' | 'dimensions_discovered' | 'wipes' (open set)
+        value      INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (account_id, stat)
+      )`);
+      db.exec(`CREATE TABLE IF NOT EXISTS account_dimensions (
+        account_id    TEXT NOT NULL,
+        dimension_id  INTEGER NOT NULL,
+        first_seen_at TEXT NOT NULL,
+        PRIMARY KEY (account_id, dimension_id)
+      )`);
+      try {
+        db.exec("ALTER TABLE run_seats ADD COLUMN account_id TEXT");
+      } catch (e) {
+        if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+      }
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_run_seats_account ON run_seats(account_id)`);
+      db.exec(`PRAGMA user_version = 6`);
+    });
+    migrate();
   }
 }
 
@@ -476,16 +561,18 @@ export interface RunSeatRow {
   display_name: string;
   controller_kind: ControllerKind;
   token_salt: string | null;
+  account_id: string | null;
   joined_at: number;
   left_at: number | null;
 }
 
 const upsertSeatStmt = db.prepare(
-  `INSERT INTO run_seats (run_id, seat_index, client_id, display_name, controller_kind, token_salt, joined_at, left_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+  `INSERT INTO run_seats (run_id, seat_index, client_id, display_name, controller_kind, token_salt, account_id, joined_at, left_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL)
    ON CONFLICT(run_id, seat_index) DO UPDATE SET
      client_id = excluded.client_id, display_name = excluded.display_name,
-     controller_kind = excluded.controller_kind, token_salt = excluded.token_salt, left_at = NULL`
+     controller_kind = excluded.controller_kind, token_salt = excluded.token_salt,
+     account_id = excluded.account_id, left_at = NULL`
 );
 const leaveSeatStmt = db.prepare("UPDATE run_seats SET left_at = ? WHERE run_id = ? AND seat_index = ?");
 const seatsForRunStmt = db.prepare("SELECT * FROM run_seats WHERE run_id = ? ORDER BY seat_index");
@@ -499,9 +586,38 @@ const activeSeatForClientStmt = db.prepare(
 export function upsertRunSeat(
   runId: number,
   seatIndex: number,
-  seat: { clientId: string | null; displayName: string; controllerKind: ControllerKind; tokenSalt: string | null },
+  seat: {
+    clientId: string | null;
+    displayName: string;
+    controllerKind: ControllerKind;
+    tokenSalt: string | null;
+    accountId: string | null;
+  },
 ): void {
-  upsertSeatStmt.run(runId, seatIndex, seat.clientId, seat.displayName, seat.controllerKind, seat.tokenSalt, Date.now());
+  // Mirror of the client_id table CHECK, which SQLite cannot gain via ALTER (app-enforced, §1.2).
+  if (seat.controllerKind === "bot" && seat.accountId !== null) {
+    throw new Error(`upsertRunSeat: bot seat ${runId}/${seatIndex} must not carry an accountId`);
+  }
+  upsertSeatStmt.run(
+    runId,
+    seatIndex,
+    seat.clientId,
+    seat.displayName,
+    seat.controllerKind,
+    seat.tokenSalt,
+    seat.accountId,
+    Date.now(),
+  );
+}
+
+const setSeatAccountIfNullStmt = db.prepare(
+  "UPDATE run_seats SET account_id = ? WHERE run_id = ? AND seat_index = ? AND account_id IS NULL",
+);
+
+/** Backfill attribution onto an unattributed seat row. The IS NULL guard is load-bearing (§4.6):
+ *  a seat already attributed to a claimed account is NEVER re-pointed at a throwaway guest. */
+export function setSeatAccountIfNull(runId: number, seatIndex: number, accountId: string): void {
+  setSeatAccountIfNullStmt.run(accountId, runId, seatIndex);
 }
 
 export function leaveRunSeat(runId: number, seatIndex: number): void {

@@ -2,6 +2,7 @@ import type { ClientId, RoomCode, SeatId } from "shared";
 
 const CLIENT_ID_KEY = "coop.clientId";
 const LAST_SEAT_KEY = "coop.lastSeat";
+const AUTH_TOKEN_KEY = "coop.authToken";
 
 /**
  * A stable per-browser identity. Minted once and persisted so a reconnect (and the
@@ -36,4 +37,20 @@ export function setStoredSeat(seat: StoredSeat): void {
 
 export function clearStoredSeat(): void {
   localStorage.removeItem(LAST_SEAT_KEY);
+}
+
+/**
+ * The account bearer token (365d sliding), persisted so a later `hello` restores the
+ * account passwordless. Orthogonal to the HMAC seat token, which never leaves memory.
+ */
+export function getAuthToken(): string | null {
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setAuthToken(token: string): void {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function clearAuthToken(): void {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
 }

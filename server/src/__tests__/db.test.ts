@@ -40,8 +40,8 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
 
   it("binds seats, finds the live seat for a client, and stamps them on run end", () => {
     const runId = db.startNewRun(1, "owner", 2);
-    db.upsertRunSeat(runId, 0, { clientId: "owner", displayName: "Ann", controllerKind: "human", tokenSalt: db.newTokenSalt() });
-    db.upsertRunSeat(runId, 1, { clientId: null, displayName: "Bot", controllerKind: "bot", tokenSalt: null });
+    db.upsertRunSeat(runId, 0, { clientId: "owner", displayName: "Ann", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null });
+    db.upsertRunSeat(runId, 1, { clientId: null, displayName: "Bot", controllerKind: "bot", tokenSalt: null, accountId: null });
 
     const seats = db.loadRunSeats(runId);
     expect(seats.map((s) => s.controller_kind)).toEqual(["human", "bot"]);
@@ -75,10 +75,10 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
 
   it("enforces one live human seat per client across runs (R6/R32)", () => {
     const r1 = db.startNewRun(1, "dup", 2);
-    db.upsertRunSeat(r1, 0, { clientId: "dup", displayName: "A", controllerKind: "human", tokenSalt: db.newTokenSalt() });
+    db.upsertRunSeat(r1, 0, { clientId: "dup", displayName: "A", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null });
     const r2 = db.startNewRun(1, "dup", 2);
     expect(() =>
-      db.upsertRunSeat(r2, 0, { clientId: "dup", displayName: "A", controllerKind: "human", tokenSalt: db.newTokenSalt() }),
+      db.upsertRunSeat(r2, 0, { clientId: "dup", displayName: "A", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null }),
     ).toThrow(); // unique partial index on live (left_at IS NULL) client_id
   });
 
@@ -101,7 +101,7 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
 
   it("abandonPriorSeatForClient frees the client to take a new seat without a UNIQUE crash (R32)", () => {
     const r1 = db.startNewRun(1, "switcher", 2);
-    db.upsertRunSeat(r1, 0, { clientId: "switcher", displayName: "S", controllerKind: "human", tokenSalt: db.newTokenSalt() });
+    db.upsertRunSeat(r1, 0, { clientId: "switcher", displayName: "S", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null });
     expect(db.findActiveSeatForClient("switcher")).toEqual({ runId: r1, seatIndex: 0 });
 
     // Abandon the prior seat (solo run -> run inactivated), then a fresh create reuses the clientId.
@@ -112,15 +112,15 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
 
     const r2 = db.startNewRun(1, "switcher", 2);
     expect(() =>
-      db.upsertRunSeat(r2, 0, { clientId: "switcher", displayName: "S", controllerKind: "human", tokenSalt: db.newTokenSalt() }),
+      db.upsertRunSeat(r2, 0, { clientId: "switcher", displayName: "S", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null }),
     ).not.toThrow();
     expect(db.findActiveSeatForClient("switcher")).toEqual({ runId: r2, seatIndex: 0 });
   });
 
   it("abandonPriorSeatForClient leaves a multi-human prior run active (only stamps the leaving seat)", () => {
     const r = db.startNewRun(1, "host2", 2);
-    db.upsertRunSeat(r, 0, { clientId: "host2", displayName: "H", controllerKind: "human", tokenSalt: db.newTokenSalt() });
-    db.upsertRunSeat(r, 1, { clientId: "guest2", displayName: "G", controllerKind: "human", tokenSalt: db.newTokenSalt() });
+    db.upsertRunSeat(r, 0, { clientId: "host2", displayName: "H", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null });
+    db.upsertRunSeat(r, 1, { clientId: "guest2", displayName: "G", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null });
 
     const result = db.abandonPriorSeatForClient("guest2");
     expect(result).toEqual({ runId: r, seatIndex: 1, runInactivated: false });
@@ -143,7 +143,7 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
 
   it("eraseClient hard-deletes per-run rows but leaves the GLOBAL community map intact (R33)", () => {
     const runId = db.startNewRun(12, "gdpr", 2);
-    db.upsertRunSeat(runId, 0, { clientId: "gdpr", displayName: "X", controllerKind: "human", tokenSalt: db.newTokenSalt() });
+    db.upsertRunSeat(runId, 0, { clientId: "gdpr", displayName: "X", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null });
     db.saveSeatInventory(runId, 0, { bag: new Array(16).fill(null), equipped: [], attachments: {} });
     db.commitExplore(12, runId, { q: 1, r: 0 }, "wilderness"); // global discovery + this-run cleared
 

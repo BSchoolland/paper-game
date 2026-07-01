@@ -14,6 +14,8 @@ import {
   eyebrow,
   heading,
   presetPlate,
+  levelChip,
+  titleTag,
 } from "./ui-kit.js";
 
 const PRESET_NAME: Record<string, string> = Object.fromEntries(
@@ -211,17 +213,27 @@ export class LobbyScreen implements Screen {
       : s.displayName;
     name.style.cssText = `font:600 16px ${FONT.body}; color:${isOpen ? THEME.faint : THEME.parch}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;`;
     nameRow.appendChild(name);
+    if (s.level !== null) nameRow.appendChild(levelChip(s.level));
     if (s.isHost) nameRow.appendChild(this.badge("HOST", THEME.goldDeep, THEME.goldLine));
     if (isBot) nameRow.appendChild(this.badge("BOT", THEME.muted, THEME.faint));
     info.appendChild(nameRow);
 
     const sub = document.createElement("div");
-    sub.textContent = isOpen
-      ? "Invite a friend or add a bot"
-      : s.presetId
-        ? PRESET_NAME[s.presetId] ?? "Choosing kit…"
-        : "Choosing kit…";
-    sub.style.cssText = `font:12.5px ${FONT.body}; color:${THEME.muted}; margin-top:3px;`;
+    sub.style.cssText = `display:flex; align-items:center; gap:6px; font:12.5px ${FONT.body}; color:${THEME.muted}; margin-top:3px;`;
+    if (isOpen) {
+      sub.textContent = "Invite a friend or add a bot";
+    } else {
+      if (s.equippedTitleId !== null) {
+        sub.appendChild(titleTag(s.equippedTitleId));
+        const sep = document.createElement("span");
+        sep.textContent = "·";
+        sep.style.color = THEME.faint;
+        sub.appendChild(sep);
+      }
+      const preset = document.createElement("span");
+      preset.textContent = s.presetId ? PRESET_NAME[s.presetId] ?? "Choosing kit…" : "Choosing kit…";
+      sub.appendChild(preset);
+    }
     info.appendChild(sub);
     row.appendChild(info);
 

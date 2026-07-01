@@ -80,6 +80,33 @@ import { join } from "path";
 import { existsSync } from "fs";
 import { eventLog } from "./event-log.js";
 import { io, sendTo } from "./wire-transport.js";
+import { AccountError, seedTitles, purgeExpiredSessions, loadCardProfile } from "./accounts.js";
+import * as presence from "./presence.js";
+import {
+  resolveConnectionAccount,
+  buildAuthState,
+  handleClaimAccount,
+  handleRegister,
+  handleLogin,
+  handleLogout,
+  type AccountResolution,
+} from "./auth-handlers.js";
+import {
+  handleGetProfile,
+  handleSetDisplayName,
+  handleEquipTitle,
+  handleGetFriends,
+  handleFriendRequest,
+  handleFriendAccept,
+  handleFriendDecline,
+  handleFriendRemove,
+  handleFriendInvite,
+  handleChatSend,
+  pushFriendsListTo,
+  pushPresenceDelta,
+  pushRoomPresenceDelta,
+} from "./social-handlers.js";
+import { recordDimensionsSeen } from "./awards.js";
 
 export function initSeeds(): void {
   seedDimension0();
@@ -87,6 +114,7 @@ export function initSeeds(): void {
   seedDimension2();
   seedDimension3();
   seedDimension501();
+  seedTitles();
 }
 
 // Auto-seed on normal boot. Tests/harnesses set GAME_SKIP_SEED=1 (with an in-memory
@@ -104,6 +132,8 @@ if (process.env.GAME_SKIP_SEED !== "1") {
     try {
       const n = deactivateStaleRuns(RETENTION_MS, (runId) => rooms.getByRun(runId) !== null);
       if (n > 0) console.log(`[housekeeping] deactivated ${n} stale run(s)`);
+      const purged = purgeExpiredSessions();
+      if (purged > 0) console.log(`[housekeeping] purged ${purged} expired account session(s)`);
     } catch (e) {
       console.error("[housekeeping] sweep failed:", e);
     }
@@ -213,6 +243,7 @@ function cleanupPriorSeat(
 /** Push the post-bind snapshots to a (re)connecting seat (resume step 8 / hello-reclaim). */
 function sendSeatSnapshots(room: Room, seat: Seat): void {
   io.send(seat, { type: "roomState", room: roomStatePayload(room, seat) });
+  io.send(seat, { type: "chatHistory", entries: room.chatLog });
   if (room.phase === "overworld") {
     // Send the visibility-expanded map (same payload as the broadcast), NOT raw room.hexMap, so the
     // resuming player gets the clickable frontier the server's proposeMove check expects (no desync).
@@ -235,8 +266,35 @@ function handleHello(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage
     return;
   }
 
+  // AUTH_IN_ROOM (design flag #5): a seated socket's account is frozen for the life of the seat.
+  // A repeated hello would re-run account resolution and could swap ws.data.accountId (e.g. with a
+  // stolen/other token) while the seat stays attributed to the old account — reject it outright.
+  // Legit clients only ever hello once per connection, before taking a seat.
+  if (ws.data.roomCode !== null) {
+    return sendError(ws, "AUTH_IN_ROOM", "Already seated; account identity is fixed while in a room");
+  }
+
   const clientId = msg.clientId;
   ws.data.clientId = clientId;
+
+  // Account resolution (docs/meta-loop/01-accounts.md §4.2): restore from authToken or reuse/mint
+  // the device's guest. Orthogonal to the HMAC seat token below (§4.5) — never conflate.
+  let resolution: AccountResolution;
+  try {
+    resolution = resolveConnectionAccount(ws, msg);
+  } catch (e) {
+    if (e instanceof AccountError) {
+      // Guest-mint budget exhausted for this address: no account can be resolved, so no welcome.
+      sendError(ws, e.code, e.message, false);
+      ws.close();
+      return;
+    }
+    throw e;
+  }
+  const afterWelcome = () => {
+    // A claimed account's friends panel is primed right after the welcome (guests have none).
+    if (!resolution.isGuest) pushFriendsListTo(ws.data.accountId!);
+  };
 
   // Resume into a STILL-LIVE in-memory room only (a recent drop, or a crash-recovered run rebuilt at
   // boot). We do NOT lazily reconstruct on hello: a gracefully-reaped run is marked inactive, so
@@ -263,13 +321,15 @@ function handleHello(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage
           ws.data.roomCode = room.code;
           ws.data.seatId = seat.seatId;
           connectSeat(room, io, seat, ws, clientId);
-          sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, reconnected: { code: room.code, seatId: seat.seatId } });
+          sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, auth: buildAuthState(ws, resolution.authRejected), reconnected: { code: room.code, seatId: seat.seatId } });
+          afterWelcome();
           sendSeatSnapshots(room, seat);
           broadcastRoomState(room, io);
           if (room.phase === "combat") broadcastCoopStatus(room, io);
         } else {
           // Seat is live elsewhere: welcome room-less but with the valid token (force-reclaim path).
-          sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token });
+          sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, auth: buildAuthState(ws, resolution.authRejected) });
+          afterWelcome();
         }
         return;
       }
@@ -280,7 +340,8 @@ function handleHello(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage
   // re-derived/replaced when the client takes a seat (createRoom / joinRoom).
   const token = mintTokenFor(clientId, newTokenSalt());
   ws.data.sessionToken = token;
-  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token });
+  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, auth: buildAuthState(ws, resolution.authRejected) });
+  afterWelcome();
 }
 
 /** Build a brand-new room + durable run for the host (write point 1, R13.1). */
@@ -342,6 +403,7 @@ function createRoomFor(
     session: null,
     defendRound: null,
     vote: null,
+    chatLog: [],
     reapTimer: null,
     lastActivityMs: Date.now(),
   };
@@ -355,6 +417,7 @@ function createRoomFor(
   host.state = "human-connected";
   host.socket = ws;
   room.hostSeatId = host.seatId;
+  bindSeatAccount(host, ws);
 
   const token = mintTokenFor(clientId, salt);
   ws.data.sessionToken = token;
@@ -367,13 +430,27 @@ function createRoomFor(
     displayName: host.displayName,
     controllerKind: "human",
     tokenSalt: salt,
+    accountId: host.accountId,
   });
   saveSeatInventory(runId, host.seatIndex, host.inventory);
 
-  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, reconnected: { code, seatId: host.seatId } });
+  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, auth: buildAuthState(ws), reconnected: { code, seatId: host.seatId } });
   broadcastRoomState(room, io);
   sendInventory(room, io, host);
+  pushRoomPresenceDelta(room); // the host's friends gain a Join affordance (§7.4)
   return room;
+}
+
+/** Fresh-bind attribution (§4.6): seat identity comes from the connection's resolved account —
+ *  the profile is the single name source. Throws if hello never resolved an account (cannot
+ *  happen behind the "Say hello first" guards). */
+function bindSeatAccount(seat: Seat, ws: ServerWebSocket<SocketData>): void {
+  const accountId = ws.data.accountId;
+  if (!accountId) throw new Error("seat bind without a resolved account (hello must run first)");
+  const card = loadCardProfile(accountId);
+  seat.accountId = accountId;
+  seat.displayName = card.displayName;
+  seat.cardProfile = { level: card.level, equippedTitleId: card.equippedTitleId };
 }
 
 function handleJoinRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "joinRoom" }>): void {
@@ -397,7 +474,7 @@ function handleJoinRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMess
   seat.clientId = clientId;
   seat.state = "human-connected";
   seat.socket = ws;
-  if (msg.displayName) seat.displayName = msg.displayName;
+  bindSeatAccount(seat, ws);
 
   const token = mintTokenFor(clientId, salt);
   ws.data.sessionToken = token;
@@ -413,12 +490,16 @@ function handleJoinRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMess
     displayName: seat.displayName,
     controllerKind: "human",
     tokenSalt: salt,
+    accountId: seat.accountId,
   });
   saveSeatInventory(room.runId, seat.seatIndex, seat.inventory);
 
-  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, reconnected: { code: room.code, seatId: seat.seatId } });
+  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, auth: buildAuthState(ws), reconnected: { code: room.code, seatId: seat.seatId } });
   broadcastRoomState(room, io);
   sendInventory(room, io, seat);
+  // Friends-panel joinability changed for EVERY seated account: the joiner gained a room, and if
+  // this join took the last open seat the others' rooms stopped being joinable (§7.4).
+  pushRoomPresenceDelta(room);
 }
 
 function handleReclaimSeat(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "reclaimSeat" }>): void {
@@ -459,7 +540,7 @@ function handleReclaimSeat(ws: ServerWebSocket<SocketData>, msg: Extract<ClientM
   ws.data.seatId = seat.seatId;
   connectSeat(room, io, seat, ws, clientId);
 
-  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: ws.data.sessionToken, reconnected: { code: room.code, seatId: seat.seatId } });
+  sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: ws.data.sessionToken, auth: buildAuthState(ws), reconnected: { code: room.code, seatId: seat.seatId } });
   sendSeatSnapshots(room, seat);
   broadcastRoomState(room, io);
   if (room.phase === "combat") broadcastCoopStatus(room, io);
@@ -497,7 +578,7 @@ function handleQuickMatch(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMe
   if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
   const target = rooms.firstJoinable();
   if (target) {
-    handleJoinRoom(ws, { type: "joinRoom", code: target.code, displayName: msg.displayName });
+    handleJoinRoom(ws, { type: "joinRoom", code: target.code });
   } else {
     handleCreateRoom(ws, { type: "createRoom", capacity: QUICKMATCH_CAPACITY, dimensionId: msg.dimensionId });
   }
@@ -522,26 +603,35 @@ function handleStartGame(room: Room, seat: Seat): void {
     return;
   }
 
-  // Bot-fill every still-open seat (durable controller_kind='bot', write point 2).
+  // Bot-fill every still-open seat (durable controller_kind='bot', write point 2). A bot seat must
+  // carry no account identity in memory either — a stale accountId here would crash the next
+  // persistSeat (bot + accountId throws) and leak the prior occupant onto the roster.
   for (const s of room.seats) {
     if (s.state === "open") {
       s.state = "bot";
       s.clientId = null;
       s.tokenSalt = null;
+      s.accountId = null;
+      s.cardProfile = null;
       upsertRunSeat(room.runId, s.seatIndex, {
         clientId: null,
         displayName: s.displayName,
         controllerKind: "bot",
         tokenSalt: null,
+        accountId: null,
       });
       saveSeatInventory(room.runId, s.seatIndex, s.inventory);
     }
   }
 
+  // Expedition start recorder (§6): chart this dimension for every attributed human seat.
+  recordDimensionsSeen(room, io);
+
   room.phase = "overworld";
   setRunPhase(room.runId, "overworld"); // persist the lifecycle SSOT (crash recovery resumes overworld runs)
   broadcastRoomState(room, io);
   broadcastHexMapState(room, io);
+  pushRoomPresenceDelta(room); // the lobby is gone — friends' Join affordances drop (§7.4)
 }
 
 function handleReset(room: Room, seat: Seat): void {
@@ -587,7 +677,7 @@ function handlePlayAgain(room: Room, seat: Seat): void {
   const existing = room.rematchCode ? rooms.get(room.rematchCode) : null;
   const joinable = existing && existing.phase === "lobby" && existing.seats.some((s) => s.state === "open");
   if (joinable) {
-    handleJoinRoom(ws, { type: "joinRoom", code: existing!.code, displayName: seat.displayName });
+    handleJoinRoom(ws, { type: "joinRoom", code: existing!.code });
     return;
   }
   // No live rematch room yet (or it filled / already started) — spin up a fresh private one. This
@@ -699,6 +789,52 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
       return handleQuickMatch(ws, msg);
   }
 
+  // --- connection-scoped account/social (no seat required, but hello must have run) ---
+  // claim/register/login are async (Bun.password) and MUST catch internally (§5 async-handler rule):
+  // routeMessage and the ws message() try/catch are synchronous, so a rejected promise would escape.
+  switch (msg.type) {
+    case "claimAccount":
+    case "register":
+    case "login":
+    case "logout":
+    case "getProfile":
+    case "setDisplayName":
+    case "equipTitle":
+    case "getFriends":
+    case "friendRequest":
+    case "friendAccept":
+    case "friendDecline":
+    case "friendRemove": {
+      if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
+      switch (msg.type) {
+        case "claimAccount":
+          return void handleClaimAccount(ws, msg);
+        case "register":
+          return void handleRegister(ws, msg);
+        case "login":
+          return void handleLogin(ws, msg);
+        case "logout":
+          return handleLogout(ws);
+        case "getProfile":
+          return handleGetProfile(ws, msg);
+        case "setDisplayName":
+          return handleSetDisplayName(ws, msg);
+        case "equipTitle":
+          return handleEquipTitle(ws, msg);
+        case "getFriends":
+          return handleGetFriends(ws);
+        case "friendRequest":
+          return handleFriendRequest(ws, msg);
+        case "friendAccept":
+          return handleFriendAccept(ws, msg);
+        case "friendDecline":
+          return handleFriendDecline(ws, msg);
+        case "friendRemove":
+          return handleFriendRemove(ws, msg);
+      }
+    }
+  }
+
   // Everything below requires a bound seat (R22).
   const bound = seatFor(ws);
   if (!bound) {
@@ -764,6 +900,12 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
     case "leaveRoom":
       return handleLeaveRoom(ws, room, seat);
 
+    // --- seat-scoped social ---
+    case "chatSend":
+      return handleChatSend(room, seat, ws, msg.text);
+    case "friendInvite":
+      return handleFriendInvite(room, seat, ws, msg.accountId);
+
     // --- host-gated ---
     case "startGame":
       return handleStartGame(room, seat);
@@ -800,11 +942,17 @@ function detachSeat(room: Room, seat: Seat, reason: "leave" | "close"): void {
     }
     // Durably stamp this seat as left so its clientId is freed for a fresh create/join (R32) — the
     // in-memory seat going `open` must be mirrored durably or the UNIQUE-live index lingers.
+    // The account identity must clear with it: an open seat carrying the leaver's accountId leaks
+    // it on every roomState and later crashes persistSeat once the seat is bot-filled.
     const seatIndex = seat.seatIndex;
+    const leaverAccountId = seat.accountId;
     seat.state = "open";
     seat.clientId = null;
     seat.tokenSalt = null;
     seat.ready = false;
+    seat.accountId = null;
+    seat.cardProfile = null;
+    seat.displayName = `Player ${seatIndex + 1}`;
     leaveRunSeat(room.runId, seatIndex);
     broadcastRoomState(room, io);
     if (room.seats.every((s) => s.socket === null)) {
@@ -814,6 +962,10 @@ function detachSeat(room: Room, seat: Seat, reason: "leave" | "close"): void {
       finalizeRun(room.runId, "abandoned");
       reapRoom(room);
     }
+    // Friends-panel joinability (§7.4): the leaver lost their room; the survivors' room may have
+    // just regained an open seat (or vanished entirely if it reaped above).
+    if (leaverAccountId !== null) pushPresenceDelta(leaverAccountId);
+    pushRoomPresenceDelta(room);
     return;
   }
   // Overworld / combat / gameover. A voluntary leave permanently bots the seat; an involuntary close
@@ -866,7 +1018,7 @@ export const server = Bun.serve({
       // Identity comes from the `hello` message, never from query params (ruling R22). `?dim=` is
       // tolerated only as an asset-preload hint and ignored for identity here.
       const upgraded = server.upgrade(req, {
-        data: { clientId: "", sessionToken: "", roomCode: null, seatId: null, seq: 0 } as SocketData,
+        data: { clientId: "", sessionToken: "", roomCode: null, seatId: null, seq: 0, accountId: null, authToken: null } as SocketData,
       });
       if (!upgraded)
         return new Response("WebSocket upgrade failed", { status: 400 });
@@ -933,7 +1085,7 @@ export const server = Bun.serve({
 
   websocket: {
     open(ws: ServerWebSocket<SocketData>) {
-      ws.data = { clientId: "", sessionToken: "", roomCode: null, seatId: null, seq: 0 };
+      ws.data = { clientId: "", sessionToken: "", roomCode: null, seatId: null, seq: 0, accountId: null, authToken: null };
     },
 
     message(ws: ServerWebSocket<SocketData>, raw: string | Buffer) {
@@ -959,6 +1111,10 @@ export const server = Bun.serve({
     },
 
     close(ws: ServerWebSocket<SocketData>) {
+      // Presence FIRST, before the early-return-if-unseated: room-less HOME sockets are the
+      // primary presence audience and must go offline too. No-op if the socket died pre-hello.
+      const prev = presence.unregister(ws);
+      if (prev?.wentOffline) pushPresenceDelta(prev.accountId);
       const bound = seatFor(ws);
       if (!bound) return;
       const { room, seat } = bound;
