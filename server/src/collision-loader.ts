@@ -3,9 +3,9 @@ import { resolve } from "path";
 import type { GridState, MapObjectPlacement, StructureEntry } from "shared";
 import { stampMapObjects, CELL_WALL } from "shared";
 import type { AlphaImage } from "shared";
+import { ASSETS_DIR } from "../../shared/src/paths.js";
 
-const PUBLIC_DIR = resolve(import.meta.dir, "../../client/public");
-const SPRITES_DIR = resolve(PUBLIC_DIR, "sprites/map-objects");
+const SPRITES_DIR = resolve(ASSETS_DIR, "sprites/map-objects");
 
 function objectFolder(name: string): string {
   if (name.startsWith("tree-") || name.startsWith("bush-") || name.startsWith("grass-"))
@@ -27,7 +27,7 @@ export async function loadCollisionGrid(
 
   const resolvePath = (name: string): string => {
     const sp = spritePathByName.get(name);
-    if (sp) return resolve(PUBLIC_DIR, sp);
+    if (sp) return resolve(ASSETS_DIR, sp);
     const folder = objectFolder(name);
     const subpath = folder ? `${folder}/` : "";
     return resolve(SPRITES_DIR, `${subpath}${name}.webp`);
@@ -64,7 +64,7 @@ export async function loadCollisionGrid(
 export async function loadMaskCollision(grid: GridState, maskPath: string): Promise<void> {
   let raw;
   try {
-    raw = await sharp(resolve(PUBLIC_DIR, maskPath))
+    raw = await sharp(resolve(ASSETS_DIR, maskPath))
       .greyscale()
       .raw()
       .toBuffer({ resolveWithObject: true });

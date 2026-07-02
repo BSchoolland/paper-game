@@ -5,7 +5,7 @@
  *   bun register-structures.ts <dimId>
  *
  * Reads the sprite manifest at:
- *   client/public/sprites/map-objects/dimension-<dimId>/manifest.json
+ *   public/sprites/map-objects/dimension-<dimId>/manifest.json
  *
  * Builds StructureEntry[] with the same cost/scale formula as buildDim3Structures(),
  * then updates the dimension row in the DB (preserving name and status).
@@ -14,6 +14,7 @@
  */
 import { Database } from "bun:sqlite";
 import { join, resolve } from "node:path";
+import { ASSETS_DIR } from "../../shared/src/paths.js";
 import { existsSync } from "node:fs";
 
 interface StructureEntry {
@@ -31,7 +32,7 @@ if (!dimId || isNaN(dimId)) {
 }
 
 const ROOT = resolve(import.meta.dir, "..", "..");
-const PUBLIC_DIR = join(ROOT, "client", "public");
+const PUBLIC_DIR = ASSETS_DIR;
 const DB_PATH = process.env.GAME_DB_PATH ?? join(ROOT, "server", "hex-discovery.sqlite");
 
 // v2 dimensions render encounters from baked map images, not runtime-composited

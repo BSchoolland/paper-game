@@ -9,12 +9,12 @@
  */
 import { join } from "node:path";
 import { $ } from "bun";
+import { ASSETS_DIR } from "../../shared/src/paths.js";
 
 const BUCKET = "schoolland-tbg-maps";
-const ROOT = join(import.meta.dir, "..", "..");
 
 export async function uploadMaps(dimId: number): Promise<void> {
-  const local = join(ROOT, "client/public/sprites/maps", `dimension-${dimId}`);
+  const local = join(ASSETS_DIR, "sprites/maps", `dimension-${dimId}`);
   const dest = `s3://${BUCKET}/sprites/maps/dimension-${dimId}/`;
   await $`aws s3 sync ${local} ${dest} --exclude ${"*.mask.png"} --exclude ${"manifest.json"} --no-progress`;
   console.log(`Uploaded dimension-${dimId} map art to ${dest}`);

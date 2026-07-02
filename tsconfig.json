@@ -10,5 +10,7 @@
     "resolveJsonModule": true,
     "noUncheckedIndexedAccess": true,
     "noEmit": true
-  }
+  },
+  // web/ is Svelte: raw tsc doesn't know runes — it's checked by `svelte-check` (web/package.json "check").
+  "exclude": ["web", "node_modules"]
 }

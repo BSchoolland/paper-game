@@ -1,0 +1,130 @@
+/* ==========================================================================
+   EXPEDITION design tokens + page ground (ported from lobby-experiment/refine-4).
+   Material system: paper, ink, wax = commitment, gilt = celebration, stamps =
+   machine facts. Type floors: body >= 15px, captions >= 13px, no italic on
+   functional text (italic/handwriting = player-authored content + tagline).
+   ========================================================================== */
+:root {
+  --parch: #e9d7a7;
+  --paper: #f3e7c1;
+  --paper-hi: #f8efd3;
+  --paper-lo: #e7d5a4;
+  --ink: #3c2f1c;
+  --ink-70: rgba(60, 47, 28, 0.7);
+  --ink-55: rgba(60, 47, 28, 0.55);
+  --ink-40: rgba(60, 47, 28, 0.4);
+  --ink-25: rgba(60, 47, 28, 0.25);
+  --ink-12: rgba(60, 47, 28, 0.12);
+  --sage: #66743f;
+  --moss: #4f6337;
+  --terra: #a3512f;
+  --slate: #4e7286;
+  --wax: #9c3428;
+  --wax-hi: #c8563e;
+  --gilt: #a4854c;
+  --gilt-hi: #c9a763;
+  --plum: #7b5876;
+  --ink-s0: #3c2f1c;
+  --ink-s1: #4e7286;
+  --ink-s2: #5c6b3a;
+  --ink-s3: #a05336;
+  --sc: "IM Fell English SC", serif;
+  --body: "IM Fell English", serif;
+  --hand: "Caveat", cursive;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--body);
+  font-size: 16px;
+  color: var(--ink);
+  line-height: 1.5;
+  background: #e2cf9d;
+  padding-bottom: 28px;
+  overflow-x: clip;
+}
+
+/* Painted-map ground behind everything (the #bg div is rendered by App). */
+#bg {
+  position: fixed;
+  inset: -3%;
+  z-index: -1;
+  background: url("/sprites/map-objects/backgrounds/background-light.png") center/cover no-repeat;
+}
+
+/* Warm vignette + paper grain over the whole page. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  background: radial-gradient(ellipse at 50% 38%, transparent 58%, rgba(74, 54, 24, 0.16) 100%);
+}
+
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 61;
+  opacity: 0.06;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input {
+  font: inherit;
+  color: var(--ink);
+}
+
+@keyframes settle {
+  from {
+    transform: translateY(8px);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes fadein {
+  from {
+    opacity: 0;
+  }
+}
+
+.screen {
+  animation: settle 0.35s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

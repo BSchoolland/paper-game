@@ -5,11 +5,10 @@ import { resolve } from "node:path";
 import type { HexCoord, HexStatus, HexIconType, UnitTemplate, ItemDefinition, InventoryState, AttachmentData } from "shared";
 import type { StructureEntry, Dimension, MapManifest, RoomCode, WireLogRecord, RunOutcome, ContractState } from "shared";
 import { bankedXp } from "shared";
-
-const PUBLIC_DIR = resolve(import.meta.dir, "../../client/public");
+import { ASSETS_DIR } from "../../shared/src/paths.js";
 
 function loadMapManifest(dimId: number): MapManifest | null {
-  const p = resolve(PUBLIC_DIR, `sprites/maps/dimension-${dimId}/manifest.json`);
+  const p = resolve(ASSETS_DIR, `sprites/maps/dimension-${dimId}/manifest.json`);
   if (!existsSync(p)) return null;
   try {
     return JSON.parse(readFileSync(p, "utf-8")) as MapManifest;

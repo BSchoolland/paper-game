@@ -14,6 +14,7 @@ import { PROTOCOL_VERSION, getAnimSet, hexKey, getHexIcon, isDecorationHex, buil
 import { DEFAULT_PRESET_ID, expeditionSlots, isManifestable, effectiveStartingTier } from "shared";
 import type { ContractType, ItemDefinition } from "shared";
 import { loadDimension, loadEnemyTemplateRegistry, loadItems, loadCodexEntry } from "./db.js";
+import { ASSETS_DIR, SERVER_SPRITES_DIR, WEB_DIST_DIR } from "../../shared/src/paths.js";
 import {
   startNewRun,
   seedDiscovery,
@@ -1277,7 +1278,7 @@ export const server = Bun.serve({
     if (url.pathname.startsWith(spritesPrefix)) {
       const relativePath = url.pathname.slice(spritesPrefix.length);
       if (relativePath.includes("..")) return new Response("Forbidden", { status: 403 });
-      const filePath = join(import.meta.dir, "..", "sprites", relativePath);
+      const filePath = join(SERVER_SPRITES_DIR, relativePath);
       const file = Bun.file(filePath);
       if (await file.exists()) {
         return new Response(file, {
@@ -1311,7 +1312,7 @@ export const server = Bun.serve({
       }
       const dimItems = loadItems(dimId);
       const itemSprites: Record<string, string> = {};
-      const itemsRoot = join(import.meta.dir, "..", "..", "client", "public");
+      const itemsRoot = ASSETS_DIR;
       for (const item of Object.values(dimItems)) {
         const prefix = item.dimensionId === 0 ? "" : `dimension-${item.dimensionId}/`;
         const rel = `sprites/items/${prefix}${item.sprite}`;
@@ -1327,6 +1328,39 @@ export const server = Bun.serve({
         backgroundPath: dimension.backgroundPath,
         hexDecorationsPath: dimension.hexDecorationsPath,
       }, { headers: CORS_HEADERS });
+    }
+
+    // Shared static assets (sprites/maps/items) live in the top-level public/ store. In dev Vite
+    // serves these; in prod the bun server is the single origin, so serve them from ASSETS_DIR.
+    if (url.pathname.startsWith("/sprites/")) {
+      const rel = url.pathname.slice(1);
+      if (!rel.includes("..")) {
+        const file = Bun.file(join(ASSETS_DIR, rel));
+        if (await file.exists()) {
+          return new Response(file, { headers: { "Cache-Control": "public, max-age=31536000, immutable" } });
+        }
+      }
+      return new Response("Not found", { status: 404 });
+    }
+
+    // Static: serve the built web app for anything not matched above. In prod the bun server is the
+    // single origin (static + /api + /ws); in dev WEB_DIST_DIR is absent and Vite serves the frontend.
+    if (req.method === "GET" && existsSync(WEB_DIST_DIR)) {
+      const rel = url.pathname === "/" ? "index.html" : url.pathname.slice(1);
+      if (!rel.includes("..")) {
+        const asset = Bun.file(join(WEB_DIST_DIR, rel));
+        if (await asset.exists()) {
+          const immutable = url.pathname.startsWith("/assets/");
+          return new Response(asset, {
+            headers: { "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "no-cache" },
+          });
+        }
+      }
+      // SPA fallback: unknown non-file path -> index.html for client-side routing.
+      const index = Bun.file(join(WEB_DIST_DIR, "index.html"));
+      if (await index.exists()) {
+        return new Response(index, { headers: { "Content-Type": "text/html", "Cache-Control": "no-cache" } });
+      }
     }
 
     return new Response("Not found", { status: 404 });

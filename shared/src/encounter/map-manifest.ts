@@ -5,6 +5,6 @@
  */
 export interface MapManifest {
   dimensionId: number;
-  maps: Record<string, string[]>;          // encounterType -> map sprite paths (relative to client/public)
+  maps: Record<string, string[]>;          // encounterType -> map sprite paths (relative to public/)
   masks?: Record<string, string[]>;        // encounterType -> collision mask paths (parallel to maps)
 }

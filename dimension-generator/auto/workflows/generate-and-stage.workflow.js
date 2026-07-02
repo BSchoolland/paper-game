@@ -251,7 +251,7 @@ const artPrompt = [
   "",
   `  ${ENV} bun ${AUTO}/art-agent.ts ${slug}`,
   "",
-  `On success the sprites are extracted to server/sprites/enemies/dimension-${dimId}/, client/public/sprites/items/dimension-${dimId}/, client/public/sprites/map-objects/dimension-${dimId}/, and client/public/sprites/map-decorations/dimension-${dimId}/.`,
+  `On success the sprites are extracted to server/sprites/enemies/dimension-${dimId}/, public/sprites/items/dimension-${dimId}/, public/sprites/map-objects/dimension-${dimId}/, and public/sprites/map-decorations/dimension-${dimId}/.`,
   "",
   "Return a one-paragraph summary of which bundles were generated and which sprite directories were written. Fail loud if the command errors or no images are produced.",
 ].join("\n");
@@ -364,7 +364,7 @@ const mapsPrompt = [
   "",
   "STEP 1 — Generate the dimension reference + encounter maps + collision masks (gpt-image-2 for the maps, OpenAI for collision; takes a few minutes):",
   `  cd ${GEN} && ${ENV} bun ${AUTO}/map-agent.ts --new ${dimId} ${JSON.stringify(dimName)} ${JSON.stringify(spec.description)}`,
-  `  It writes maps + manifest.json + collision masks to client/public/sprites/maps/dimension-${dimId}/.`,
+  `  It writes maps + manifest.json + collision masks to public/sprites/maps/dimension-${dimId}/.`,
   "",
   "STEP 2 — Assert full coverage. v2 dimensions have no structure fallback, so every encounter type MUST have a map. Exits non-zero if any are missing:",
   `  cd ${GEN} && ${ENV} bun ${AUTO}/assert-map-coverage.ts ${dimId}`,
@@ -507,10 +507,10 @@ await agent(
 // ---------------------------------------------------------------------------
 const assetDirs = [
   `${ROOT}/server/sprites/enemies/dimension-${dimId}`,
-  `${ROOT}/client/public/sprites/items/dimension-${dimId}`,
-  `${ROOT}/client/public/sprites/map-objects/dimension-${dimId}`,
-  `${ROOT}/client/public/sprites/map-decorations/dimension-${dimId}`,
-  `${ROOT}/client/public/sprites/maps/dimension-${dimId}`,
+  `${ROOT}/public/sprites/items/dimension-${dimId}`,
+  `${ROOT}/public/sprites/map-objects/dimension-${dimId}`,
+  `${ROOT}/public/sprites/map-decorations/dimension-${dimId}`,
+  `${ROOT}/public/sprites/maps/dimension-${dimId}`,
   bundlesRoot,
 ];
 

@@ -7,10 +7,10 @@ import OpenAI from "openai";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { slugify } from "../slugify.js";
+import { SERVER_SPRITES_DIR } from "../../shared/src/paths.js";
 
 const MODEL = process.env.CONTENT_CHECK_MODEL ?? "gpt-4o-mini";
-const ROOT = join(import.meta.dir, "..", "..");
-const SPRITES_ROOT = process.env.GAME_SPRITES_ROOT ?? join(ROOT, "server/sprites");
+const SPRITES_ROOT = process.env.GAME_SPRITES_ROOT ?? SERVER_SPRITES_DIR;
 
 const [dimIdArg, specPathArg] = process.argv.slice(2);
 const dimId = Number(dimIdArg);

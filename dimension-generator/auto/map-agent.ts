@@ -17,6 +17,7 @@
  */
 import OpenAI from "openai";
 import { join, extname } from "node:path";
+import { ASSETS_DIR } from "../../shared/src/paths.js";
 import { mkdir, copyFile, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { MAP_PROMPTS, fullPrompt } from "./map-prompts.js";
@@ -163,7 +164,7 @@ export async function generateCollisionMask(mapPath: string, outMaskPath: string
 // using MULTIPASS_TYPES to decide pass count. Idempotent; updates the manifest.
 export async function generateMasks(dimId: number): Promise<void> {
   const sub = PUBLIC_SUBDIR(dimId);
-  const dir = join(ROOT, "client/public", sub);
+  const dir = join(ASSETS_DIR, sub);
   const manifest = JSON.parse(await Bun.file(join(dir, "manifest.json")).text()) as MapManifest;
 
   const tasks = Object.entries(manifest.maps).flatMap(([type, files]) =>
@@ -173,7 +174,7 @@ export async function generateMasks(dimId: number): Promise<void> {
   const masks: Record<string, string[]> = {};
   await pool(tasks, 3, async (t) => {
     const maskFile = t.file.replace(/\.png$/i, ".mask.png");
-    await generateCollisionMask(join(ROOT, "client/public", t.file), join(ROOT, "client/public", maskFile), t.passes);
+    await generateCollisionMask(join(ASSETS_DIR, t.file), join(ASSETS_DIR, maskFile), t.passes);
     (masks[t.type] ??= []).push(maskFile);
     console.log(`  ✓ ${maskFile.split("/").pop()} (${t.passes}-pass)`);
   });
@@ -186,7 +187,7 @@ export async function generateMasks(dimId: number): Promise<void> {
 
 export async function generateMaps(dimId: number, referencePath: string): Promise<MapManifest> {
   const sub = PUBLIC_SUBDIR(dimId);
-  const outDir = join(ROOT, "client/public", sub);
+  const outDir = join(ASSETS_DIR, sub);
   await mkdir(outDir, { recursive: true });
 
   console.log(`\n--- Map Agent: dimension ${dimId} ---`);

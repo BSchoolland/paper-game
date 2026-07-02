@@ -9,10 +9,11 @@
  *
  *   bun assert-map-coverage.ts <dimId>
  */
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { existsSync } from "node:fs";
 import { HEX_ICON_TYPES } from "../../shared/src/map/hex-map.js";
 import type { MapManifest } from "../../shared/src/encounter/map-manifest.js";
+import { ASSETS_DIR } from "../../shared/src/paths.js";
 
 const REQUIRED = [...HEX_ICON_TYPES, "wilderness", "dense-wilderness"];
 
@@ -22,8 +23,7 @@ if (!Number.isFinite(dimId)) {
   process.exit(1);
 }
 
-const ROOT = resolve(import.meta.dir, "..", "..");
-const manifestPath = join(ROOT, "client/public/sprites/maps", `dimension-${dimId}`, "manifest.json");
+const manifestPath = join(ASSETS_DIR, "sprites/maps", `dimension-${dimId}`, "manifest.json");
 if (!existsSync(manifestPath)) {
   throw new Error(`v2 map coverage: manifest missing for dimension ${dimId} at ${manifestPath}`);
 }

@@ -1,0 +1,39 @@
+name: Deploy
+
+# Auto-deploy the test site on every push to master. The server pulls, rebuilds the web app, and
+# restarts the PM2 process. Secrets: DEPLOY_HOST, DEPLOY_USER, DEPLOY_SSH_KEY.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$DEPLOY_USER@$DEPLOY_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          export PATH="$HOME/.bun/bin:$PATH"
+          cd /root/apps/paper-game
+          git fetch --all --prune
+          git reset --hard origin/master
+          bun install
+          bun --filter web build
+          pm2 restart paper-game --update-env
+          pm2 save
+          echo "Deployed $(git rev-parse --short HEAD)"
+          REMOTE

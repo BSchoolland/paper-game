@@ -6,8 +6,8 @@
 import { loadDimension, loadEnemyTemplateRegistry, loadItems } from "../../server/src/db.js";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import { ASSETS_DIR, SERVER_SPRITES_DIR } from "../../shared/src/paths.js";
 
-const ROOT = join(import.meta.dir, "..", "..");
 const dimId = Number(process.argv[2]);
 if (!Number.isFinite(dimId)) throw new Error("usage: assert-dimension-playable.ts <dimId>");
 
@@ -27,7 +27,7 @@ for (const id of enemyIds) {
   if (!sprites) { problems.push(`enemy ${id}: no sprites field`); continue; }
   for (const [state, url] of Object.entries(sprites)) {
     const rel = String(url).replace(/^\/api\/sprites\//, "");
-    if (!existsSync(join(ROOT, "server/sprites", rel))) problems.push(`enemy ${id}: missing ${state} sprite (${rel})`);
+    if (!existsSync(join(SERVER_SPRITES_DIR, rel))) problems.push(`enemy ${id}: missing ${state} sprite (${rel})`);
   }
 }
 
@@ -37,7 +37,7 @@ if (itemIds.length === 0) problems.push("no item templates");
 for (const id of itemIds) {
   const it = items[id] as { sprite: string; dimensionId: number };
   const prefix = it.dimensionId === 0 ? "" : `dimension-${it.dimensionId}/`;
-  const stem = join(ROOT, "client/public/sprites/items", `${prefix}${it.sprite}`);
+  const stem = join(ASSETS_DIR, "sprites/items", `${prefix}${it.sprite}`);
   if (!existsSync(`${stem}.png`) && !existsSync(`${stem}.webp`)) problems.push(`item ${id}: missing sprite (${it.sprite})`);
 }
 

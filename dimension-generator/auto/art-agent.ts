@@ -11,6 +11,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import { join, basename } from "node:path";
+import { ASSETS_DIR, SERVER_SPRITES_DIR } from "../../shared/src/paths.js";
 import { existsSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { slugify } from "../slugify.js";
@@ -77,7 +78,7 @@ export function extractSprites(dimId: number, result: BundleResult, spec: any) {
   console.log(`  Extracting: ${name}`);
 
   if (name === "01-background") {
-    const outDir = join(ROOT, "client/public/sprites/map-objects", `dimension-${dimId}`);
+    const outDir = join(ASSETS_DIR, "sprites/map-objects", `dimension-${dimId}`);
     spawnSync("mkdir", ["-p", outDir]);
     spawnSync("cp", [imagePath, join(outDir, "background.png")]);
     console.log(`    Copied background`);
@@ -85,7 +86,7 @@ export function extractSprites(dimId: number, result: BundleResult, spec: any) {
   }
 
   if (name === "02-decorations") {
-    const outDir = join(ROOT, "client/public/sprites/map-objects", `dimension-${dimId}`);
+    const outDir = join(ASSETS_DIR, "sprites/map-objects", `dimension-${dimId}`);
     spawnSync("mkdir", ["-p", outDir]);
     const r = spawnSync("python3", [
       join(SCRIPTS, "process-decoration-sheet.py"), imagePath, outDir,
@@ -95,7 +96,7 @@ export function extractSprites(dimId: number, result: BundleResult, spec: any) {
   }
 
   if (name === "07-map-decorations") {
-    const outDir = join(ROOT, "client/public/sprites/map-decorations", `dimension-${dimId}`);
+    const outDir = join(ASSETS_DIR, "sprites/map-decorations", `dimension-${dimId}`);
     spawnSync("mkdir", ["-p", outDir]);
     const r = spawnSync("python3", [
       join(SCRIPTS, "process-decoration-sheet.py"), imagePath, outDir,
@@ -105,7 +106,7 @@ export function extractSprites(dimId: number, result: BundleResult, spec: any) {
   }
 
   if (name.match(/^\d+-enemies-/)) {
-    const outDir = join(ROOT, "server/sprites/enemies", `dimension-${dimId}`);
+    const outDir = join(SERVER_SPRITES_DIR, "enemies", `dimension-${dimId}`);
     spawnSync("mkdir", ["-p", outDir]);
 
     const batchIdx = parseInt(name.slice(0, 2)) - 3;
@@ -122,7 +123,7 @@ export function extractSprites(dimId: number, result: BundleResult, spec: any) {
   }
 
   if (name === "08-items") {
-    const outDir = join(ROOT, "client/public/sprites/items", `dimension-${dimId}`);
+    const outDir = join(ASSETS_DIR, "sprites/items", `dimension-${dimId}`);
     spawnSync("mkdir", ["-p", outDir]);
 
     const names = extractItemNames(spec);

@@ -13,6 +13,7 @@ import { generateDimensionMaps } from "./map-agent.js";
 import { uploadMaps } from "./upload-maps-s3.js";
 import { HEX_ICON_TYPES } from "../../shared/src/map/hex-map.js";
 import type { MapManifest } from "../../shared/src/encounter/map-manifest.js";
+import { ASSETS_DIR } from "../../shared/src/paths.js";
 
 const ROOT = resolve(import.meta.dir, "..", "..");
 const REQUIRED = [...HEX_ICON_TYPES, "wilderness", "dense-wilderness"];
@@ -46,7 +47,7 @@ function coverageMissing(manifest: MapManifest): string[] {
 // masks — lets the backfill resume after a codex usage-limit stop without
 // regenerating finished dimensions.
 async function alreadyComplete(dimId: number): Promise<boolean> {
-  const p = join(ROOT, "client/public/sprites/maps", `dimension-${dimId}`, "manifest.json");
+  const p = join(ASSETS_DIR, "sprites/maps", `dimension-${dimId}`, "manifest.json");
   if (!existsSync(p)) return false;
   const m = JSON.parse(await Bun.file(p).text()) as MapManifest;
   const mapsOk = coverageMissing(m).length === 0;
