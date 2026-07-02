@@ -132,4 +132,68 @@ describe("db migration idempotency (v9)", () => {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 30000);
+
+  it("v8 item dedup folds a legacy duplicate into an already-existing d<dim>- successor", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "coop-migration-dedup-"));
+    const dbPath = join(dir, "dedup.sqlite");
+    try {
+      // The real pre-v8 failure shape: 'short-sword' duplicated across dims 0 and 501, while the
+      // collision-aware pipeline already saved 'd501-short-sword' in dim 501 — the rename target
+      // exists, so the migration must fold, not collide (UNIQUE items.id, items.dimension_id).
+      const seed = new Database(dbPath);
+      seed.exec("CREATE TABLE dimensions (id INTEGER PRIMARY KEY, name TEXT NOT NULL, structures_json TEXT NOT NULL DEFAULT '[]', background_path TEXT, hex_decorations_path TEXT, status TEXT NOT NULL DEFAULT 'approved')");
+      seed.exec("CREATE TABLE items (id TEXT NOT NULL, dimension_id INTEGER NOT NULL, item_json TEXT NOT NULL, PRIMARY KEY (id, dimension_id))");
+      seed.exec("CREATE TABLE runs (id INTEGER PRIMARY KEY AUTOINCREMENT, dimension_id INTEGER NOT NULL DEFAULT 1, capacity INTEGER NOT NULL DEFAULT 2, host_client_id TEXT, active INTEGER NOT NULL DEFAULT 1, party_q INTEGER NOT NULL DEFAULT 0, party_r INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL DEFAULT 0, completed_at INTEGER, outcome TEXT, started_at INTEGER, phase TEXT NOT NULL DEFAULT 'lobby', contract_json TEXT)");
+      seed.exec("CREATE TABLE run_cleared_hexes (run_id INTEGER NOT NULL, q INTEGER NOT NULL, r INTEGER NOT NULL, PRIMARY KEY (run_id, q, r))");
+      seed.exec("CREATE TABLE discovered_hexes (dimension_id INTEGER NOT NULL, q INTEGER NOT NULL, r INTEGER NOT NULL, PRIMARY KEY (dimension_id, q, r))");
+      seed.exec("CREATE TABLE discovered_hex_icons (dimension_id INTEGER NOT NULL, q INTEGER NOT NULL, r INTEGER NOT NULL, icon TEXT NOT NULL, PRIMARY KEY (dimension_id, q, r))");
+      seed.exec("CREATE TABLE run_seats (run_id INTEGER NOT NULL, seat_index INTEGER NOT NULL, client_id TEXT, display_name TEXT NOT NULL DEFAULT '', controller_kind TEXT NOT NULL DEFAULT 'human', token_salt TEXT, account_id TEXT, joined_at INTEGER NOT NULL DEFAULT 0, left_at INTEGER, PRIMARY KEY (run_id, seat_index))");
+      seed.exec("CREATE TABLE run_seat_items (run_id INTEGER NOT NULL, seat_index INTEGER NOT NULL, location TEXT NOT NULL, slot_order INTEGER NOT NULL, item_id TEXT NOT NULL, PRIMARY KEY (run_id, seat_index, location, slot_order))");
+      seed.exec("CREATE TABLE run_seat_attachments (run_id INTEGER NOT NULL, seat_index INTEGER NOT NULL, item_id TEXT NOT NULL, attachment_json TEXT NOT NULL, PRIMARY KEY (run_id, seat_index, item_id))");
+      seed.exec("CREATE TABLE profiles (account_id TEXT PRIMARY KEY, display_name TEXT NOT NULL, xp INTEGER NOT NULL DEFAULT 0, equipped_title_id TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL)");
+      seed.exec("CREATE TABLE run_pending_xp (run_id INTEGER NOT NULL, account_id TEXT NOT NULL, amount INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL, PRIMARY KEY (run_id, account_id))");
+      seed.exec("INSERT INTO dimensions (id, name) VALUES (0, 'Origin'), (501, 'The Mire')");
+      seed.exec(`INSERT INTO items (id, dimension_id, item_json) VALUES
+        ('short-sword', 0, '{"id":"short-sword","name":"Short Sword"}'),
+        ('short-sword', 501, '{"id":"short-sword","name":"Short Sword"}'),
+        ('d501-short-sword', 501, '{"id":"d501-short-sword","name":"Short Sword"}'),
+        ('sling', 501, '{"id":"sling","name":"Sling"}'),
+        ('sling', 600, '{"id":"sling","name":"Sling"}')`);
+      seed.exec("INSERT INTO runs (id, dimension_id) VALUES (7, 501)");
+      seed.exec("INSERT INTO run_seat_items (run_id, seat_index, location, slot_order, item_id) VALUES (7, 0, 'equipped', 0, 'short-sword')");
+      seed.exec("PRAGMA user_version = 7");
+      seed.close();
+
+      const proc = Bun.spawn({
+        cmd: ["bun", "-e", `await import(${JSON.stringify(DB_TS)})`],
+        cwd: resolve(import.meta.dir, "../.."),
+        env: { ...process.env, GAME_DB_PATH: dbPath, GAME_SKIP_SEED: "1" },
+        stdout: "pipe",
+        stderr: "pipe",
+      });
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) console.error("[dedup] stderr:", await new Response(proc.stderr).text());
+      expect(exitCode).toBe(0);
+
+      const check = new Database(dbPath);
+      // Legacy 501 row folded into the existing successor; dim-0 owner untouched.
+      const swords = check.query("SELECT id, dimension_id FROM items WHERE id LIKE '%short-sword%' ORDER BY dimension_id").all() as { id: string; dimension_id: number }[];
+      expect(swords).toEqual([
+        { id: "short-sword", dimension_id: 0 },
+        { id: "d501-short-sword", dimension_id: 501 },
+      ]);
+      // Seat reference in the dim-501 run re-pointed to the successor.
+      const ref = check.query("SELECT item_id FROM run_seat_items WHERE run_id = 7").get() as { item_id: string };
+      expect(ref.item_id).toBe("d501-short-sword");
+      // No-successor case still renames: sling in dim 600 becomes d600-sling with item_json.id rewritten.
+      const slings = check.query("SELECT id, dimension_id, json_extract(item_json, '$.id') AS jid FROM items WHERE id LIKE '%sling%' ORDER BY dimension_id").all() as { id: string; dimension_id: number; jid: string }[];
+      expect(slings).toEqual([
+        { id: "sling", dimension_id: 501, jid: "sling" },
+        { id: "d600-sling", dimension_id: 600, jid: "d600-sling" },
+      ]);
+      check.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 30000);
 });

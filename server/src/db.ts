@@ -374,8 +374,17 @@ const SCHEMA_VERSION = 3;
         const owners = db.query("SELECT dimension_id FROM items WHERE id = ? ORDER BY dimension_id").all(id) as { dimension_id: number }[];
         for (const { dimension_id } of owners.slice(1)) {
           const newId = `d${dimension_id}-${id}`;
-          db.prepare("UPDATE items SET id = ?, item_json = json_set(item_json, '$.id', ?) WHERE id = ? AND dimension_id = ?")
-            .run(newId, newId, id, dimension_id);
+          // The pipeline may have already re-saved this design under the d<dim>- convention
+          // (collision-aware saveItems), leaving the legacy row as a superseded duplicate in the
+          // same dimension. Renaming would collide with the (id, dimension_id) PK — fold the
+          // legacy row into its successor instead.
+          const superseded = db.query("SELECT 1 FROM items WHERE id = ? AND dimension_id = ?").get(newId, dimension_id);
+          if (superseded) {
+            db.prepare("DELETE FROM items WHERE id = ? AND dimension_id = ?").run(id, dimension_id);
+          } else {
+            db.prepare("UPDATE items SET id = ?, item_json = json_set(item_json, '$.id', ?) WHERE id = ? AND dimension_id = ?")
+              .run(newId, newId, id, dimension_id);
+          }
           db.prepare("UPDATE run_seat_items SET item_id = ? WHERE item_id = ? AND run_id IN (SELECT id FROM runs WHERE dimension_id = ?)")
             .run(newId, id, dimension_id);
           db.prepare("UPDATE run_seat_attachments SET item_id = ? WHERE item_id = ? AND run_id IN (SELECT id FROM runs WHERE dimension_id = ?)")
