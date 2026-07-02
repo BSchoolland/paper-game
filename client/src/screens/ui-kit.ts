@@ -7,9 +7,10 @@
  * Cinzel display headers over a clean Inter body, generous padding, wide 2-column layouts.
  */
 
-import type { StarterPreset } from "shared";
+import type { ItemDefinition, ItemRarity, StarterPreset } from "shared";
 import { titleById } from "shared";
 import { assetUrl, mapAssetUrl } from "../renderer/asset-url.js";
+import { itemSpriteUrl } from "../renderer/item-sprites.js";
 
 export const THEME = {
   // surfaces
@@ -50,10 +51,11 @@ export const FONT = {
 const cinzel = FONT.cinzel;
 const body = FONT.body;
 
-const MAP_SCENE: Record<"home" | "lobby" | "gameover", string> = {
+const MAP_SCENE: Record<"home" | "lobby" | "gameover" | "victory", string> = {
   home: "/sprites/maps/dimension-0/gateway-city-0.png",
   lobby: "/sprites/maps/dimension-0/town-0.png",
   gameover: "/sprites/maps/dimension-0/great-ruins-0.png",
+  victory: "/sprites/maps/dimension-0/gateway-city-0.png",
 };
 
 /** Loads Inter once (Cinzel is loaded by the host page / harness). */
@@ -69,9 +71,10 @@ function ensureFonts(): void {
 /**
  * Full-bleed atmosphere layer. Insert as the FIRST child of a screen container (container itself
  * should be `background:#0b0906`). A scaled painted map under a warm center-glowing vignette; the
- * panel is pulled in so more painted backdrop shows around the edges. gameover mixes a red tint.
+ * panel is pulled in so more painted backdrop shows around the edges. gameover mixes a red tint;
+ * victory a warm gold one.
  */
-export function boardBackdrop(scene: "home" | "lobby" | "gameover"): HTMLDivElement {
+export function boardBackdrop(scene: "home" | "lobby" | "gameover" | "victory"): HTMLDivElement {
   ensureFonts();
   const layer = document.createElement("div");
   layer.style.cssText = `position:absolute; inset:0; overflow:hidden; pointer-events:none;`;
@@ -84,12 +87,15 @@ export function boardBackdrop(scene: "home" | "lobby" | "gameover"): HTMLDivElem
     filter:saturate(0.92) brightness(0.78);
   `;
 
-  const redTint = scene === "gameover" ? ", rgba(40,8,8,.28)" : "";
+  const tint =
+    scene === "gameover" ? ", rgba(40,8,8,.28)"
+    : scene === "victory" ? ", rgba(64,48,10,.26)"
+    : "";
   const vignette = document.createElement("div");
   vignette.style.cssText = `
     position:absolute; inset:0;
     background:
-      radial-gradient(120% 90% at 50% 35%, rgba(11,9,6,0.10) 0%, rgba(11,9,6,0.48) 55%, rgba(7,5,3,0.90) 100%${redTint}),
+      radial-gradient(120% 90% at 50% 35%, rgba(11,9,6,0.10) 0%, rgba(11,9,6,0.48) 55%, rgba(7,5,3,0.90) 100%${tint}),
       linear-gradient(180deg, rgba(7,5,3,0.50) 0%, rgba(7,5,3,0.18) 40%, rgba(7,5,3,0.74) 100%);
   `;
 
@@ -296,8 +302,8 @@ export function titleTag(titleId: string): HTMLDivElement {
   return tag;
 }
 
-/** 6px XP progress bar; `pct` is clamped to [0, 1]. */
-export function xpBar(pct: number): HTMLDivElement {
+/** 6px gold progress bar (XP, contract progress); `pct` is clamped to [0, 1]. */
+export function progressBar(pct: number): HTMLDivElement {
   const track = document.createElement("div");
   track.style.cssText = `
     width:100%; height:6px; border-radius:3px; overflow:hidden; box-sizing:border-box;
@@ -311,6 +317,10 @@ export function xpBar(pct: number): HTMLDivElement {
   `;
   track.appendChild(fill);
   return track;
+}
+
+export function xpBar(pct: number): HTMLDivElement {
+  return progressBar(pct);
 }
 
 const CLASS_ART: Record<string, string> = {
@@ -348,6 +358,46 @@ export function itemIcon(id: string, opts?: { dimmed?: boolean }): HTMLDivElemen
   img.src = assetUrl(`/sprites/items/${id}.webp`);
   img.title = id;
   img.style.cssText = `width:30px; height:30px; object-fit:contain;`;
+  chip.appendChild(img);
+  return chip;
+}
+
+/** Rarity accent per item tier — existing THEME tokens only (03-loot-codex §6.1). */
+export const RARITY_COLOR: Record<ItemRarity, string> = {
+  common: THEME.muted,
+  uncommon: THEME.green,
+  rare: THEME.gold,
+  epic: THEME.danger,
+  legendary: THEME.parchHi,
+};
+
+/**
+ * The cross-dimension sibling of `itemIcon` (which stays dimension-0-only for preset kit):
+ * same dark gold-keyline chip, but the art comes from `itemSpriteUrl` and the border is
+ * rarity-tinted. A missing sprite (the known .png/.webp gap in generated dims) degrades to
+ * a rarity-colored ◆ glyph — never a throw; the name still shows via the tooltip.
+ */
+export function designChip(item: ItemDefinition, sizePx = 40): HTMLDivElement {
+  const chip = document.createElement("div");
+  chip.title = item.name;
+  chip.style.cssText = `
+    width:${sizePx}px; height:${sizePx}px; box-sizing:border-box; flex:0 0 auto;
+    display:flex; align-items:center; justify-content:center;
+    border-radius:8px;
+    background:radial-gradient(circle at 50% 35%, rgba(184,137,58,0.18), rgba(11,9,6,0.5));
+    border:1px solid ${RARITY_COLOR[item.rarity]}8c;
+    box-shadow:0 2px 6px rgba(0,0,0,0.4) inset;
+  `;
+  const inner = Math.round(sizePx * 0.75);
+  const img = document.createElement("img");
+  img.src = itemSpriteUrl(item);
+  img.style.cssText = `width:${inner}px; height:${inner}px; object-fit:contain;`;
+  img.onerror = () => {
+    const glyph = document.createElement("span");
+    glyph.textContent = "◆";
+    glyph.style.cssText = `font:${Math.round(sizePx * 0.45)}px ${body}; color:${RARITY_COLOR[item.rarity]};`;
+    img.replaceWith(glyph);
+  };
   chip.appendChild(img);
   return chip;
 }

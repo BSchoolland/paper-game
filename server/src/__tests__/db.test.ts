@@ -8,15 +8,17 @@ const db = await import("../db.js");
 
 describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => {
   it("discovery is GLOBAL per dimension; discoverHex reports first-ever vs repeat", () => {
-    // dim 1 discovery is visible in dim 1 but NOT dim 2.
-    expect(db.discoverHex(1, { q: 5, r: 0 })).toBe(true); // first-ever
-    expect(db.discoverHex(1, { q: 5, r: 0 })).toBe(false); // repeat -> no new row
-    expect(db.loadDiscoveredHexes(1)["5,0"]).toBe("explored");
-    expect(db.loadDiscoveredHexes(2)["5,0"]).toBeUndefined();
+    // Uses dims 90/91 (untouched by seeds, the harness, or other tests) — the db.ts module opens ONE
+    // shared :memory: connection across every test file, so first-ever/count assertions must use
+    // dimensions nothing else discovers into.
+    expect(db.discoverHex(90, { q: 5, r: 0 })).toBe(true); // first-ever
+    expect(db.discoverHex(90, { q: 5, r: 0 })).toBe(false); // repeat -> no new row
+    expect(db.loadDiscoveredHexes(90)["5,0"]).toBe("explored");
+    expect(db.loadDiscoveredHexes(91)["5,0"]).toBeUndefined();
 
-    db.seedDiscovery(2, 1); // 7-hex disc into dim 2 only
-    expect(Object.keys(db.loadDiscoveredHexes(2)).length).toBe(7);
-    expect(db.loadDiscoveredHexes(2)["5,0"]).toBeUndefined();
+    db.seedDiscovery(91, 1); // 7-hex disc into dim 91 only
+    expect(Object.keys(db.loadDiscoveredHexes(91)).length).toBe(7);
+    expect(db.loadDiscoveredHexes(91)["5,0"]).toBeUndefined();
   });
 
   it("run_cleared is per-run; a discovery persists across runs in the same dimension", () => {
@@ -26,10 +28,10 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
 
     // commitExplore in runA discovers (q,r) globally for dim 7 AND clears it for runA only.
     expect(db.commitExplore(7, runA, { q: 1, r: 0 }, "wilderness")).toBe(true); // first-ever
-    db.markRunCleared(runA, { q: 0, r: 0 });
+    db.markRunCleared(runA, 7, { q: 0, r: 0 });
 
-    expect([...db.loadRunCleared(runA)].sort()).toEqual(["0,0", "1,0"]);
-    expect(db.loadRunCleared(runB).size).toBe(0); // runB has no cleared hexes
+    expect([...db.loadRunCleared(runA, 7)].sort()).toEqual(["0,0", "1,0"]);
+    expect(db.loadRunCleared(runB, 7).size).toBe(0); // runB has no cleared hexes
 
     // The community discovery from runA is visible to the later runB in the same dimension.
     expect(db.loadDiscoveredHexes(7)["1,0"]).toBe("explored");
@@ -94,7 +96,7 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
   it("round-trips a per-seat inventory (empty) and tolerates no seeded items", () => {
     const runId = db.startNewRun(1, "inv", 2);
     db.saveSeatInventory(runId, 0, { bag: new Array(16).fill(null), equipped: [], attachments: {} });
-    const inv = db.loadSeatInventory(runId, 0, 1);
+    const inv = db.loadSeatInventory(runId, 0);
     expect(inv.bag.length).toBe(16);
     expect(inv.equipped.length).toBe(0);
   });
@@ -131,10 +133,10 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
 
   it("commitExplore advances global discovery + icon + per-run cleared + party position atomically (write point 4 / R13.2)", () => {
     const runId = db.startNewRun(11, "explorer", 2);
-    db.markRunCleared(runId, { q: 0, r: 0 });
+    db.markRunCleared(runId, 11, { q: 0, r: 0 });
     db.commitExplore(11, runId, { q: 1, r: 0 }, "wilderness");
 
-    expect([...db.loadRunCleared(runId)].sort()).toEqual(["0,0", "1,0"]);
+    expect([...db.loadRunCleared(runId, 11)].sort()).toEqual(["0,0", "1,0"]);
     expect(db.loadDiscoveredHexes(11)["1,0"]).toBe("explored");
     expect(db.loadDiscoveredHexIcons(11)["1,0"]).toBe("wilderness");
     const run = db.loadRun(runId)!;
@@ -151,7 +153,7 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
     expect(erased).toBe(1);
     expect(db.loadRun(runId)).toBeNull();
     expect(db.loadRunSeats(runId).length).toBe(0);
-    expect(db.loadRunCleared(runId).size).toBe(0); // per-run cleared erased
+    expect(db.loadRunCleared(runId, 12).size).toBe(0); // per-run cleared erased
     expect(db.findActiveSeatForClient("gdpr")).toBeNull();
     // The community discovery is shared, non-personal world state and survives the erasure.
     expect(db.loadDiscoveredHexes(12)["1,0"]).toBe("explored");
@@ -163,5 +165,89 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
     expect(db.verifySessionToken(token, "clientA", salt)).toBe(true);
     expect(db.verifySessionToken(token, "clientB", salt)).toBe(false);
     expect(db.verifySessionToken(token, "clientA", db.newTokenSalt())).toBe(false);
+  });
+});
+
+// =====================================================================================
+// Contracts & run outcomes (v7): pending-XP ledger, banking, contract snapshot
+// (docs/meta-loop/02-contracts.md §8)
+// =====================================================================================
+
+let acctSeq = 0;
+
+/** Minimal profile row so bankXpStmt has a target (accounts.ts owns real minting). */
+function mkProfileAccount(): string {
+  const id = `acct-${++acctSeq}`;
+  const now = new Date().toISOString();
+  db.db
+    .prepare("INSERT INTO profiles (account_id, display_name, xp, created_at, updated_at) VALUES (?, ?, 0, ?, ?)")
+    .run(id, `T${acctSeq}`, now, now);
+  return id;
+}
+
+function profileXp(accountId: string): number {
+  return (db.db.prepare("SELECT xp FROM profiles WHERE account_id = ?").get(accountId) as { xp: number }).xp;
+}
+
+describe("pending-XP ledger + finalizeRun banking (v7)", () => {
+  it("accruePendingXp upserts per (run, account) and returns the running total", () => {
+    const runId = db.startNewRun(1, "ledger-a", 2);
+    const a = mkProfileAccount();
+    const b = mkProfileAccount();
+
+    expect(db.accruePendingXp(runId, a, 25)).toBe(25);
+    expect(db.accruePendingXp(runId, a, 25)).toBe(50); // same account accumulates
+    expect(db.accruePendingXp(runId, b, 25)).toBe(25); // distinct accounts are separate rows
+
+    const rows = db.loadPendingXp(runId).sort((x, y) => x.account_id.localeCompare(y.account_id));
+    expect(rows).toEqual([
+      { account_id: a, amount: 50 },
+      { account_id: b, amount: 25 },
+    ]);
+  });
+
+  it("finalizeRun banks the ledger with the outcome multiplier — exactly once (all four outcomes)", () => {
+    const cases = [
+      { outcome: "victory" as const, banked: 25 },
+      { outcome: "retreat" as const, banked: 12 }, // floor(25 * 0.5)
+      { outcome: "defeat" as const, banked: 12 },
+      { outcome: "abandoned" as const, banked: 12 },
+    ];
+    for (const { outcome, banked } of cases) {
+      const runId = db.startNewRun(1, `bank-${outcome}`, 2);
+      const account = mkProfileAccount();
+      db.accruePendingXp(runId, account, 25);
+
+      expect(db.finalizeRun(runId, outcome)).toBe(true);
+      expect(profileXp(account)).toBe(banked);
+      // Ledger rows survive banking (audit + settlement pushes read them back).
+      expect(db.loadPendingXp(runId)).toEqual([{ account_id: account, amount: 25 }]);
+
+      // The load-bearing idempotency proof: a second finalize is a no-op and does NOT re-bank.
+      expect(db.finalizeRun(runId, "abandoned")).toBe(false);
+      expect(profileXp(account)).toBe(banked);
+    }
+  });
+
+  it("saveRunContract round-trips through runs.contract_json and freezes on a finalized run", () => {
+    const runId = db.startNewRun(1, "contract-rt", 2);
+    const state = { type: "chart-hexes", targetHex: null, targetDimensionId: null, progress: 3, required: 10, completed: false };
+    db.saveRunContract(runId, state as never);
+    expect(JSON.parse(db.loadRun(runId)!.contract_json!)).toEqual(state);
+
+    db.finalizeRun(runId, "retreat");
+    db.saveRunContract(runId, { ...state, progress: 9 } as never); // AND active = 1 -> no-op
+    expect(JSON.parse(db.loadRun(runId)!.contract_json!)).toEqual(state);
+  });
+
+  it("eraseClient deletes the client's run_pending_xp rows with the run's other rows", () => {
+    const runId = db.startNewRun(1, "gdpr-xp", 2);
+    db.upsertRunSeat(runId, 0, { clientId: "gdpr-xp", displayName: "X", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null });
+    const account = mkProfileAccount();
+    db.accruePendingXp(runId, account, 25);
+    expect(db.loadPendingXp(runId).length).toBe(1);
+
+    expect(db.eraseClient("gdpr-xp")).toBe(1);
+    expect(db.loadPendingXp(runId)).toEqual([]);
   });
 });

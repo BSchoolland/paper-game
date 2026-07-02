@@ -1,4 +1,4 @@
-import type { EntityId, GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord } from "shared";
+import type { EntityId, GameEvent, GameState, PlayerAction, TeamId, EncounterType, HexCoord, ArchetypeId } from "shared";
 import {
   resolveAction,
   isActionLegal,
@@ -6,7 +6,9 @@ import {
   serializeGameState,
   generateEncounter,
   setTemplateRegistry,
+  hexDistance,
 } from "shared";
+import { REST_BARRIER_HP } from "shared";
 import { loadDimension, loadEnemyTemplateRegistry } from "./db.js";
 import { loadCollisionGrid, loadMaskCollision } from "./collision-loader.js";
 import {
@@ -36,12 +38,18 @@ function logDeniedMove(state: GameState, action: PlayerAction, reason: string): 
 
 export class EncounterSession {
   state: GameState;
+  /** The themed group this encounter rolled — rides combatStart for flavor (05-difficulty flag #11). */
+  readonly archetype: ArchetypeId;
+  /** The scaled enemy budget this encounter was composed against (telemetry / test handle, §2.5). */
+  readonly effectiveBudget: number;
   readonly heroBrains = new Map<EntityId, HeroController>();
   private turnIndex = 0;
   private aiRunner: AiTurnRunner;
 
-  private constructor(state: GameState) {
+  private constructor(state: GameState, archetype: ArchetypeId, effectiveBudget: number) {
     this.state = state;
+    this.archetype = archetype;
+    this.effectiveBudget = effectiveBudget;
     this.aiRunner = new AiTurnRunner({
       getState: () => this.state,
       setState: (s) => { this.state = s; },
@@ -60,11 +68,17 @@ export class EncounterSession {
     hexCoord: HexCoord;
     runId: number;
     dimensionId: number;
+    dimensionTier: number | null;
+    rested: boolean;
   }): Promise<EncounterSession> {
-    const { seats, hexType, hexCoord, runId, dimensionId } = opts;
+    const { seats, hexType, hexCoord, runId, dimensionId, dimensionTier, rested } = opts;
     const dimension = loadDimension(dimensionId)!;
     setTemplateRegistry(loadEnemyTemplateRegistry(dimensionId));
-    const encounter = generateEncounter(hexType, dimension, hexCoord.q, hexCoord.r, runId);
+    const encounter = generateEncounter(hexType, dimension, hexCoord.q, hexCoord.r, runId, {
+      dimensionTier,
+      distanceFromOrigin: hexDistance(hexCoord, { q: 0, r: 0 }), // every dimension's origin is (0,0)
+      partySize: seats.length, // = room capacity; bots included by design (they fight)
+    });
     const map = buildEncounterMap(encounter);
     if (map.mapDefinition.mapImage) {
       if (map.mapDefinition.maskImage) await loadMaskCollision(map.grid, map.mapDefinition.maskImage);
@@ -72,7 +86,22 @@ export class EncounterSession {
       await loadCollisionGrid(map.grid, map.mapDefinition.objects, dimension.structures);
     }
     const entities = placeEncounterEntities(encounter, map.grid, seats);
-    return new EncounterSession(createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition }));
+    let state = createGameState({ entities, grid: map.grid, mapDefinition: map.mapDefinition });
+    // Rested (05-difficulty flag #2): every hero enters this combat with REST_BARRIER_HP barrier.
+    // Applied AFTER createGameState because its turn-1 startTurn clears the starting (red/hero) team's
+    // barrier (turn-resolver.ts) — a construction-time stamp would be wiped before the fight begins.
+    // Enemies are blue, so they never receive it. The barrier persists through the heroes' first turn
+    // and the enemies' first assault, clearing at the heroes' turn-2 start (absorbs the first hit).
+    if (rested) {
+      const withBarrier = new Map(state.entities);
+      for (const seat of seats) {
+        const hero = withBarrier.get(seat.heroEntityId);
+        if (!hero) throw new Error(`createEncounter: rested hero ${seat.heroEntityId} missing after createGameState`);
+        withBarrier.set(seat.heroEntityId, { ...hero, barrier: REST_BARRIER_HP });
+      }
+      state = { ...state, entities: withBarrier };
+    }
+    return new EncounterSession(state, encounter.archetype, encounter.effectiveBudget);
   }
 
   serialize(): object {

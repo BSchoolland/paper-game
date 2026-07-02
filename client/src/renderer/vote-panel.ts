@@ -1,15 +1,25 @@
-import type { VoteStatePayload } from "shared";
+import type { VoteKind, VoteStatePayload } from "shared";
 import type { RoomConnection } from "../net/connection.js";
 import type { SeatContext } from "../state/seat-context.js";
+import { RARITY_COLOR, designChip } from "../screens/ui-kit.js";
+
+const TITLE_BY_KIND: Record<VoteKind, string> = {
+  move: "Move proposed",
+  retreat: "Retreat proposed",
+  travel: "Descent proposed",
+  loot: "Claim proposed",
+};
 
 /**
- * The overworld movement-vote panel. Renders the open `voteState` — a tally over the
- * frozen electorate plus a deadline countdown — with yes/no buttons for the local seat. Voting is
- * server-authoritative: the panel only renders `voteState` and clears on `moveResolved`; it never
- * resolves locally. Hidden when there is no open vote.
+ * The overworld vote panel (move + retreat + travel + loot proposals). Renders the open `voteState` — a tally
+ * over the frozen electorate plus a deadline countdown — with yes/no buttons for the local seat.
+ * Voting is server-authoritative: the panel only renders `voteState` and clears on `voteState:
+ * null` / `moveResolved`; it never resolves locally. Hidden when there is no open vote.
  */
 export class VotePanel {
   private container: HTMLDivElement;
+  private title: HTMLDivElement;
+  private subtitle: HTMLDivElement;
   private tally: HTMLDivElement;
   private countdown: HTMLDivElement;
   private yesBtn: HTMLButtonElement;
@@ -41,10 +51,13 @@ export class VotePanel {
       pointer-events: auto;
     `;
 
-    const title = document.createElement("div");
-    title.style.cssText = "font-size:14px; font-weight:bold;";
-    title.textContent = "Move proposed";
-    this.container.appendChild(title);
+    this.title = document.createElement("div");
+    this.title.style.cssText = "font-size:14px; font-weight:bold;";
+    this.container.appendChild(this.title);
+
+    this.subtitle = document.createElement("div");
+    this.subtitle.style.cssText = "font-size:12px; color:#8a7a68; display:none;";
+    this.container.appendChild(this.subtitle);
 
     this.tally = document.createElement("div");
     this.tally.style.cssText = "font-size:13px;";
@@ -92,6 +105,30 @@ export class VotePanel {
 
   private render(): void {
     const vote = this.vote!;
+    this.title.textContent = TITLE_BY_KIND[vote.kind];
+    this.subtitle.innerHTML = "";
+    this.subtitle.style.display = vote.kind === "move" ? "none" : "block";
+    if (vote.kind === "retreat") {
+      this.subtitle.textContent = "End the run at this gateway — bank 50% of pending XP";
+    } else if (vote.kind === "travel") {
+      this.subtitle.textContent = `Travel the gateway to ${vote.travel!.toName} (Tier ${vote.travel!.toTier})`;
+    } else if (vote.kind === "loot") {
+      const item = vote.loot!.item;
+      const proposer = this.seat.room?.seats.find((s) => s.seatId === vote.proposerSeatId);
+      this.subtitle.style.display = "flex";
+      this.subtitle.style.alignItems = "center";
+      this.subtitle.style.gap = "6px";
+      this.subtitle.appendChild(designChip(item, 26));
+      const line = document.createElement("span");
+      const itemName = document.createElement("b");
+      itemName.textContent = item.name;
+      itemName.style.color = RARITY_COLOR[item.rarity];
+      line.append(
+        document.createTextNode(`${proposer ? proposer.displayName : vote.proposerSeatId} claims `),
+        itemName,
+      );
+      this.subtitle.appendChild(line);
+    }
     let yes = 0;
     let no = 0;
     for (const seatId of vote.electorate) {

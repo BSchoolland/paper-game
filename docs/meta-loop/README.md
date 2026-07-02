@@ -75,13 +75,15 @@ gifting between accounts, shops, spatial hub world, post-victory continue-explor
 | # | Feature | Status | Design doc |
 |---|---------|--------|------------|
 | 1 | Accounts & community foundation | IN PROGRESS | `docs/meta-loop/01-accounts.md` |
-| 2 | Contracts & run outcomes (victory/retreat) | pending | `docs/meta-loop/02-contracts.md` |
-| 3 | Loot & codex | pending | `docs/meta-loop/03-loot-codex.md` |
-| 4 | Portals & tiered multiverse | pending | `docs/meta-loop/04-portals.md` |
-| 5 | Difficulty & themed encounters | pending | `docs/meta-loop/05-difficulty.md` |
+| 2 | Contracts & run outcomes (victory/retreat) | DONE | `docs/meta-loop/02-contracts.md` |
+| 3 | Loot & codex | DONE | `docs/meta-loop/03-loot-codex.md` |
+| 4 | Portals & tiered multiverse | DONE | `docs/meta-loop/04-portals.md` |
+| 5 | Difficulty & themed encounters | DONE | `docs/meta-loop/05-difficulty.md` |
 
-Order follows the dependency chain: codex needs accounts; retreat needs gateways to mean
-something; scaling needs tiers to exist. Each workflow updates its row when done.
+Implementation order is 1 → 2 → 4 → 3 → 5: codex needs accounts; retreat needs gateways
+to mean something; the manifest tier-gate needs dimension tiers; scaling needs tiers too.
+Features 2–5 are designed sequentially in that same order, each design treating its
+predecessors' docs as binding contracts.
 
 ## Feature spec summaries
 

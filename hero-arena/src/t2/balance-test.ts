@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { resolveAction } from "../../../shared/src/index.js";
 import type { GameEvent } from "../../../shared/src/index.js";
 import { generateEncounter } from "../../../shared/src/encounter/encounter.js";
+import { BASELINE_SCALING } from "../../../shared/src/encounter/difficulty.js";
 import type { EncounterType } from "../../../shared/src/encounter/encounter.js";
 import type { Dimension } from "../../../shared/src/encounter/dimension.js";
 import type { EntityId, GameState, PlayerAction, TeamId, UnitTemplate } from "../../../shared/src/index.js";
@@ -283,7 +284,7 @@ for (const [key, tmpl] of Object.entries(registry)) classNameToKey.set(tmpl.clas
 console.log(`\nRunning realistic encounter tests...`);
 for (const profile of ENCOUNTER_PROFILES) {
   for (const seed of SEEDS) {
-    const encounter = generateEncounter(profile, dimension, seed, seed * 7, seed * 13);
+    const encounter = generateEncounter(profile, dimension, seed, seed * 7, seed * 13, BASELINE_SCALING);
     const enemies: Array<{ key: string; count: number; dim: number }> = [];
     const counts = new Map<string, number>();
     for (const tmpl of encounter.enemies) {

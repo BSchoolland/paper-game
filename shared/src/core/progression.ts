@@ -6,8 +6,23 @@
  * consumers are expedition slots (feature 3), titles, and UI.
  */
 
+import type { RunOutcome } from "../net/protocol.js";
+
 /** Tunable: flat XP per encounter win, v1 (feature 5 scales by difficulty). */
 export const XP_ENCOUNTER_WIN = 25;
+
+/** Locked decisions 6/7 (+ 02-contracts flag #3 for abandoned): pending-XP bank multiplier by outcome. */
+export const XP_BANK_MULTIPLIER: Readonly<Record<RunOutcome, number>> = {
+  victory: 1,
+  retreat: 0.5,
+  defeat: 0.5,
+  abandoned: 0.5,
+};
+
+/** The single banked-amount formula — used by db.finalizeRun AND the settlement pushes. */
+export function bankedXp(pending: number, outcome: RunOutcome): number {
+  return Math.floor(pending * XP_BANK_MULTIPLIER[outcome]);
+}
 
 /** Total XP required to have reached `level` (level 1 = 0). Cost of n -> n+1 is 100*n. */
 export function xpToReachLevel(level: number): number {

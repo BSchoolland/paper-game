@@ -1,9 +1,9 @@
-import type { EnemyTag } from "../core/types.js";
 import type { HexIconType } from "../map/hex-map.js";
+import type { ArchetypeId } from "./archetypes.js";
 
 export interface EncounterProfile {
-  readonly enemyBudget: number;
-  readonly tagWeights: Partial<Record<EnemyTag, number>>;
+  readonly enemyBudget: number;   // BASE budget — scaled by effectiveEnemyBudget at roll time
+  readonly archetypeWeights: Partial<Record<ArchetypeId, number>>;
   readonly structureBudget: number;
   readonly structureStyle: "natural" | "ruins" | "fortified" | "arena";
 }
@@ -13,85 +13,85 @@ export type EncounterType = HexIconType | "wilderness" | "dense-wilderness";
 const ENCOUNTER_PROFILES: Record<EncounterType, EncounterProfile> = {
   "wilderness": {
     enemyBudget: 6,
-    tagWeights: { swarm: 2, melee: 1 },
+    archetypeWeights: { horde: 3, ambush: 2, warband: 1 },
     structureBudget: 30,
     structureStyle: "natural",
   },
   "dense-wilderness": {
     enemyBudget: 8,
-    tagWeights: { swarm: 3, melee: 2 },
+    archetypeWeights: { horde: 3, ambush: 2, guardian: 1 },
     structureBudget: 60,
     structureStyle: "natural",
   },
   "enemy-camp": {
     enemyBudget: 18,
-    tagWeights: { melee: 3, ranged: 2 },
+    archetypeWeights: { warband: 3, horde: 1, ambush: 1 },
     structureBudget: 40,
     structureStyle: "natural",
   },
   "elite-encounter": {
-      enemyBudget: 25,
-      tagWeights: { elite: 4, melee: 2, tank: 1 },
-      structureBudget: 30,
-      structureStyle: "arena",
+    enemyBudget: 25,
+    archetypeWeights: { warband: 2, guardian: 2 },
+    structureBudget: 30,
+    structureStyle: "arena",
   },
   "boss": {
     enemyBudget: 35,
-    tagWeights: { boss: 5, melee: 1, swarm: 1 },
+    archetypeWeights: { guardian: 1 },
     structureBudget: 20,
     structureStyle: "arena",
   },
   "calamity": {
     enemyBudget: 50,
-    tagWeights: { boss: 4, elite: 3, tank: 2 },
+    archetypeWeights: { guardian: 2, warband: 1 },
     structureBudget: 20,
     structureStyle: "arena",
   },
   "town": {
     enemyBudget: 8,
-    tagWeights: { melee: 2, ranged: 1 },
+    archetypeWeights: { garrison: 1 },
     structureBudget: 30,
     structureStyle: "fortified",
   },
   "city": {
     enemyBudget: 16,
-    tagWeights: { ranged: 3, tank: 2, melee: 1 },
+    archetypeWeights: { garrison: 1 },
     structureBudget: 50,
     structureStyle: "fortified",
   },
   "gateway-city": {
     enemyBudget: 16,
-    tagWeights: { tank: 3, elite: 2, ranged: 2 },
+    archetypeWeights: { garrison: 1 },
     structureBudget: 60,
     structureStyle: "fortified",
   },
   "gateway": {
     enemyBudget: 16,
-    tagWeights: { tank: 3, melee: 2, ranged: 1 },
+    archetypeWeights: { garrison: 2, warband: 1 },
     structureBudget: 40,
     structureStyle: "fortified",
   },
   "ruins": {
     enemyBudget: 12,
-    tagWeights: { tank: 3, swarm: 2 },
+    archetypeWeights: { guardian: 1, ambush: 1, horde: 1 },
     structureBudget: 40,
     structureStyle: "ruins",
   },
   "great-ruins": {
     enemyBudget: 18,
-    tagWeights: { elite: 3, tank: 2, swarm: 2 },
+    archetypeWeights: { guardian: 2, warband: 1 },
     structureBudget: 30,
     structureStyle: "ruins",
   },
   "treasure": {
     enemyBudget: 10,
-    tagWeights: { swarm: 3, ranged: 1 },
+    archetypeWeights: { horde: 2, ambush: 2 },
     structureBudget: 30,
     structureStyle: "natural",
   },
   "great-treasure": {
     enemyBudget: 18,
-    tagWeights: { elite: 3, ranged: 2, swarm: 1 },
+    archetypeWeights: { guardian: 2, ambush: 1 },
     structureBudget: 30,
     structureStyle: "natural",
   },

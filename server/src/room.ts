@@ -16,13 +16,17 @@ import type {
   AimDirection,
   Vec2,
   ChatEntry,
+  ContractState,
+  RunOutcome,
+  GatewayInfo,
+  LootPoolEntry,
 } from "shared";
 import { BAG_SIZE, getAnimSet, getPreset, DEFAULT_PRESET_ID } from "shared";
 import type { CombatRuntime } from "./combat-runtime.js";
 import type { EncounterSession } from "./encounter-session.js";
 import type { HeroController } from "../../hero-arena/src/types.js";
 import { makeSovereign, FIGHTER_WEIGHTS, PRESETS } from "../../hero-arena/agents/agent-02/sovereign.js";
-import { loadItems } from "./db.js";
+import { getItemById, loadCodexEntry } from "./db.js";
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -60,6 +64,8 @@ export interface Seat {
   brain: HeroController | null; // present iff AI-driven (bot or disconnected)
   inventory: InventoryState; // per-seat bag
   presetId: string | null; // the starter preset last chosen in the lobby (null once hand-edited/unknown)
+  /** Codex designs this seat will materialize at start (lobby picks, validated); [] until chosen. */
+  manifestIds: string[];
   animSet: AnimSet;
   displayName: string;
   /** Attribution: the account this seat's outcomes credit (never overwritten once set, §4.6). */
@@ -96,16 +102,21 @@ export interface DefendRound {
   timeout: Timer | null;
 }
 
-/** An open overworld movement vote (DESIGN §6 / ruling R15). */
-export interface MovementVote {
+/** An open overworld vote (DESIGN §6 / ruling R15; retreat: docs/meta-loop/02-contracts.md §4.4). */
+interface RoomVoteBase {
   readonly proposalId: string;
   readonly proposerSeatId: SeatId;
-  readonly target: HexCoord;
   readonly electorate: SeatId[]; // frozen connected-human set at propose time
   ballots: Map<SeatId, "yes" | "no">;
   deadline: number;
   timer: Timer | null;
 }
+
+export type RoomVote =
+  | (RoomVoteBase & { readonly kind: "move"; readonly target: HexCoord })
+  | (RoomVoteBase & { readonly kind: "retreat" })
+  | (RoomVoteBase & { readonly kind: "travel"; readonly gateway: GatewayInfo })
+  | (RoomVoteBase & { readonly kind: "loot"; readonly entry: LootPoolEntry });
 
 export interface Room {
   readonly code: RoomCode;
@@ -117,11 +128,19 @@ export interface Room {
    *  off-combat. Replaces the old coopPhase/phaseTransitioning/aiPlayerBusy/paused flag scatter. */
   combat: CombatRuntime | null;
 
-  dimensionId: number;
+  dimensionId: number;                   // the CURRENT dimension (mutated by travel)
+  startDimensionId: number;              // the lobby-picked start (resetToOrigin/rematch target)
+  dimensionName: string;                 // cached meta (roomStatePayload fires constantly)
+  dimensionTier: number | null;          // NULL only for dev-override runs in unplaced dims (flag #10)
+  gateways: Record<string, GatewayInfo>; // community gateway map for the CURRENT dimension, by hexKey
   runId: number;
   hexMap: HexMapState; // shared; playerPos === party position
   visitedThisRun: Set<string>;
+  runClearedCount: number; // combat-cleared this run, origins excluded, cumulative across travel (flag #8)
   pendingHex: HexCoord | null;
+  /** Unconsumed rest buff: heroes enter the next combat with REST_BARRIER_HP barrier. Ephemeral —
+   *  lost on crash/reap by design (05-difficulty flag #3); one walk-back to a rest node re-arms. */
+  rested: boolean;
 
   capacity: number; // 2..4, fixed at create
   seats: Seat[]; // length === capacity, index-stable
@@ -134,7 +153,15 @@ export interface Room {
 
   session: EncounterSession | null; // null off-combat
   defendRound: DefendRound | null;
-  vote: MovementVote | null;
+  vote: RoomVote | null;
+
+  /** Unclaimed party drops this run (mirrors run_loot WHERE assigned_seat_index IS NULL). */
+  lootPool: LootPoolEntry[];
+
+  /** The run's contract; null only for legacy pre-v7 runs and not-yet-assigned lobbies. */
+  contract: ContractState | null;
+  /** The settled run outcome; set at settleRun, null while the run is live. */
+  outcome: RunOutcome | null;
 
   /** In-memory room chat (lobby + overworld), cap 100 — lost on crash/reap by design (flag #8). */
   chatLog: ChatEntry[];
@@ -191,21 +218,21 @@ export function freshRoomCode(taken: (code: RoomCode) => boolean, maxTries = 50)
 }
 
 /** Build a seat's inventory from a starter preset: bag + auto-equipped kit + baked attachments. The
- *  single source of truth for a fresh seat's loadout (co-op path). An unknown preset id falls back to
- *  the default so a seat is never left unarmed. */
-export function buildPresetInventory(presetId: string, dimensionId: number): InventoryState {
-  const merged = { ...loadItems(0), ...loadItems(1), ...loadItems(2), ...loadItems(3), ...loadItems(dimensionId) };
+ *  single source of truth for a fresh seat's loadout (co-op path). Item ids resolve globally (flag #9:
+ *  ids are unique across dimensions). An unknown preset id falls back to the default so a seat is
+ *  never left unarmed. */
+export function buildPresetInventory(presetId: string): InventoryState {
   const preset = getPreset(presetId) ?? getPreset(DEFAULT_PRESET_ID)!;
 
   const bag: (ItemDefinition | null)[] = new Array(BAG_SIZE).fill(null);
   preset.bagIds.forEach((id, i) => {
-    const item = merged[id];
+    const item = getItemById(id);
     if (item && i < BAG_SIZE) bag[i] = item;
   });
 
   const equipped: ItemDefinition[] = [];
   for (const id of preset.equippedIds) {
-    const item = merged[id];
+    const item = getItemById(id);
     if (item) equipped.push(item);
   }
 
@@ -218,8 +245,33 @@ export function buildPresetInventory(presetId: string, dimensionId: number): Inv
   return { bag, equipped, attachments };
 }
 
-export function buildDefaultInventory(dimensionId: number): InventoryState {
-  return buildPresetInventory(DEFAULT_PRESET_ID, dimensionId);
+export function buildDefaultInventory(): InventoryState {
+  return buildPresetInventory(DEFAULT_PRESET_ID);
+}
+
+/** Re-parse a seat's manifest picks into ItemDefinitions from the account's codex snapshots. Ids were
+ *  validated at choose time, so a missing row here is an invariant break (throw, not a silent skip). */
+export function manifestItemsFor(seat: Seat): ItemDefinition[] {
+  if (seat.manifestIds.length === 0) return [];
+  if (!seat.accountId) throw new Error(`manifestItemsFor: seat ${seat.seatId} has manifests but no account`);
+  return seat.manifestIds.map((id) => {
+    const entry = loadCodexEntry(seat.accountId!, id);
+    if (!entry) throw new Error(`manifestItemsFor: design "${id}" missing from codex for ${seat.accountId}`);
+    return JSON.parse(entry.item_json) as ItemDefinition;
+  });
+}
+
+/** Starter preset + materialized codex designs into the first free bag slots (flag #11). Capacity is
+ *  safe by construction (preset bag ≤ 2 + K ≤ 10 < BAG_SIZE); the throw is an invariant, not a check. */
+export function buildSeatLoadout(presetId: string, manifest: readonly ItemDefinition[]): InventoryState {
+  const inv = buildPresetInventory(presetId);
+  const bag = [...inv.bag];
+  for (const item of manifest) {
+    const free = bag.indexOf(null);
+    if (free === -1) throw new Error("buildSeatLoadout: bag overflow");
+    bag[free] = item;
+  }
+  return { ...inv, bag };
 }
 
 /** AI brain for a bot or disconnected seat — fixed `crafty` preset (the v1 difficulty). */
@@ -230,11 +282,11 @@ export function sovereignFor(_seat: Seat): HeroController {
 }
 
 /** Build a room's seats as `open` (lobby) with default loadouts. */
-export function createOpenSeats(capacity: number, dimensionId: number): Seat[] {
+export function createOpenSeats(capacity: number): Seat[] {
   const seats: Seat[] = [];
   for (let i = 0; i < capacity; i++) {
     const seatId = seatIdForIndex(i);
-    const inventory = buildPresetInventory(DEFAULT_PRESET_ID, dimensionId);
+    const inventory = buildPresetInventory(DEFAULT_PRESET_ID);
     seats.push({
       seatId,
       seatIndex: i,
@@ -246,6 +298,7 @@ export function createOpenSeats(capacity: number, dimensionId: number): Seat[] {
       brain: null,
       inventory,
       presetId: DEFAULT_PRESET_ID,
+      manifestIds: [],
       animSet: getAnimSet(inventory.equipped),
       displayName: `Player ${i + 1}`,
       accountId: null,

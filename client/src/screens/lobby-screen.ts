@@ -1,8 +1,10 @@
 import type { Screen } from "./screen-manager.js";
 import type { RoomConnection } from "../net/connection.js";
 import type { SeatContext } from "../state/seat-context.js";
-import type { RoomStatePayload, SeatInfo } from "shared";
-import { STARTER_PRESETS } from "shared";
+import type { AccountStore } from "../state/account-store.js";
+import type { CodexStore } from "../state/codex-store.js";
+import type { CodexEntryPayload, ContractOffer, DimensionOption, RoomStatePayload, SeatInfo } from "shared";
+import { STARTER_PRESETS, contractById, effectiveStartingTier, expeditionSlots, isManifestable } from "shared";
 import { assetUrl } from "../renderer/asset-url.js";
 import {
   THEME,
@@ -16,6 +18,9 @@ import {
   presetPlate,
   levelChip,
   titleTag,
+  designChip,
+  errorNote,
+  RARITY_COLOR,
 } from "./ui-kit.js";
 
 const PRESET_NAME: Record<string, string> = Object.fromEntries(
@@ -34,10 +39,25 @@ const PRESET_NAME: Record<string, string> = Object.fromEntries(
 export class LobbyScreen implements Screen {
   private container: HTMLDivElement;
   private unsub: (() => void) | null = null;
+  private offers: readonly ContractOffer[] = [];
+  private dimOptions: readonly DimensionOption[] = [];
+  /** Manifest picker popover open/closed (survives the full-innerHTML re-renders). */
+  private pickerOpen = false;
+  /** Own manifest ids as last rendered — a server-side shrink without a local send means the
+   *  dimension-change re-validation dropped picks (§4.6) and the notice must show. */
+  private renderedManifestIds: readonly string[] | null = null;
+  private manifestInteracted = false;
+  private droppedNotice = false;
+  private manifestSection: HTMLDivElement | null = null;
+  private onOutsideClick = (e: MouseEvent): void => {
+    if (this.manifestSection && !this.manifestSection.contains(e.target as Node)) this.closePicker();
+  };
 
   constructor(
     private conn: RoomConnection,
     private seat: SeatContext,
+    private account: AccountStore,
+    private codex: CodexStore,
     private onOpenLoadout: () => void,
   ) {
     this.container = document.createElement("div");
@@ -54,16 +74,39 @@ export class LobbyScreen implements Screen {
       background: ${THEME.deep};
     `;
     document.body.appendChild(this.container);
+
+    // Offers arrive once per seat-landing in a lobby-phase room (server-pushed, per-map;
+    // re-sent when the lobby's dimension changes).
+    this.conn.on("contractOffers", (msg) => {
+      this.offers = msg.offers;
+      this.render();
+    });
+
+    // Startable dimensions (tier-0 + party-charted union); re-broadcast when the seated-account
+    // union changes.
+    this.conn.on("dimensionOptions", (msg) => {
+      this.dimOptions = msg.options;
+      this.render();
+    });
+
+    // Codex designs feed the manifest picker (fetched on enter, held in the shared store).
+    this.codex.subscribe(() => this.render());
   }
 
   enter() {
     this.container.style.display = "flex";
+    this.pickerOpen = false;
+    this.renderedManifestIds = null;
+    this.manifestInteracted = false;
+    this.droppedNotice = false;
+    this.conn.send({ type: "getCodex" });
     this.unsub = this.seat.subscribe(() => this.render());
     this.render();
   }
 
   exit() {
     this.container.style.display = "none";
+    this.closePicker();
     this.unsub?.();
     this.unsub = null;
   }
@@ -87,6 +130,9 @@ export class LobbyScreen implements Screen {
 
     card.appendChild(this.header(room));
     card.appendChild(this.body(room));
+    card.appendChild(this.destinationBoard(room));
+    card.appendChild(this.contractBoard(room));
+    card.appendChild(this.manifestBoard(room));
     card.appendChild(this.footer(room));
 
     this.container.appendChild(card);
@@ -119,7 +165,7 @@ export class LobbyScreen implements Screen {
 
     const ctx = document.createElement("div");
     ctx.style.cssText = `text-align:right; font:13px/1.7 ${FONT.body}; color:${THEME.muted};`;
-    ctx.innerHTML = `Dimension <b style="color:${THEME.gold}">${room.dimensionId}</b> · Gateway City<br/>
+    ctx.innerHTML = `Dimension <b style="color:${THEME.gold}">${room.dimensionName}</b> · Tier ${room.dimensionTier ?? "—"}<br/>
       <span style="color:${THEME.faint}">${this.seat.isHost() ? "Begin when your warband is ready" : "Waiting on the host to begin"}</span>`;
     header.appendChild(ctx);
 
@@ -142,6 +188,376 @@ export class LobbyScreen implements Screen {
     outer.style.cssText = "display:flex; flex-direction:column; flex:1 1 auto; min-height:0;";
     outer.append(ruleWrap, body);
     return outer;
+  }
+
+  /**
+   * Full-width destination picker: the server's startable dimensions (tier-0 + party-charted)
+   * as mini-cards. The host clicks to re-point the expedition (`chooseDimension`); everyone sees
+   * the live pick via `roomState.dimensionId`.
+   */
+  private destinationBoard(room: RoomStatePayload): HTMLDivElement {
+    const amHost = this.seat.isHost();
+
+    const section = document.createElement("div");
+    section.style.cssText = "padding:0 44px 22px; flex:0 0 auto; display:flex; flex-direction:column;";
+    section.appendChild(rule());
+
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex; align-items:baseline; gap:14px; margin:16px 0 12px;";
+    head.appendChild(heading("Destination", "section"));
+    const hint = document.createElement("div");
+    hint.textContent = amHost ? "Choose where the expedition begins" : "The host chooses the destination";
+    hint.style.cssText = `font:13px ${FONT.body}; color:${THEME.faint};`;
+    head.appendChild(hint);
+    section.appendChild(head);
+
+    const row = document.createElement("div");
+    row.style.cssText = `display:flex; flex-wrap:wrap; gap:${THEME.gap};`;
+    for (const option of this.dimOptions) {
+      row.appendChild(this.dimensionCard(option, option.id === room.dimensionId, amHost));
+    }
+    section.appendChild(row);
+
+    return section;
+  }
+
+  private dimensionCard(option: DimensionOption, selected: boolean, amHost: boolean): HTMLDivElement {
+    const card = document.createElement("div");
+    card.style.cssText = `
+      position:relative; flex:1; min-width:150px; box-sizing:border-box; padding:14px 16px; border-radius:10px;
+      background:rgba(11,9,6,0.45);
+      border:1px solid ${selected ? THEME.gold : THEME.goldLine};
+      ${selected ? `box-shadow:0 0 14px -6px ${THEME.gold};` : ""}
+      ${amHost ? "cursor:pointer;" : ""}
+    `;
+    if (amHost) {
+      card.addEventListener("click", () => this.conn.send({ type: "chooseDimension", dimensionId: option.id }));
+    }
+
+    const name = document.createElement("div");
+    name.textContent = option.name;
+    name.style.cssText = `font:700 14px ${FONT.cinzel}; color:${THEME.gold};`;
+    card.appendChild(name);
+
+    const tier = document.createElement("div");
+    tier.textContent = `TIER ${option.tier}`;
+    tier.style.cssText = `font:11px ${FONT.body}; letter-spacing:.1em; color:${THEME.goldDeep}; margin-top:5px;`;
+    card.appendChild(tier);
+
+    if (selected) {
+      const badge = document.createElement("div");
+      badge.textContent = "CHOSEN";
+      badge.style.cssText = `
+        position:absolute; top:10px; right:10px;
+        font:700 10px ${FONT.body}; letter-spacing:0.1em; color:#221a0c;
+        background:linear-gradient(180deg,${THEME.gold},${THEME.goldDeep});
+        padding:3px 9px; border-radius:6px;
+      `;
+      card.appendChild(badge);
+    }
+
+    return card;
+  }
+
+  /**
+   * Full-width contract board: the server's per-map offers as mini-cards. The host clicks to
+   * choose (`chooseContract`); everyone sees the live selection via `roomState.contract`. No
+   * pick by start time → the run gets the default Chart the Wilds contract server-side.
+   */
+  private contractBoard(room: RoomStatePayload): HTMLDivElement {
+    const amHost = this.seat.isHost();
+    const selectedType = room.contract?.type ?? null;
+
+    const section = document.createElement("div");
+    section.style.cssText = "padding:0 44px 22px; flex:0 0 auto; display:flex; flex-direction:column;";
+    section.appendChild(rule());
+
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex; align-items:baseline; gap:14px; margin:16px 0 12px;";
+    head.appendChild(heading("Contract", "section"));
+    const hint = document.createElement("div");
+    hint.textContent = amHost ? "Choose the party's contract" : "The host chooses the contract";
+    hint.style.cssText = `font:13px ${FONT.body}; color:${THEME.faint};`;
+    head.appendChild(hint);
+    section.appendChild(head);
+
+    const row = document.createElement("div");
+    row.style.cssText = `display:flex; gap:${THEME.gap};`;
+    for (const offer of this.offers) row.appendChild(this.offerCard(offer, offer.type === selectedType, amHost));
+    section.appendChild(row);
+
+    if (selectedType === null) {
+      const note = document.createElement("div");
+      note.textContent = "Default: Chart the Wilds";
+      note.style.cssText = `font:11px ${FONT.body}; color:${THEME.faint}; margin-top:8px;`;
+      section.appendChild(note);
+    }
+
+    return section;
+  }
+
+  private offerCard(offer: ContractOffer, selected: boolean, amHost: boolean): HTMLDivElement {
+    const def = contractById(offer.type);
+
+    const card = document.createElement("div");
+    card.style.cssText = `
+      position:relative; flex:1; box-sizing:border-box; padding:14px 16px; border-radius:10px;
+      background:rgba(11,9,6,0.45);
+      border:1px solid ${selected ? THEME.gold : THEME.goldLine};
+      ${selected ? `box-shadow:0 0 14px -6px ${THEME.gold};` : ""}
+      ${amHost ? "cursor:pointer;" : ""}
+    `;
+    if (amHost) {
+      card.addEventListener("click", () => this.conn.send({ type: "chooseContract", contractType: offer.type }));
+    }
+
+    const name = document.createElement("div");
+    name.textContent = def.name;
+    name.style.cssText = `font:700 14px ${FONT.cinzel}; color:${THEME.gold};`;
+    card.appendChild(name);
+
+    const desc = document.createElement("div");
+    desc.textContent = def.description;
+    desc.style.cssText = `font:12px/1.5 ${FONT.body}; color:${THEME.muted}; margin:5px 0 8px;`;
+    card.appendChild(desc);
+
+    const meta = document.createElement("div");
+    meta.style.cssText = "display:flex; align-items:baseline; gap:10px;";
+    const reward = document.createElement("span");
+    reward.textContent = `+${def.xpReward} XP`;
+    reward.style.cssText = `font:11px ${FONT.body}; color:${THEME.goldDeep};`;
+    meta.appendChild(reward);
+    if (offer.targetHex) {
+      const bearing = document.createElement("span");
+      bearing.textContent = `(${offer.targetHex.q}, ${offer.targetHex.r})`;
+      bearing.style.cssText = `font:11px ${FONT.body}; color:${THEME.faint};`;
+      meta.appendChild(bearing);
+    }
+    card.appendChild(meta);
+
+    if (selected) {
+      const badge = document.createElement("div");
+      badge.textContent = "CHOSEN";
+      badge.style.cssText = `
+        position:absolute; top:10px; right:10px;
+        font:700 10px ${FONT.body}; letter-spacing:0.1em; color:#221a0c;
+        background:linear-gradient(180deg,${THEME.gold},${THEME.goldDeep});
+        padding:3px 9px; border-radius:6px;
+      `;
+      card.appendChild(badge);
+    }
+
+    return card;
+  }
+
+  /**
+   * Full-width manifest section (03-loot-codex §6.4), below the contract board: K slot wells
+   * for this seat's codex picks (K = expeditionSlots(level); server re-validates), a picker
+   * popover over the account's designs with eligibility dimming, and a dropped-picks notice
+   * when a dimension change returned now-ineligible picks server-side.
+   */
+  private manifestBoard(room: RoomStatePayload): HTMLDivElement {
+    const profile = this.account.profile;
+    if (!profile) throw new Error("LobbyScreen: seated without a profile (welcome must precede roomState)");
+    const slots = expeditionSlots(profile.level);
+    const startingTier = effectiveStartingTier(room.dimensionTier);
+    const myInfo = room.seats.find((s) => s.seatId === room.yourSeatId);
+    const picks = myInfo?.manifestIds ?? [];
+
+    // Detect a server-side shrink this client did not send (dimension-change re-validation).
+    const prev = this.renderedManifestIds;
+    this.renderedManifestIds = [...picks];
+    if (prev !== null && (prev.length !== picks.length || prev.some((id, i) => picks[i] !== id))) {
+      if (!this.manifestInteracted && prev.some((id) => !picks.includes(id))) this.droppedNotice = true;
+      this.manifestInteracted = false;
+    }
+
+    const section = document.createElement("div");
+    section.style.cssText = "padding:0 44px 22px; flex:0 0 auto; display:flex; flex-direction:column;";
+    section.appendChild(rule());
+    this.manifestSection = section;
+
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex; align-items:baseline; gap:14px; margin:16px 0 12px;";
+    head.appendChild(heading("Manifest", "section"));
+    const hint = document.createElement("div");
+    hint.textContent =
+      `Bring up to ${slots} codex designs · tier ${startingTier} or below` +
+      (room.dimensionTier === null ? " · Unplaced expedition — tier 0 designs only" : "");
+    hint.style.cssText = `font:13px ${FONT.body}; color:${THEME.faint};`;
+    head.appendChild(hint);
+    section.appendChild(head);
+
+    if (this.droppedNotice) {
+      const note = errorNote("Some manifested designs exceed the new destination's tier and were returned.");
+      note.style.marginBottom = "10px";
+      section.appendChild(note);
+    }
+
+    const slotWrap = document.createElement("div");
+    slotWrap.style.cssText = "position:relative;";
+    const slotRow = document.createElement("div");
+    slotRow.style.cssText = "display:flex; gap:10px;";
+    for (let i = 0; i < slots; i++) {
+      slotRow.appendChild(this.slotWell(picks, picks[i] ?? null));
+    }
+    slotWrap.appendChild(slotRow);
+    if (this.pickerOpen) slotWrap.appendChild(this.manifestPicker(picks, startingTier));
+    section.appendChild(slotWrap);
+
+    return section;
+  }
+
+  /** One 48px manifest slot: a picked design (chip + ✕ remove) or a dashed click-to-pick well. */
+  private slotWell(picks: readonly string[], itemId: string | null): HTMLDivElement {
+    const well = document.createElement("div");
+    well.style.cssText = `
+      position:relative; width:48px; height:48px; box-sizing:border-box; flex:0 0 auto;
+      display:flex; align-items:center; justify-content:center;
+      border:1px dashed ${THEME.goldLine}; border-radius:8px;
+    `;
+    if (itemId === null) {
+      well.style.cursor = "pointer";
+      well.title = "Add a codex design";
+      const plus = document.createElement("span");
+      plus.textContent = "+";
+      plus.style.cssText = `font:20px ${FONT.cinzel}; color:${THEME.faint};`;
+      well.appendChild(plus);
+      well.addEventListener("click", () => this.openPicker());
+      return well;
+    }
+
+    const entry = this.codex.entries.find((e) => e.item.id === itemId);
+    if (entry) {
+      well.appendChild(designChip(entry.item, 40));
+    } else {
+      // Codex fetch still in flight (reconnect into the lobby): the id is known-good server-side.
+      const pending = document.createElement("span");
+      pending.textContent = "…";
+      pending.title = itemId;
+      pending.style.cssText = `font:16px ${FONT.body}; color:${THEME.faint};`;
+      well.appendChild(pending);
+    }
+
+    const remove = document.createElement("button");
+    remove.tabIndex = -1;
+    remove.textContent = "✕";
+    remove.title = "Remove";
+    remove.style.cssText = `
+      position:absolute; top:-7px; right:-7px; width:18px; height:18px; box-sizing:border-box;
+      display:flex; align-items:center; justify-content:center; padding:0; cursor:pointer;
+      font:700 10px ${FONT.body}; color:${THEME.parch};
+      background:${THEME.dangerDeep}; border:1px solid ${THEME.danger}; border-radius:50%;
+    `;
+    remove.addEventListener("click", () => this.sendManifest(picks.filter((id) => id !== itemId)));
+    well.appendChild(remove);
+    return well;
+  }
+
+  /** Picker popover (titlesPopover precedent), anchored under the slot row. */
+  private manifestPicker(picks: readonly string[], startingTier: number): HTMLDivElement {
+    const pop = document.createElement("div");
+    pop.style.cssText = `
+      position:absolute; top:56px; left:0; right:0; z-index:5;
+      background:linear-gradient(180deg, ${THEME.slate2}, ${THEME.ink});
+      border:1px solid ${THEME.goldLine}; border-radius:10px;
+      box-shadow:0 14px 34px -10px rgba(0,0,0,0.8);
+    `;
+
+    if (this.codex.entries.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "No designs in your codex yet — win an expedition to bank your first.";
+      empty.style.cssText = `padding:12px 14px; font:12.5px ${FONT.body}; color:${THEME.muted};`;
+      pop.appendChild(empty);
+      return pop;
+    }
+
+    const grid = document.createElement("div");
+    grid.style.cssText = `
+      display:grid; grid-template-columns:repeat(auto-fill, minmax(210px, 1fr)); gap:8px;
+      padding:12px; max-height:240px; overflow-y:auto;
+    `;
+    for (const entry of this.codex.entries) {
+      grid.appendChild(this.pickerCell(entry, picks, startingTier));
+    }
+    pop.appendChild(grid);
+    return pop;
+  }
+
+  private pickerCell(entry: CodexEntryPayload, picks: readonly string[], startingTier: number): HTMLElement {
+    const picked = picks.includes(entry.item.id);
+    const eligible = !picked && isManifestable(entry.item, entry.tier, startingTier);
+    const reason =
+      picked ? "Picked"
+      : entry.item.type === "consumable" ? "Run-scoped"
+      : entry.tier > startingTier ? "Tier too high"
+      : null;
+
+    const cell = document.createElement("button");
+    cell.tabIndex = -1;
+    cell.style.cssText = `
+      display:flex; align-items:center; gap:9px; text-align:left; box-sizing:border-box;
+      padding:8px 10px; border:1px solid rgba(184,137,58,0.25); border-radius:8px;
+      background:rgba(11,9,6,0.35);
+      ${eligible ? "cursor:pointer;" : "opacity:.45;"}
+    `;
+    cell.disabled = !eligible;
+    cell.appendChild(designChip(entry.item, 34));
+
+    const info = document.createElement("div");
+    info.style.cssText = "flex:1; min-width:0;";
+    const name = document.createElement("div");
+    name.textContent = entry.item.name;
+    name.style.cssText = `
+      font:600 13px ${FONT.body}; color:${RARITY_COLOR[entry.item.rarity]};
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    `;
+    info.appendChild(name);
+    const meta = document.createElement("div");
+    meta.style.cssText = "display:flex; align-items:baseline; gap:8px; margin-top:2px;";
+    const tier = document.createElement("span");
+    tier.textContent = `TIER ${entry.tier}`;
+    tier.style.cssText = `font:11px ${FONT.body}; letter-spacing:.1em; color:${THEME.goldDeep};`;
+    meta.appendChild(tier);
+    if (reason) {
+      const why = document.createElement("span");
+      why.textContent = reason;
+      why.style.cssText = `font:11px ${FONT.body}; color:${THEME.faint};`;
+      meta.appendChild(why);
+    }
+    info.appendChild(meta);
+    cell.appendChild(info);
+
+    if (eligible) {
+      cell.addEventListener("mouseenter", () => (cell.style.borderColor = THEME.gold));
+      cell.addEventListener("mouseleave", () => (cell.style.borderColor = "rgba(184,137,58,0.25)"));
+      cell.addEventListener("click", () => {
+        this.sendManifest([...picks, entry.item.id]);
+        this.closePicker();
+      });
+    }
+    return cell;
+  }
+
+  /** Full-replacement manifest send; also clears the dropped-picks notice (§6.4). */
+  private sendManifest(itemIds: readonly string[]): void {
+    this.droppedNotice = false;
+    this.manifestInteracted = true;
+    this.conn.send({ type: "chooseManifest", itemIds });
+  }
+
+  private openPicker(): void {
+    if (this.pickerOpen) return;
+    this.pickerOpen = true;
+    document.addEventListener("mousedown", this.onOutsideClick);
+    this.render();
+  }
+
+  private closePicker(): void {
+    if (!this.pickerOpen) return;
+    this.pickerOpen = false;
+    document.removeEventListener("mousedown", this.onOutsideClick);
+    this.render();
   }
 
   /** Left rail: "Roster" heading over one ledger row per seat. */
@@ -233,6 +649,15 @@ export class LobbyScreen implements Screen {
       const preset = document.createElement("span");
       preset.textContent = s.presetId ? PRESET_NAME[s.presetId] ?? "Choosing kit…" : "Choosing kit…";
       sub.appendChild(preset);
+      if (s.manifestIds.length > 0) {
+        const manifests = document.createElement("span");
+        manifests.textContent = `+${s.manifestIds.length} design${s.manifestIds.length === 1 ? "" : "s"}`;
+        manifests.style.cssText = `
+          flex:0 0 auto; font:11px ${FONT.body}; color:${THEME.goldDeep};
+          border:1px solid ${THEME.goldLine}; border-radius:5px; padding:0 5px;
+        `;
+        sub.appendChild(manifests);
+      }
     }
     info.appendChild(sub);
     row.appendChild(info);

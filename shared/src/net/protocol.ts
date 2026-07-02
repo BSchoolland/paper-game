@@ -9,9 +9,17 @@
 import type { EntityId, Vec2, AimDirection, AttackAbility, PlayerAction, GameEvent } from "../core/types.js";
 import type { SerializedGameState } from "../core/serialization.js";
 import type { InventoryState, AttachmentData } from "../core/inventory.js";
-import type { HexCoord, HexMapState } from "../map/hex-map.js";
+import type { ItemDefinition } from "../core/items.js";
+import type { HexCoord, HexMapState, HexIconType } from "../map/hex-map.js";
+import type { ContractState, ContractOffer, ContractType } from "../overworld/contracts.js";
+import type { ArchetypeId } from "../encounter/archetypes.js";
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 7;
+
+/** Durable run outcome — the value set of runs.outcome (db.ts re-imports this). */
+export type RunOutcome = "victory" | "defeat" | "retreat" | "abandoned";
+
+export type VoteKind = "move" | "retreat" | "travel" | "loot";
 
 // --- Identity / seats ---
 export type SeatId = "s0" | "s1" | "s2" | "s3"; // "s{index}", index-stable for the room's life
@@ -46,6 +54,8 @@ export interface SeatInfo {
   readonly accountId: AccountId | null;
   readonly level: number | null;
   readonly equippedTitleId: string | null;
+  /** Codex designs this seat will materialize at start (lobby transparency). [] when none/bot/open. */
+  readonly manifestIds: readonly string[];
 }
 
 export interface RoomStatePayload {
@@ -58,6 +68,18 @@ export interface RoomStatePayload {
   readonly yourSeatId: SeatId | null;
   readonly runId: number;
   readonly dimensionId: number;
+  readonly dimensionName: string;
+  /** NULL only for dev-override runs in unplaced dimensions (04-portals flag #10); feature 3
+   *  reads the lobby value as the run's starting tier. */
+  readonly dimensionTier: number | null;
+  /** The run's contract; null only for legacy pre-v7 runs and not-yet-assigned lobbies. */
+  readonly contract: ContractState | null;
+  /** Set iff phase === "gameover" — drives the outcome-variant end screen on reconnect too. */
+  readonly outcome: RunOutcome | null;
+  /** Unclaimed party drops, oldest first (03-loot-codex flag #13). Always [] outside a started run. */
+  readonly lootPool: readonly LootPoolEntry[];
+  /** True while the party carries an unconsumed rest (reconnect-safe truth; flag #2/#8). */
+  readonly rested: boolean;
 }
 
 export interface SeatCombatStatus {
@@ -100,6 +122,49 @@ export interface RoomBrowserEntry {
   readonly phase: RoomPhase;
 }
 
+// --- Portals / tiered multiverse DTOs (docs/meta-loop/04-portals.md §2.1) ---
+
+/** A community-attuned gateway destination (dimension_gateways row + destination meta). */
+export interface GatewayInfo {
+  readonly toDimensionId: number;
+  readonly toName: string;
+  readonly toTier: number;
+}
+
+/** One run-start option in the lobby picker (union of tier-0 + party-charted, server-built). */
+export interface DimensionOption {
+  readonly id: number;
+  readonly name: string;
+  readonly tier: number;
+}
+
+// --- Loot & codex DTOs (docs/meta-loop/03-loot-codex.md §3.1) ---
+
+/**
+ * One drop in the shared party pool. Full ItemDefinition (the `inventory` message precedent)
+ * so the client renders name/sprite/rarity with zero lookups.
+ */
+export interface LootPoolEntry {
+  readonly lootId: number; // run_loot.id — the claim handle
+  readonly item: ItemDefinition;
+  readonly sourceIcon: HexIconType | null; // richness provenance for the tooltip
+}
+
+/** One banked design, with provenance resolved server-side (dimension + discoverer names). */
+export interface CodexEntryPayload {
+  readonly item: ItemDefinition;
+  readonly dimensionId: number; // the design's native dimension
+  readonly dimensionName: string;
+  readonly tier: number;
+  readonly acquiredAt: string; // ISO — when THIS account banked it
+  readonly first: {
+    readonly accountId: AccountId;
+    readonly displayName: string;
+    readonly at: string; // ISO
+    readonly mine: boolean; // discoverer === the requesting account
+  };
+}
+
 // --- Accounts / social DTOs (docs/meta-loop/01-accounts.md §3.1) ---
 
 export interface AccountStatsPayload {
@@ -107,6 +172,10 @@ export interface AccountStatsPayload {
   readonly hexesCharted: number;
   readonly dimensionsDiscovered: number;
   readonly wipes: number;
+  readonly contractsCompleted: number;
+  readonly dimensionsTraveled: number;
+  readonly designsRecovered: number;
+  readonly firstsRecovered: number;
 }
 
 export interface ProfilePayload {
@@ -165,8 +234,15 @@ export type VoteChoice = "yes" | "no";
 
 export interface VoteStatePayload {
   readonly proposalId: string;
+  readonly kind: VoteKind;
+  /** For kind "loot" the proposer IS the claimant. */
   readonly proposerSeatId: SeatId;
-  readonly target: HexCoord;
+  /** Was required; null for retreat, travel, and loot votes. */
+  readonly target: HexCoord | null;
+  /** Travel destination; null unless kind === "travel" — drives the VotePanel destination line. */
+  readonly travel: GatewayInfo | null;
+  /** Claimed drop; null unless kind === "loot" — drives the VotePanel claim line. */
+  readonly loot: LootPoolEntry | null;
   /** Cast human ballots only. */
   readonly votes: Partial<Record<SeatId, VoteChoice>>;
   /** Frozen connected-human seat set at propose time; resolution math is over this (ruling R15). */
@@ -184,6 +260,7 @@ export type ErrorCode =
   | "SEAT_IN_USE"
   | "BAD_PHASE"
   | "INVALID_MOVE"
+  | "GATEWAY_UNATTUNED"
   | "NO_OPEN_PROPOSAL"
   | "ROOM_CREATE_FAILED"
   | "MALFORMED"
@@ -217,6 +294,18 @@ export type ClientMessage =
   | { type: "startGame" }
   | { type: "proposeMove"; target: HexCoord }
   | { type: "castVote"; proposalId: string; vote: VoteChoice }
+  // Host-gated, lobby-only: pick the run's contract from the offer board.
+  | { type: "chooseContract"; contractType: ContractType }
+  // Host-gated, lobby-only: re-point the expedition's start dimension (from dimensionOptions).
+  | { type: "chooseDimension"; dimensionId: number }
+  // Seat-scoped, overworld-only, party standing on a gateway hex: open a retreat vote.
+  | { type: "proposeRetreat" }
+  // Seat-scoped, overworld-only, party on a cleared gateway hex: open a travel-deeper vote.
+  | { type: "proposeTravel" }
+  // Seat-scoped, overworld-only: propose claiming a pool item for YOUR seat (opens a loot vote).
+  | { type: "claimLoot"; lootId: number }
+  // Seat-scoped, lobby-only: set this seat's manifest picks (full replacement, may be []).
+  | { type: "chooseManifest"; itemIds: readonly string[] }
   | { type: "action"; seatId: SeatId; action: WireAction }
   | { type: "pass" }
   | { type: "unpass" }
@@ -233,6 +322,8 @@ export type ClientMessage =
   | { type: "login"; username: string; password: string }
   | { type: "logout" }
   | { type: "getProfile"; accountId?: AccountId } // omitted = own
+  // Connection-scoped (no seat required): fetch your codex for the shelf / manifest picker.
+  | { type: "getCodex" }
   | { type: "setDisplayName"; name: string }
   | { type: "equipTitle"; titleId: string | null }
   | { type: "getFriends" }
@@ -260,11 +351,15 @@ export type ServerMessage =
   | { type: "leftRoom" }
   | { type: "roomList"; rooms: readonly RoomBrowserEntry[] }
   | { type: "roomState"; room: RoomStatePayload }
-  | { type: "hexMapState"; hexMap: HexMapState }
+  | { type: "hexMapState"; hexMap: HexMapState; gateways: Record<string, GatewayInfo> }
+  // Broadcast on a gateway attunement ATTEMPT (first-clear or travel-retry): gateway = the fixed
+  // destination, or null when the pool was empty (04-portals flag #4 — server already logged).
+  | { type: "gatewayUpdate"; hex: HexCoord; gateway: GatewayInfo | null }
   | { type: "hexDiscovered"; coord: HexCoord }
   | { type: "voteState"; vote: VoteStatePayload | null }
   | { type: "moveResolved"; proposalId: string; accepted: boolean; target: HexCoord }
-  | { type: "combatStart"; encounterHex: HexCoord }
+  | { type: "combatStart"; encounterHex: HexCoord; archetype: ArchetypeId }
+  | { type: "restUpdate"; rested: boolean }
   | { type: "state"; state: SerializedGameState; events: readonly GameEvent[] }
   | { type: "coopStatus"; coop: CoopStatusPayload }
   | {
@@ -279,7 +374,7 @@ export type ServerMessage =
     }
   | { type: "actionRejected"; seatId: SeatId }
   | { type: "combatEnd"; won: boolean }
-  | { type: "gameOver"; outcome: "victory" | "defeat" }
+  | { type: "gameOver"; outcome: "victory" | "defeat" | "retreat" }
   | { type: "inventory"; inventory: InventoryState }
   | { type: "authState"; auth: AuthStatePayload } // pushed after post-connect auth mutations only
   | { type: "profile"; profile: ProfilePayload } // getProfile response + own-profile pushes
@@ -287,9 +382,34 @@ export type ServerMessage =
   | { type: "roomInvite"; from: { accountId: AccountId; displayName: string }; code: RoomCode; dimensionId: number }
   | { type: "chat"; entry: ChatEntry }
   | { type: "chatHistory"; entries: readonly ChatEntry[] } // replayed in sendSeatSnapshots
+  // Lobby offer board: sent to each seat landing in a lobby-phase room; re-sent only when the
+  // lobby's dimension changes (04-portals chooseDimension) — offers are static per dimension map.
+  | { type: "contractOffers"; offers: readonly ContractOffer[] }
+  // Lobby run-start picker: union of tier-0 + party-charted dims. Sent on lobby land AND
+  // re-broadcast to the whole lobby whenever the seated-account union changes (join/leave).
+  | { type: "dimensionOptions"; options: readonly DimensionOption[] }
   /** PRIVATE per-seat sends — never broadcast; one player's XP totals never leak to the room. */
-  | { type: "xpAward"; amount: number; xp: number; level: number; leveledUp: boolean }
+  // Provisional accrual push: `pending` is this seat's running per-run pending total (no level yet).
+  | { type: "xpAward"; amount: number; pending: number }
+  // Run-end settlement push: what banked, with the new profile totals.
+  | {
+      type: "xpBanked";
+      pending: number;
+      multiplier: number;
+      banked: number;
+      xp: number;
+      level: number;
+      leveledUp: boolean;
+    }
   | { type: "titlesEarned"; titleIds: readonly string[] }
+  // Broadcast at drop time — toast/celebration only; pool truth rides roomState (flag #13).
+  | { type: "lootFound"; drops: readonly LootPoolEntry[] }
+  // getCodex response (PRIVATE): the requesting account's full codex, acquired_at DESC.
+  | { type: "codex"; entries: readonly CodexEntryPayload[] }
+  // Run-end settlement push (PRIVATE per-seat, next to xpBanked): what JUST entered your codex.
+  // entries = newly-banked only (dedup applied); firstItemIds ⊆ entries' ids = designs whose
+  // global first-recovery credit went to YOU; skippedUntiered surfaces flag #5's loud skip.
+  | { type: "codexBanked"; entries: readonly CodexEntryPayload[]; firstItemIds: readonly string[]; skippedUntiered: number }
   | { type: "error"; code: ErrorCode; message: string; recoverable: boolean };
 
 export type ServerMessageType = ServerMessage["type"];

@@ -7,6 +7,8 @@ import { GameRenderer } from "./renderer/game-renderer.js";
 import { DefendPrompt } from "./renderer/defend-prompt.js";
 import { PartyHud } from "./renderer/party-hud.js";
 import { VotePanel } from "./renderer/vote-panel.js";
+import { ContractHud } from "./renderer/contract-hud.js";
+import { LootPanel } from "./renderer/loot-panel.js";
 import { HexMapRenderer, loadMapIconAssets } from "./renderer/hex-map-renderer.js";
 import { FramePacer } from "./renderer/frame-pacer.js";
 import { InputManager } from "./input/input-manager.js";
@@ -15,21 +17,22 @@ import { loadMapAssets } from "./renderer/grid-renderer.js";
 import { ScreenManager } from "./screens/screen-manager.js";
 import { HomeScreen } from "./screens/home-screen.js";
 import { LobbyScreen } from "./screens/lobby-screen.js";
-import { GameOverScreen } from "./screens/game-over-screen.js";
+import { GameOverScreen, type XpBankedMsg, type CodexBankedMsg } from "./screens/game-over-screen.js";
 import { MapScreen } from "./screens/map-screen.js";
 import { CombatScreen } from "./screens/combat-screen.js";
 import { InventoryScreen } from "./screens/inventory-screen.js";
 import { ReplayScreen } from "./screens/replay-screen.js";
 import { ReplayStore } from "./state/replay-store.js";
 import { AccountStore } from "./state/account-store.js";
+import { CodexStore } from "./state/codex-store.js";
 import { ChatStore } from "./state/chat-store.js";
 import { ChatPanel } from "./screens/chat-panel.js";
 import { AuthModal, AUTH_ERROR_CODES } from "./screens/auth-modal.js";
 import { FriendsDock } from "./screens/friends-panel.js";
 import { THEME, FONT } from "./screens/ui-kit.js";
 import { clearStoredSeat, setAuthToken } from "./net/player-token.js";
-import type { HexMapState, RoomCode, RoomPhase } from "shared";
-import { getAnimSet, titleById } from "shared";
+import type { GatewayInfo, HexMapState, RoomCode, RoomPhase } from "shared";
+import { archetypeById, getAnimSet, hexKey, titleById } from "shared";
 
 function showBanner(text: string): void {
   const el = document.createElement("div");
@@ -173,6 +176,7 @@ async function init() {
   const seat = new SeatContext();
   const combatStore = new CombatStore(conn, seat);
   const accountStore = new AccountStore();
+  const codexStore = new CodexStore();
   const chatStore = new ChatStore();
   const authModal = new AuthModal(conn);
 
@@ -191,9 +195,14 @@ async function init() {
   conn.on("authState", (msg) => {
     setAuthToken(msg.auth.authToken);
     accountStore.setAuth(msg.auth);
+    // Identity switched (login/logout/claim): the shelf/picker must show the NEW account's codex.
+    conn.send({ type: "getCodex" });
   });
   conn.on("profile", (msg) => accountStore.setProfile(msg.profile));
   conn.on("friendsList", (msg) => accountStore.setFriends(msg.friends));
+
+  // Codex snapshots (getCodex responses) land in the shared store; Home/Lobby render from it.
+  conn.on("codex", (msg) => codexStore.setEntries(msg.entries));
 
   // Room chat: scoped to one room — replaced by the reconnect replay, cleared on room change.
   conn.on("chat", (msg) => chatStore.append(msg.entry));
@@ -208,9 +217,7 @@ async function init() {
 
   // Private reward pushes + friend room invites (gold toast stack, bottom-right).
   const pushToast = makeToastStack();
-  conn.on("xpAward", (msg) =>
-    pushToast(msg.leveledUp ? `+${msg.amount} XP — Level up! Now LV ${msg.level}` : `+${msg.amount} XP`),
-  );
+  conn.on("xpAward", (msg) => pushToast(`+${msg.amount} XP — ${msg.pending} pending`));
   conn.on("titlesEarned", (msg) => {
     for (const id of msg.titleIds) pushToast(`Title earned — ${titleById(id).name}`);
   });
@@ -343,23 +350,69 @@ async function init() {
   hexRenderer.hide();
 
   let hexMapState: HexMapState | null = null;
+  let gatewayMap: Record<string, GatewayInfo> = {};
 
   // HUDs (in-combat party panel + overworld vote panel + floating chat/friends panels — the
   // latter live outside every screen's DOM so lobby re-renders can never blur their inputs)
   const partyHud = new PartyHud(seat, clientState);
   new VotePanel(conn, seat);
+  new LootPanel(conn, seat);
+  const contractHud = new ContractHud(conn, seat, () => hexMapState, () => gatewayMap);
   new ChatPanel(conn, seat, chatStore);
   new FriendsDock(conn, accountStore, seat, (mode) => authModal.open(mode));
+
+  // Run-scoped XP state: the pending accrual feeds the ContractHud chip; the last settlement push
+  // is held for the GameOverScreen's banked line. Both reset when a fresh run begins (new runId /
+  // room left); lastBank additionally clears on any overworld snapshot so a reconnect mid-run
+  // can never show a stale bank on a later game over.
+  let lastBank: XpBankedMsg | null = null;
+  let lastCodexBank: CodexBankedMsg | null = null;
+  let seenRunId: number | null = null;
+  conn.on("xpAward", (msg) => contractHud.setPending(msg.pending));
+  conn.on("xpBanked", (msg) => {
+    lastBank = msg;
+    contractHud.setPending(0);
+    pushToast(msg.leveledUp ? `Banked ${msg.banked} XP — Level up! Now LV ${msg.level}` : `Banked ${msg.banked} XP`);
+  });
+  // Codex settlement push (docs/meta-loop/03-loot-codex.md §6.7): held for the game-over screen's
+  // codex line, celebrated in the toast stack, and re-fetched into the store so the HOME shelf is
+  // current the moment the player returns.
+  conn.on("codexBanked", (msg) => {
+    lastCodexBank = msg;
+    if (msg.entries.length > 0) pushToast(`Codex — ${msg.entries.length} new design(s) banked`);
+    for (const _ of msg.firstItemIds) pushToast("✦ World first! Design recovered for the first time anywhere");
+    conn.send({ type: "getCodex" });
+  });
+  // Drop-moment celebration; pool truth rides roomState (the LootPanel renders from it).
+  conn.on("lootFound", (msg) => {
+    for (const d of msg.drops) pushToast(`Spoils — ${d.item.name}`);
+  });
+  conn.on("roomState", (msg) => {
+    if (msg.room.phase === "overworld") {
+      lastBank = null;
+      lastCodexBank = null;
+    }
+    if (msg.room.runId !== seenRunId) {
+      seenRunId = msg.room.runId;
+      contractHud.setPending(0);
+    }
+  });
+  conn.on("leftRoom", () => {
+    lastBank = null;
+    lastCodexBank = null;
+    seenRunId = null;
+    contractHud.setPending(0);
+  });
 
   // Inventory (own bag; loadout-editable only off-combat)
   const inventoryScreen = new InventoryScreen(conn, () => seat.room?.phase !== "combat");
 
   // Screen manager + registration
   const screens = new ScreenManager();
-  const homeScreen = new HomeScreen(conn, seat, dim, accountStore, (mode) => authModal.open(mode));
+  const homeScreen = new HomeScreen(conn, seat, dim, accountStore, codexStore, (mode) => authModal.open(mode));
   screens.register("home", homeScreen);
-  screens.register("lobby", new LobbyScreen(conn, seat, () => screens.switchTo("inventory")));
-  screens.register("gameover", new GameOverScreen(conn));
+  screens.register("lobby", new LobbyScreen(conn, seat, accountStore, codexStore, () => screens.switchTo("inventory")));
+  screens.register("gameover", new GameOverScreen(conn, seat, () => lastBank, () => lastCodexBank));
   screens.register("map", new MapScreen(hexRenderer, conn, () => hexMapState));
   screens.register("combat", new CombatScreen(combatRenderer, clientState, combatStore, input), true);
   screens.register("inventory", inventoryScreen, true);
@@ -375,7 +428,31 @@ async function init() {
 
   conn.on("hexMapState", (msg) => {
     hexMapState = msg.hexMap;
+    gatewayMap = msg.gateways;
+    contractHud.setHexMap(msg.hexMap);
     if (screens.isActive("map")) hexRenderer.render(hexMapState);
+  });
+
+  // Gateway attunement result at a cleared gateway hex (docs/meta-loop/04-portals.md §6.1):
+  // a fixed destination, or null when the pool was empty (flag #4's player-facing half).
+  conn.on("gatewayUpdate", (msg) => {
+    if (msg.gateway) {
+      gatewayMap[hexKey(msg.hex)] = msg.gateway;
+      pushToast(`A gateway attunes — ${msg.gateway.toName} (Tier ${msg.gateway.toTier}) lies beyond.`);
+    } else {
+      pushToast("The gateway is unattuned — no new dimension is ready beyond it.");
+    }
+    contractHud.refresh();
+  });
+
+  // Difficulty flavor (docs/meta-loop/05-difficulty.md §6.1): combat entry announces the rolled
+  // archetype; a rest grant announces the fortify. Phase routing still rides roomState.
+  conn.on("combatStart", (msg) => pushToast(archetypeById(msg.archetype).flavor));
+  conn.on("restUpdate", (msg) => {
+    // The hex-entered grant path broadcasts no roomState (only hexMapState), so this message
+    // is the HUD's only source of truth for `rested` there — patch it into the seat context.
+    if (seat.room) seat.setRoom({ ...seat.room, rested: msg.rested });
+    if (msg.rested) pushToast("The party rests — fortified for the next battle.");
   });
 
   // The PartyHud follows combat: shown while in the combat screen, hidden otherwise.
@@ -438,6 +515,7 @@ async function init() {
   // The server confirms a voluntary leave / finalized run by telling this client it is now room-less.
   conn.on("leftRoom", () => {
     seat.setRoom(null);
+    gatewayMap = {};
     clearStoredSeat();
     chatStore.clear();
     chatRoomCode = null;

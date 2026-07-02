@@ -9,10 +9,11 @@ import type {
   RoomCapacity,
   RoomBrowserEntry,
   HexIconType,
-  HexCoord,
 } from "shared";
-import { PROTOCOL_VERSION, getAnimSet, hexKey, getHexIcon, isDecorationHex } from "shared";
-import { loadDimension, loadEnemyTemplateRegistry, loadItems } from "./db.js";
+import { PROTOCOL_VERSION, getAnimSet, hexKey, getHexIcon, isDecorationHex, buildContractOffers, DEFAULT_CONTRACT_TYPE } from "shared";
+import { DEFAULT_PRESET_ID, expeditionSlots, isManifestable, effectiveStartingTier } from "shared";
+import type { ContractType, ItemDefinition } from "shared";
+import { loadDimension, loadEnemyTemplateRegistry, loadItems, loadCodexEntry } from "./db.js";
 import {
   startNewRun,
   seedDiscovery,
@@ -30,14 +31,21 @@ import {
   finalizeRun,
   deactivateStaleRuns,
   setRunPhase,
+  setRunStartDimension,
+  clearRunContract,
+  getDimensionMeta,
+  applyCanonicalDimensionTiers,
   newTokenSalt,
   mintSessionToken,
   verifySessionToken,
 } from "./db.js";
+import { startableDimensions, isStartableDimension, loadGatewaysForDimension } from "./gateways.js";
 import { rooms } from "./room-registry.js";
 import {
   createOpenSeats,
   buildPresetInventory,
+  buildSeatLoadout,
+  manifestItemsFor,
   freshRoomCode,
   seatIdForIndex,
 } from "./room.js";
@@ -57,6 +65,9 @@ import {
   setReady,
   submitDefend,
   proposeMove,
+  proposeRetreat,
+  proposeLootClaim,
+  voteStatePayload,
   castVote,
   beginCombatEntry,
   endCombat,
@@ -65,10 +76,13 @@ import {
   connectSeat,
   onSeatDisconnected,
   leaveSeatPermanently,
+  proposeTravel,
   abortDefendRound,
   resendPendingDefendPrompts,
   armReap,
   clearReap,
+  DISCOVERY_RADIUS,
+  ORIGIN,
 } from "./room-machine.js";
 import { seedDimension0 } from "./seed.js";
 import { seedDimension1 } from "./seed-dimension-1.js";
@@ -106,7 +120,9 @@ import {
   pushPresenceDelta,
   pushRoomPresenceDelta,
 } from "./social-handlers.js";
-import { recordDimensionsSeen } from "./awards.js";
+import { emitRunEvent } from "./run-events.js";
+import { assignContract } from "./contract-engine.js";
+import { handleGetCodex } from "./codex.js";
 
 export function initSeeds(): void {
   seedDimension0();
@@ -114,6 +130,9 @@ export function initSeeds(): void {
   seedDimension2();
   seedDimension3();
   seedDimension501();
+  // On a fresh DB the v8 tier backfill ran against an empty table — stamp the canonical dims'
+  // fixed tiers (04-portals §0.2) after the seeds land. Idempotent on existing DBs.
+  applyCanonicalDimensionTiers();
   seedTitles();
 }
 
@@ -123,6 +142,12 @@ export function initSeeds(): void {
 const RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // R33: deactivate runs idle longer than 7 days.
 const HOUSEKEEPING_INTERVAL_MS = 60 * 60 * 1000; // hourly sweep.
 if (process.env.GAME_SKIP_SEED !== "1") {
+  if (process.env.GAME_ALLOW_UNCHARTED_DIMENSIONS === "1") {
+    // 04-portals flag #5: an explicit dev knob, surfaced loudly at boot — never a silent bypass.
+    console.warn(
+      "[dimensions] GAME_ALLOW_UNCHARTED_DIMENSIONS=1 — run-start eligibility (charted/tier gate) is DISABLED; any player can start runs in untiered/in-review dimensions",
+    );
+  }
   initSeeds();
   recoverActiveRuns(reapEmptyRoom);
   // R33 retention housekeeping: periodically inactivate runs untouched past the retention window,
@@ -141,9 +166,7 @@ if (process.env.GAME_SKIP_SEED !== "1") {
   sweep.unref?.(); // don't keep the process alive solely for the sweep.
 }
 
-const ORIGIN: HexCoord = { q: 0, r: 0 };
 const ORIGIN_KEY = hexKey(ORIGIN);
-const DISCOVERY_RADIUS = 15;
 const DEFAULT_DIMENSION = 1;
 const QUICKMATCH_CAPACITY: RoomCapacity = 4; // quick-match creates a 4-seat room when none are open
 
@@ -240,14 +263,39 @@ function cleanupPriorSeat(
   }
 }
 
+/** The seated-account union for a room (eligibleSeats filter: attributed + still a human's seat). */
+function seatedAccountIds(room: Room): string[] {
+  return room.seats
+    .filter((s) => s.accountId !== null && (s.state === "human-connected" || s.state === "human-disconnected"))
+    .map((s) => s.accountId!);
+}
+
+/** Run-start options for a room's current seated party (tier-0 + party-charted). */
+function startableForRoom(room: Room): import("shared").DimensionOption[] {
+  return startableDimensions(seatedAccountIds(room));
+}
+
+/** Re-broadcast the run-start picker to every connected seat (the seated-account union changed). */
+function broadcastDimensionOptions(room: Room): void {
+  const options = startableForRoom(room);
+  for (const s of room.seats) if (s.socket) io.send(s, { type: "dimensionOptions", options });
+}
+
 /** Push the post-bind snapshots to a (re)connecting seat (resume step 8 / hello-reclaim). */
 function sendSeatSnapshots(room: Room, seat: Seat): void {
   io.send(seat, { type: "roomState", room: roomStatePayload(room, seat) });
+  if (room.phase === "lobby") {
+    io.send(seat, { type: "contractOffers", offers: buildContractOffers(room.hexMap.icons) });
+    io.send(seat, { type: "dimensionOptions", options: startableForRoom(room) });
+  }
   io.send(seat, { type: "chatHistory", entries: room.chatLog });
   if (room.phase === "overworld") {
     // Send the visibility-expanded map (same payload as the broadcast), NOT raw room.hexMap, so the
     // resuming player gets the clickable frontier the server's proposeMove check expects (no desync).
-    io.send(seat, { type: "hexMapState", hexMap: hexMapStatePayload(room) });
+    io.send(seat, { type: "hexMapState", hexMap: hexMapStatePayload(room), gateways: room.gateways });
+    // An open vote (move/retreat/travel/loot) must survive a reconnect (03-loot-codex §4.7): without
+    // this the returning player sees no ballot and the LootPanel wrongly re-enables its Claim buttons.
+    if (room.vote) io.send(seat, { type: "voteState", vote: voteStatePayload(room.vote) });
   }
   sendInventory(room, io, seat);
   if (room.phase === "combat" && room.session) {
@@ -344,9 +392,37 @@ function handleHello(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage
   afterWelcome();
 }
 
+/**
+ * Existence + startability check for a caller-chosen start dimension (flag #5), against the CALLER's
+ * account (resolved at hello). DEFAULT_DIMENSION (tier 0) and the client's ?dim=0 pass by
+ * construction. GAME_ALLOW_UNCHARTED_DIMENSIONS=1 skips the eligibility (NOT the existence) check.
+ * Returns true if allowed; sends INVALID_INPUT and returns false otherwise.
+ */
+function validateStartDimension(ws: ServerWebSocket<SocketData>, dimensionId: number): boolean {
+  if (!getDimensionMeta(dimensionId)) {
+    sendError(ws, "INVALID_INPUT", "Unknown dimension");
+    return false;
+  }
+  if (process.env.GAME_ALLOW_UNCHARTED_DIMENSIONS !== "1") {
+    const accountId = ws.data.accountId;
+    if (!isStartableDimension(dimensionId, accountId ? [accountId] : [])) {
+      sendError(ws, "INVALID_INPUT", "You haven't charted that dimension");
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Build a brand-new room + durable run for the host (write point 1, R13.1). */
 function handleCreateRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMessage, { type: "createRoom" }>): void {
   if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
+  // Wire JSON is cast to ClientMessage, so RoomCapacity is only a compile-time promise. A capacity
+  // outside 2..4 has no partySizeBudgetMult (difficulty.ts throws), soft-locking every fight the
+  // room could ever build — reject it at this trust boundary.
+  const capacity = msg.capacity as number;
+  if (capacity !== 2 && capacity !== 3 && capacity !== 4)
+    return sendError(ws, "INVALID_INPUT", "Room capacity must be 2, 3, or 4");
+  if (msg.dimensionId !== undefined && !validateStartDimension(ws, msg.dimensionId)) return;
   createRoomFor(ws, msg.capacity, msg.dimensionId ?? DEFAULT_DIMENSION, true);
 }
 
@@ -375,9 +451,12 @@ function createRoomFor(
   seedDiscovery(dimensionId, DISCOVERY_RADIUS);
   discoverHex(dimensionId, ORIGIN);
   saveDiscoveredHexIcon(dimensionId, ORIGIN, "town");
-  markRunCleared(runId, ORIGIN);
+  markRunCleared(runId, dimensionId, ORIGIN);
 
-  const seats = createOpenSeats(capacity, dimensionId);
+  const seats = createOpenSeats(capacity);
+
+  const meta = getDimensionMeta(dimensionId);
+  if (!meta) throw new Error(`createRoomFor: dimension ${dimensionId} does not exist`); // fail loud
 
   const hexes = loadDiscoveredHexes(dimensionId);
   hexes[ORIGIN_KEY] = "explored";
@@ -392,10 +471,16 @@ function createRoomFor(
     generation: 0,
     combat: null,
     dimensionId,
+    startDimensionId: dimensionId,
+    dimensionName: meta.name,
+    dimensionTier: meta.tier,
+    gateways: loadGatewaysForDimension(dimensionId),
     runId,
     hexMap: { playerPos: ORIGIN, hexes, icons },
     visitedThisRun: new Set([ORIGIN_KEY]),
+    runClearedCount: 0,
     pendingHex: null,
+    rested: false,
     capacity,
     seats,
     listed,
@@ -403,6 +488,9 @@ function createRoomFor(
     session: null,
     defendRound: null,
     vote: null,
+    lootPool: [],
+    contract: null,
+    outcome: null,
     chatLog: [],
     reapTimer: null,
     lastActivityMs: Date.now(),
@@ -436,6 +524,10 @@ function createRoomFor(
 
   sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, auth: buildAuthState(ws), reconnected: { code, seatId: host.seatId } });
   broadcastRoomState(room, io);
+  // The host lands in the lobby without passing through sendSeatSnapshots — send the offer board
+  // and the run-start dimension picker.
+  io.send(host, { type: "contractOffers", offers: buildContractOffers(room.hexMap.icons) });
+  io.send(host, { type: "dimensionOptions", options: startableForRoom(room) });
   sendInventory(room, io, host);
   pushRoomPresenceDelta(room); // the host's friends gain a Join affordance (§7.4)
   return room;
@@ -496,6 +588,10 @@ function handleJoinRoom(ws: ServerWebSocket<SocketData>, msg: Extract<ClientMess
 
   sendTo(ws, { type: "welcome", protocolVersion: PROTOCOL_VERSION, sessionToken: token, auth: buildAuthState(ws), reconnected: { code: room.code, seatId: seat.seatId } });
   broadcastRoomState(room, io);
+  // A joiner lands in the lobby without passing through sendSeatSnapshots — send the offer board.
+  io.send(seat, { type: "contractOffers", offers: buildContractOffers(room.hexMap.icons) });
+  // The seated-account union grew: re-broadcast the run-start picker to the whole lobby (incl. the joiner).
+  broadcastDimensionOptions(room);
   sendInventory(room, io, seat);
   // Friends-panel joinability changed for EVERY seated account: the joiner gained a room, and if
   // this join took the last open seat the others' rooms stopped being joinable (§7.4).
@@ -624,8 +720,11 @@ function handleStartGame(room: Room, seat: Seat): void {
     }
   }
 
-  // Expedition start recorder (§6): chart this dimension for every attributed human seat.
-  recordDimensionsSeen(room, io);
+  // Expedition start recorder: chart this dimension for every attributed human seat.
+  emitRunEvent(room, io, { type: "run-started", runId: room.runId, dimensionId: room.dimensionId });
+
+  // Exactly-one-contract invariant (locked #3 / flag #2): no host pick -> the default contract.
+  if (!room.contract) assignContract(room, DEFAULT_CONTRACT_TYPE);
 
   room.phase = "overworld";
   setRunPhase(room.runId, "overworld"); // persist the lifecycle SSOT (crash recovery resumes overworld runs)
@@ -680,10 +779,105 @@ function handlePlayAgain(room: Room, seat: Seat): void {
     handleJoinRoom(ws, { type: "joinRoom", code: existing!.code });
     return;
   }
-  // No live rematch room yet (or it filled / already started) — spin up a fresh private one. This
-  // clicker hosts it; subsequent clickers from this finished room follow into the same code.
-  const rematch = createRoomFor(ws, room.capacity as RoomCapacity, room.dimensionId, false);
+  // No live rematch room yet (or it filled / already started) — spin up a fresh private one at the
+  // run's START dimension (flag #6: a wipe forfeited earned depth). This clicker hosts it; subsequent
+  // clickers from this finished room follow into the same code.
+  const rematch = createRoomFor(ws, room.capacity as RoomCapacity, room.startDimensionId, false);
   if (rematch) room.rematchCode = rematch.code;
+}
+
+/** Host-gated, lobby-only: pick the run's contract from the offer board (02-contracts §4.5). */
+function handleChooseContract(
+  room: Room,
+  seat: Seat,
+  ws: ServerWebSocket<SocketData>,
+  contractType: ContractType,
+): void {
+  if (!isHost(room, seat)) return sendError(ws, "NOT_HOST", "Only the host can choose the contract");
+  if (room.phase !== "lobby") return sendError(ws, "BAD_PHASE", "Contracts are chosen in the lobby");
+  try {
+    assignContract(room, contractType); // INVALID_INPUT on unknown/unavailable type
+  } catch (e) {
+    if (e instanceof AccountError) return sendError(ws, e.code, e.message);
+    throw e;
+  }
+  broadcastRoomState(room, io); // the selection rides roomState.contract
+}
+
+/**
+ * Host-gated, lobby-only: re-point the expedition's start dimension (04-portals §4.5). Validates
+ * existence + startability (env-overridable), then durably re-points the run's current+start
+ * dimension, rebuilds the community hexMap/gateway state, re-derives the contract (offers are
+ * per-dimension-map, flag #12), and re-sends offers to every seat.
+ */
+function handleChooseDimension(
+  room: Room,
+  seat: Seat,
+  ws: ServerWebSocket<SocketData>,
+  dimensionId: number,
+): void {
+  if (!isHost(room, seat)) return sendError(ws, "NOT_HOST", "Only the host can choose the destination");
+  if (room.phase !== "lobby") return sendError(ws, "BAD_PHASE", "The destination is chosen in the lobby");
+  const meta = getDimensionMeta(dimensionId);
+  if (!meta) return sendError(ws, "INVALID_INPUT", "Unknown dimension");
+  if (
+    process.env.GAME_ALLOW_UNCHARTED_DIMENSIONS !== "1" &&
+    !isStartableDimension(dimensionId, seatedAccountIds(room))
+  ) {
+    return sendError(ws, "INVALID_INPUT", "No one in the party has charted that dimension");
+  }
+  if (dimensionId === room.dimensionId) return; // already there — nothing to do
+
+  setRunStartDimension(room.runId, dimensionId); // durable: dimension_id + start_dimension_id
+  seedDiscovery(dimensionId, DISCOVERY_RADIUS); // idempotent community seed
+  discoverHex(dimensionId, ORIGIN);
+  saveDiscoveredHexIcon(dimensionId, ORIGIN, "town");
+  markRunCleared(room.runId, dimensionId, ORIGIN); // old dim's origin row lingers (harmless)
+
+  room.dimensionId = dimensionId;
+  room.startDimensionId = dimensionId;
+  room.dimensionName = meta.name;
+  room.dimensionTier = meta.tier;
+
+  const hexes = loadDiscoveredHexes(dimensionId);
+  hexes[ORIGIN_KEY] = "explored";
+  const icons: Record<string, HexIconType> = { [ORIGIN_KEY]: "town" };
+  for (const [key, icon] of Object.entries(loadDiscoveredHexIcons(dimensionId))) icons[key] = icon as HexIconType;
+  room.hexMap = { playerPos: ORIGIN, hexes, icons };
+  room.visitedThisRun = new Set([ORIGIN_KEY]);
+  room.gateways = loadGatewaysForDimension(dimensionId);
+
+  // Contract re-derivation (flag #12): offers are per-dimension-map. Re-assign the same TYPE with a
+  // fresh target hex if still offered, else drop the selection.
+  if (room.contract) {
+    const offers = buildContractOffers(room.hexMap.icons);
+    if (offers.some((o) => o.type === room.contract!.type)) assignContract(room, room.contract.type);
+    else {
+      room.contract = null;
+      clearRunContract(room.runId);
+    }
+  }
+
+  // Manifest re-validation (flag #12 applied to manifests): drop now-ineligible picks against the
+  // new destination's tier and rematerialize; the broadcast below carries the shrunk manifestIds.
+  const newTier = effectiveStartingTier(room.dimensionTier);
+  for (const s of room.seats) {
+    if (s.manifestIds.length === 0 || !s.accountId) continue;
+    const kept = s.manifestIds.filter((id) => {
+      const e = loadCodexEntry(s.accountId!, id)!;
+      return isManifestable(JSON.parse(e.item_json) as ItemDefinition, e.tier, newTier);
+    });
+    if (kept.length !== s.manifestIds.length) {
+      s.manifestIds = kept;
+      s.inventory = buildSeatLoadout(s.presetId ?? DEFAULT_PRESET_ID, manifestItemsFor(s));
+      saveSeatInventory(room.runId, s.seatIndex, s.inventory);
+      if (s.socket) sendInventory(room, io, s);
+    }
+  }
+
+  broadcastRoomState(room, io);
+  const offers = buildContractOffers(room.hexMap.icons);
+  for (const s of room.seats) if (s.socket) io.send(s, { type: "contractOffers", offers });
 }
 
 function handleDebugWin(room: Room, seat: Seat): void {
@@ -734,8 +928,37 @@ function applyInventoryChange(room: Room, seat: Seat): void {
 function handleChoosePreset(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, presetId: string): void {
   if (room.phase !== "lobby") return sendError(ws, "BAD_PHASE", "Presets can only be chosen in the lobby");
   if (!getPreset(presetId)) return sendError(ws, "BAD_PHASE", `Unknown preset "${presetId}"`);
-  seat.inventory = buildPresetInventory(presetId, room.dimensionId);
+  // Re-pick keeps the seat's manifested designs (they materialize into the fresh preset bag, §4.6).
+  seat.inventory = buildSeatLoadout(presetId, manifestItemsFor(seat));
   seat.presetId = presetId;
+  applyInventoryChange(room, seat);
+}
+
+/** Set this seat's manifest picks (full replacement). Validates count (K = expeditionSlots(level)),
+ *  dedup, codex membership, non-consumable, and the tier gate; then materializes into the bag (§4.6). */
+function handleChooseManifest(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, itemIds: readonly string[]): void {
+  if (room.phase !== "lobby") return sendError(ws, "BAD_PHASE", "Manifests are chosen in the lobby");
+  if (!seat.accountId) return sendError(ws, "INVALID_INPUT", "No account bound to this seat");
+  if (new Set(itemIds).size !== itemIds.length)
+    return sendError(ws, "INVALID_INPUT", "Duplicate design"); // flag #7
+  const level = loadCardProfile(seat.accountId).level; // server-derived
+  const slots = expeditionSlots(level);
+  if (itemIds.length > slots)
+    return sendError(ws, "INVALID_INPUT", `Too many designs (max ${slots})`);
+  const startingTier = effectiveStartingTier(room.dimensionTier); // lobby: current ≡ start (04 §10)
+  const manifest: ItemDefinition[] = [];
+  for (const id of itemIds) {
+    const entry = loadCodexEntry(seat.accountId, id);
+    if (!entry) return sendError(ws, "INVALID_INPUT", "Not in your codex");
+    const item = JSON.parse(entry.item_json) as ItemDefinition;
+    if (item.type === "consumable")
+      return sendError(ws, "INVALID_INPUT", "Consumable designs cannot be manifested"); // locked #5
+    if (!isManifestable(item, entry.tier, startingTier))
+      return sendError(ws, "INVALID_INPUT", "That design's tier exceeds this expedition");
+    manifest.push(item);
+  }
+  seat.manifestIds = [...itemIds];
+  seat.inventory = buildSeatLoadout(seat.presetId ?? DEFAULT_PRESET_ID, manifest);
   applyInventoryChange(room, seat);
 }
 
@@ -804,9 +1027,12 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
     case "friendRequest":
     case "friendAccept":
     case "friendDecline":
-    case "friendRemove": {
+    case "friendRemove":
+    case "getCodex": {
       if (!ws.data.clientId) return sendError(ws, "BAD_PHASE", "Say hello first");
       switch (msg.type) {
+        case "getCodex":
+          return handleGetCodex(ws);
         case "claimAccount":
           return void handleClaimAccount(ws, msg);
         case "register":
@@ -883,6 +1109,8 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
     // --- seat-scoped inventory (off-combat, R26) ---
     case "choosePreset":
       return handleChoosePreset(room, seat, ws, msg.presetId);
+    case "chooseManifest":
+      return handleChooseManifest(room, seat, ws, msg.itemIds);
     case "equip":
       return handleEquip(room, seat, ws, msg.bagIndex);
     case "unequip":
@@ -893,6 +1121,12 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
     // --- room-scoped overworld ---
     case "proposeMove":
       return proposeMove(room, io, seat, msg.target);
+    case "proposeRetreat":
+      return proposeRetreat(room, io, seat);
+    case "proposeTravel":
+      return proposeTravel(room, io, seat);
+    case "claimLoot":
+      return proposeLootClaim(room, io, seat, msg.lootId);
     case "castVote":
       return castVote(room, io, seat, msg.proposalId, msg.vote);
     case "playAgain":
@@ -907,6 +1141,10 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
       return handleFriendInvite(room, seat, ws, msg.accountId);
 
     // --- host-gated ---
+    case "chooseContract":
+      return handleChooseContract(room, seat, ws, msg.contractType);
+    case "chooseDimension":
+      return handleChooseDimension(room, seat, ws, msg.dimensionId);
     case "startGame":
       return handleStartGame(room, seat);
     case "reset":
@@ -953,8 +1191,19 @@ function detachSeat(room: Room, seat: Seat, reason: "leave" | "close"): void {
     seat.accountId = null;
     seat.cardProfile = null;
     seat.displayName = `Player ${seatIndex + 1}`;
+    // Loadout is account-gated: a freed seat must return to the createOpenSeats default. Otherwise the
+    // next joiner (or a startGame bot) inherits the leaver's manifested codex designs — violating the
+    // protocol contract that manifestIds are [] for open/bot seats, and later crashing
+    // chooseDimension's codex re-validation on a design the new account never owned.
+    seat.manifestIds = [];
+    seat.presetId = DEFAULT_PRESET_ID;
+    seat.inventory = buildPresetInventory(DEFAULT_PRESET_ID);
+    seat.animSet = getAnimSet(seat.inventory.equipped);
     leaveRunSeat(room.runId, seatIndex);
     broadcastRoomState(room, io);
+    // The seated-account union shrank: re-broadcast the run-start picker (flag #13 — the current
+    // selection is NOT revalidated; eligibility was checked at chooseDimension time). No-op if empty.
+    broadcastDimensionOptions(room);
     if (room.seats.every((s) => s.socket === null)) {
       // A never-started lobby that fully empties is abandoned durably so findActiveSeatForClient no
       // longer resolves it (else a later hello would resurrect it mid-overworld with bots, #20) and

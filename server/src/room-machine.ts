@@ -16,6 +16,9 @@ import type {
   EncounterType,
   Entity,
   TeamId,
+  GatewayInfo,
+  LootPoolEntry,
+  ItemDefinition,
 } from "shared";
 import {
   getVisibleHexes,
@@ -30,8 +33,15 @@ import {
   resolveVote,
   PROTOCOL_VERSION,
   DEFAULT_PRESET_ID,
+  DEFAULT_CONTRACT_TYPE,
+  contractById,
+  isRetreatHex,
+  isManifestable,
+  effectiveStartingTier,
+  scaledXp,
 } from "shared";
-import type { Room, Seat, DefendRound, DefendTarget, MovementVote } from "./room.js";
+import type { ContractState } from "shared";
+import type { Room, Seat, DefendRound, DefendTarget, RoomVote } from "./room.js";
 import { seatBuildSpec, sovereignFor } from "./room.js";
 import {
   coopPhaseOf,
@@ -49,6 +59,7 @@ import {
   saveSeatInventory,
   updateRunPartyPos,
   commitExplore,
+  commitTravel,
   markRunCleared,
   finalizeRun,
   startNewRun,
@@ -61,13 +72,23 @@ import {
   loadDiscoveredHexes,
   loadDiscoveredHexIcons,
   loadRunCleared,
+  countRunCombatCleared,
   loadSeatInventory,
+  accruePendingXp,
+  getDimensionMeta,
+  loadUnassignedLoot,
+  commitLootAssignment,
+  loadCodexEntry,
 } from "./db.js";
+import type { RunLootRow } from "./db.js";
 import { setSeatAccountIfNull } from "./db.js";
+import { loadGatewaysForDimension, ensureGatewayAttuned } from "./gateways.js";
 import { loadCardProfile } from "./accounts.js";
-import { awardEncounterWin, recordWipe } from "./awards.js";
+import { emitRunEvent } from "./run-events.js";
+import { eligibleSeats } from "./run-recorders.js";
+import { assignContract } from "./contract-engine.js";
 import { rooms } from "./room-registry.js";
-import { buildPresetInventory, freshRoomCode, heroEntityIdFor, seatIdForIndex } from "./room.js";
+import { buildPresetInventory, buildSeatLoadout, manifestItemsFor, freshRoomCode, heroEntityIdFor, seatIdForIndex } from "./room.js";
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -86,12 +107,16 @@ type Timer = ReturnType<typeof setTimeout>;
 // --- Tunable timeouts (server-authoritative, R28 / R11). ---
 export const DEFEND_TIMEOUT_MS = 6_000;
 export const VOTE_TIMEOUT_MS = 15_000;
+// Community-discovery seed radius. Lives here (not index.ts) because travelToDimension needs it and
+// the machine must not import index.ts; index.ts imports it back.
+export const DISCOVERY_RADIUS = 15;
 export const AFK_TIMEOUT_MS = 90_000;
 export const DISCONNECT_GRACE_MS = Number(process.env.GAME_DISCONNECT_GRACE_MS) || 3_000;
 // Env-overridable so integration tests can drive the empty-reap -> HOME path without a real 5-min wait.
 export const REAP_TIMEOUT_MS = Number(process.env.GAME_REAP_TIMEOUT_MS) || 5 * 60_000;
 
-const ORIGIN: HexCoord = { q: 0, r: 0 };
+// Exported (alongside DISCOVERY_RADIUS) so run-recorders.ts can price XP by hexDistance from it.
+export const ORIGIN: HexCoord = { q: 0, r: 0 };
 
 /**
  * The only channel through which the machine reaches clients. The WS layer implements it.
@@ -117,6 +142,7 @@ function seatInfo(room: Room, seat: Seat): SeatInfo {
     ready: seat.ready,
     loadoutSummary: { equippedIds: seat.inventory.equipped.map((i) => i.id) },
     presetId: seat.presetId,
+    manifestIds: [...seat.manifestIds],
     // From the in-memory seat cache, never a DB read (this fires on every broadcast).
     accountId: seat.accountId,
     level: seat.cardProfile?.level ?? null,
@@ -136,6 +162,12 @@ export function roomStatePayload(room: Room, forSeat: Seat | null): RoomStatePay
     yourSeatId: forSeat?.seatId ?? null,
     runId: room.runId,
     dimensionId: room.dimensionId,
+    dimensionName: room.dimensionName,
+    dimensionTier: room.dimensionTier,
+    contract: room.contract,
+    outcome: room.outcome,
+    lootPool: room.lootPool,
+    rested: room.rested,
   };
 }
 
@@ -214,9 +246,9 @@ export function hexMapStatePayload(room: Room): Extract<ServerMessage, { type: "
   return { playerPos: room.hexMap.playerPos, hexes: visible, icons };
 }
 
-/** Broadcast the shared overworld hex map (visibility-expanded + derived icons). */
+/** Broadcast the shared overworld hex map (visibility-expanded + derived icons) + gateway map. */
 export function broadcastHexMapState(room: Room, io: RoomIO): void {
-  io.broadcast(room, { type: "hexMapState", hexMap: hexMapStatePayload(room) });
+  io.broadcast(room, { type: "hexMapState", hexMap: hexMapStatePayload(room), gateways: room.gateways });
 }
 
 // =====================================================================================
@@ -225,6 +257,15 @@ export function broadcastHexMapState(room: Room, io: RoomIO): void {
 
 function seatById(room: Room, seatId: SeatId): Seat | null {
   return room.seats.find((s) => s.seatId === seatId) ?? null;
+}
+
+/** Parse a persisted drop row into a wire pool entry (snapshot resolution — no items-table read). */
+export function rowToPoolEntry(row: RunLootRow): LootPoolEntry {
+  return {
+    lootId: row.id,
+    item: JSON.parse(row.item_json) as ItemDefinition,
+    sourceIcon: row.source_icon as HexIconType | null,
+  };
 }
 
 function heroEntity(room: Room, seat: Seat): Entity | undefined {
@@ -852,13 +893,16 @@ function connectedHumanSeatIds(room: Room): SeatId[] {
   return room.seats.filter((s) => s.state === "human-connected").map((s) => s.seatId);
 }
 
-function voteStatePayload(vote: MovementVote): VoteStatePayload {
+export function voteStatePayload(vote: RoomVote): VoteStatePayload {
   const votes: Partial<Record<SeatId, VoteChoice>> = {};
   for (const [seatId, choice] of vote.ballots) votes[seatId] = choice;
   return {
     proposalId: vote.proposalId,
+    kind: vote.kind,
     proposerSeatId: vote.proposerSeatId,
-    target: vote.target,
+    target: vote.kind === "move" ? vote.target : null,
+    travel: vote.kind === "travel" ? vote.gateway : null,
+    loot: vote.kind === "loot" ? vote.entry : null,
     votes,
     electorate: vote.electorate,
     deadlineMs: vote.deadline,
@@ -892,26 +936,185 @@ export function proposeMove(room: Room, io: RoomIO, seat: Seat, target: HexCoord
     return;
   }
 
-  const vote: MovementVote = {
+  openVote(room, io, {
+    kind: "move",
+    target,
     proposalId,
     proposerSeatId: seat.seatId,
-    target,
     electorate,
     ballots,
     deadline: Date.now() + VOTE_TIMEOUT_MS,
     timer: null,
-  };
+  });
+}
+
+/**
+ * Propose ending the run at a cleared gateway (locked decision #6; 02-contracts §4.4). Same vote
+ * machinery as proposeMove; an accepted retreat settles the run with outcome "retreat" (50% bank).
+ */
+export function proposeRetreat(room: Room, io: RoomIO, seat: Seat): void {
+  const err = (code: import("shared").ErrorCode, message: string) =>
+    io.send(seat, { type: "error", code, message, recoverable: true });
+
+  if (room.phase !== "overworld") return err("BAD_PHASE", "Not in overworld");
+  if (room.vote) return err("BAD_PHASE", "A vote is already open");
+  if (seat.state !== "human-connected") return err("NOT_YOUR_SEAT", "Spectators cannot propose");
+  if (!isRetreatHex(getHexIcon(room.hexMap.playerPos, room.hexMap.icons))) {
+    return err("INVALID_MOVE", "The party must stand on a cleared gateway to retreat");
+  }
+
+  const electorate = connectedHumanSeatIds(room);
+  const proposalId = `v${++voteSeq}`;
+  const ballots = new Map<SeatId, VoteChoice>([[seat.seatId, "yes"]]);
+
+  if (electorate.length <= 1) {
+    // Single human -> instant settle (movement-vote precedent: voteState null first).
+    io.broadcast(room, { type: "voteState", vote: null });
+    settleRun(room, io, "retreat");
+    return;
+  }
+
+  openVote(room, io, {
+    kind: "retreat",
+    proposalId,
+    proposerSeatId: seat.seatId,
+    electorate,
+    ballots,
+    deadline: Date.now() + VOTE_TIMEOUT_MS,
+    timer: null,
+  });
+}
+
+/**
+ * Propose travel through a cleared gateway to a deeper dimension (04-portals §4.3). Same vote
+ * machinery as proposeMove/proposeRetreat. If the standing gateway is not yet community-attuned, a
+ * pool-refill retry is attempted (flag #4); on success the fresh destination is recorded/broadcast,
+ * on failure GATEWAY_UNATTUNED is returned and no vote opens.
+ */
+export function proposeTravel(room: Room, io: RoomIO, seat: Seat): void {
+  const err = (code: import("shared").ErrorCode, message: string) =>
+    io.send(seat, { type: "error", code, message, recoverable: true });
+
+  if (room.phase !== "overworld") return err("BAD_PHASE", "Not in overworld");
+  if (room.vote) return err("BAD_PHASE", "A vote is already open");
+  if (seat.state !== "human-connected") return err("NOT_YOUR_SEAT", "Spectators cannot propose");
+  const pos = room.hexMap.playerPos;
+  if (!isRetreatHex(getHexIcon(pos, room.hexMap.icons))) {
+    return err("INVALID_MOVE", "The party must stand on a cleared gateway to travel");
+  }
+
+  const key = hexKey(pos);
+  let gateway = room.gateways[key];
+  if (!gateway) {
+    // Retry attunement (flag #4): the pool may have been replenished since the clear.
+    const result = ensureGatewayAttuned(room.dimensionId, room.dimensionTier, pos, seat.accountId);
+    if (!result.attuned) {
+      return err("GATEWAY_UNATTUNED", "The gateway is unattuned — no new dimension is ready beyond it");
+    }
+    gateway = result.gateway;
+    room.gateways = { ...room.gateways, [key]: gateway };
+    io.broadcast(room, { type: "gatewayUpdate", hex: pos, gateway });
+  }
+
+  const electorate = connectedHumanSeatIds(room);
+  const proposalId = `v${++voteSeq}`;
+  const ballots = new Map<SeatId, VoteChoice>([[seat.seatId, "yes"]]);
+
+  if (electorate.length <= 1) {
+    // Single human -> instant travel (movement/retreat precedent: voteState null first).
+    io.broadcast(room, { type: "voteState", vote: null });
+    travelToDimension(room, io, gateway);
+    return;
+  }
+
+  openVote(room, io, {
+    kind: "travel",
+    gateway,
+    proposalId,
+    proposerSeatId: seat.seatId,
+    electorate,
+    ballots,
+    deadline: Date.now() + VOTE_TIMEOUT_MS,
+    timer: null,
+  });
+}
+
+/**
+ * Propose claiming a pool item for YOUR seat (03-loot-codex §4.3). Same vote machinery as
+ * proposeMove/Retreat/Travel; a single connected human assigns instantly, otherwise a vote opens
+ * ("<name> claims <item>", proposer auto-yes). A rejected claim leaves the item in the pool.
+ */
+export function proposeLootClaim(room: Room, io: RoomIO, seat: Seat, lootId: number): void {
+  const err = (code: import("shared").ErrorCode, message: string) =>
+    io.send(seat, { type: "error", code, message, recoverable: true });
+
+  if (room.phase !== "overworld") return err("BAD_PHASE", "Not in overworld");
+  if (room.vote) return err("BAD_PHASE", "A vote is already open");
+  if (seat.state !== "human-connected") return err("NOT_YOUR_SEAT", "Spectators cannot propose");
+  const entry = room.lootPool.find((e) => e.lootId === lootId);
+  if (!entry) return err("INVALID_INPUT", "That item is no longer available");
+  if (seat.inventory.bag.indexOf(null) === -1) return err("INVALID_INPUT", "Your bag is full");
+
+  const electorate = connectedHumanSeatIds(room);
+  const proposalId = `v${++voteSeq}`;
+  const ballots = new Map<SeatId, VoteChoice>([[seat.seatId, "yes"]]);
+
+  if (electorate.length <= 1) {
+    // Single human -> instant assign (movement/retreat/travel precedent: voteState null first).
+    io.broadcast(room, { type: "voteState", vote: null });
+    assignLoot(room, io, seat, entry);
+    return;
+  }
+
+  openVote(room, io, {
+    kind: "loot",
+    entry,
+    proposalId,
+    proposerSeatId: seat.seatId,
+    electorate,
+    ballots,
+    deadline: Date.now() + VOTE_TIMEOUT_MS,
+    timer: null,
+  });
+}
+
+/**
+ * The single claim-commit path: re-check the claimant's bag at resolve time (it may have changed
+ * mid-vote via the loadout editor), mark the drop assigned + persist the new bag in one durable tx,
+ * drain the pool, and re-broadcast. A racing path that already assigned the row makes this a no-op.
+ */
+function assignLoot(room: Room, io: RoomIO, seat: Seat, entry: LootPoolEntry): void {
+  const free = seat.inventory.bag.indexOf(null);
+  if (free === -1 || seat.state === "open" || seat.state === "bot") {
+    io.send(seat, { type: "error", code: "INVALID_INPUT",
+      message: "Claim failed — no free bag slot", recoverable: true });
+    return; // item stays in the pool
+  }
+  const bag = [...seat.inventory.bag];
+  bag[free] = entry.item;
+  const nextInv = { ...seat.inventory, bag };
+  const claimed = commitLootAssignment(room.runId, entry.lootId, seat.seatIndex,
+    seat.accountId, nextInv); // one durable tx (§1.3)
+  if (!claimed) return; // already assigned by a racing path — no-op
+  seat.inventory = nextInv;
+  room.lootPool = room.lootPool.filter((e) => e.lootId !== entry.lootId);
+  sendInventory(room, io, seat);
+  broadcastRoomState(room, io); // pool shrank + loadoutSummary changed
+}
+
+/** Install + broadcast an open vote and arm its deadline timer (one open vote per room). */
+function openVote(room: Room, io: RoomIO, vote: RoomVote): void {
   room.vote = vote;
 
   const gen = room.generation;
   vote.timer = setTimeout(() => {
     vote.timer = null;
     if (room.generation !== gen || room.vote !== vote) return;
-    resolveMovementVote(room, io, true);
+    resolveOpenVote(room, io, true);
   }, VOTE_TIMEOUT_MS);
 
   io.broadcast(room, { type: "voteState", vote: voteStatePayload(vote) });
-  resolveMovementVote(room, io, false);
+  resolveOpenVote(room, io, false);
 }
 
 /** Cast a ballot into the open vote (only electorate members count, R15). */
@@ -930,15 +1133,16 @@ export function castVote(
   if (!vote.electorate.includes(seat.seatId)) return; // not in the frozen electorate
   vote.ballots.set(seat.seatId, choice);
   io.broadcast(room, { type: "voteState", vote: voteStatePayload(vote) });
-  resolveMovementVote(room, io, false);
+  resolveOpenVote(room, io, false);
 }
 
 /**
- * Resolve the open vote over the frozen electorate (R15). When decided: broadcast `moveResolved`,
- * clear the vote, and on accept either move the party (visited) or enter combat (unexplored).
- * Generation-guarded (R17).
+ * Resolve the open vote over the frozen electorate (R15), dispatching on its kind. Move: broadcast
+ * `moveResolved`, and on accept either move the party (visited) or enter combat (unexplored).
+ * Retreat: an accept settles the run; a reject just clears the vote (`voteState: null` hides the
+ * panel + re-enables map input — no moveResolved, flag #9). Generation-guarded (R17).
  */
-export function resolveMovementVote(room: Room, io: RoomIO, deadlinePassed: boolean): void {
+export function resolveOpenVote(room: Room, io: RoomIO, deadlinePassed: boolean): void {
   const vote = room.vote;
   if (!vote) return;
   if (room.phase !== "overworld") return;
@@ -950,14 +1154,24 @@ export function resolveMovementVote(room: Room, io: RoomIO, deadlinePassed: bool
     clearTimeout(vote.timer);
     vote.timer = null;
   }
-  const { target, proposalId } = vote;
   room.vote = null;
   io.broadcast(room, { type: "voteState", vote: null });
 
-  if (resolution.accepted) {
-    finalizeMove(room, io, proposalId, target, true);
+  if (vote.kind === "move") {
+    if (resolution.accepted) {
+      finalizeMove(room, io, vote.proposalId, vote.target, true);
+    } else {
+      io.broadcast(room, { type: "moveResolved", proposalId: vote.proposalId, accepted: false, target: vote.target });
+    }
+  } else if (vote.kind === "travel") {
+    if (resolution.accepted) travelToDimension(room, io, vote.gateway);
+  } else if (vote.kind === "loot") {
+    if (resolution.accepted) {
+      const claimant = seatById(room, vote.proposerSeatId);
+      if (claimant) assignLoot(room, io, claimant, vote.entry);
+    } // rejected: voteState null already broadcast; the item stays in the pool
   } else {
-    io.broadcast(room, { type: "moveResolved", proposalId, accepted: false, target });
+    if (resolution.accepted) settleRun(room, io, "retreat");
   }
 }
 
@@ -974,21 +1188,29 @@ function finalizeMove(room: Room, io: RoomIO, proposalId: string, target: HexCoo
     // Pure party move onto an already-cleared hex (write point 5, R35): durable synchronously.
     room.hexMap = { ...room.hexMap, playerPos: target };
     updateRunPartyPos(room.runId, target);
+    emitRunEvent(room, io, {
+      type: "hex-entered",
+      runId: room.runId,
+      hex: target,
+      icon: getHexIcon(target, room.hexMap.icons),
+    });
     broadcastHexMapState(room, io);
   } else {
     void beginCombatEntry(room, io, target);
   }
 }
 
-/** Cancel an open vote (proposer disconnect, R15). */
+/** Cancel an open vote (proposer disconnect / run settle, R15). moveResolved is move-only —
+ *  the map animates on it; a retreat vote just clears (voteState: null hides the panel). */
 export function cancelVote(room: Room, io: RoomIO): void {
   const vote = room.vote;
   if (!vote) return;
   if (vote.timer) clearTimeout(vote.timer);
-  const { proposalId, target } = vote;
   room.vote = null;
   io.broadcast(room, { type: "voteState", vote: null });
-  io.broadcast(room, { type: "moveResolved", proposalId, accepted: false, target });
+  if (vote.kind === "move") {
+    io.broadcast(room, { type: "moveResolved", proposalId: vote.proposalId, accepted: false, target: vote.target });
+  }
 }
 
 // =====================================================================================
@@ -1021,8 +1243,10 @@ export async function beginCombatEntry(room: Room, io: RoomIO, target: HexCoord)
   const gen = room.generation;
   const specs = room.seats.map(seatBuildSpec);
   const hexType = encounterTypeFor(room, target);
+  const rested = room.rested;
+  room.rested = false; // consumed on combat entry — one fight per rest (restored below if the build fails)
 
-  broadcastRoomState(room, io);
+  broadcastRoomState(room, io); // now carries rested: false
 
   let session: EncounterSession;
   try {
@@ -1032,6 +1256,8 @@ export async function beginCombatEntry(room: Room, io: RoomIO, target: HexCoord)
       hexCoord: target,
       runId: room.runId,
       dimensionId: room.dimensionId,
+      dimensionTier: room.dimensionTier,
+      rested,
     });
   } catch (e) {
     console.error(`[room] encounter build failed: ${(e as Error).message}`);
@@ -1040,6 +1266,7 @@ export async function beginCombatEntry(room: Room, io: RoomIO, target: HexCoord)
       room.phase = "overworld";
       setRunPhase(room.runId, "overworld"); // build failed -> stay in overworld (durable SSOT)
       room.pendingHex = null;
+      room.rested = rested; // build failed -> the rest was not spent
       broadcastRoomState(room, io);
     }
     return;
@@ -1055,7 +1282,7 @@ export async function beginCombatEntry(room: Room, io: RoomIO, target: HexCoord)
   room.session = session;
   room.building = false;
 
-  io.broadcast(room, { type: "combatStart", encounterHex: target });
+  io.broadcast(room, { type: "combatStart", encounterHex: target, archetype: session.archetype });
   broadcastState(room, io, []);
   broadcastCoopStatus(room, io);
 
@@ -1083,30 +1310,67 @@ export function endCombat(room: Room, io: RoomIO): void {
   room.combat = null; // off-combat
 
   if (won && room.pendingHex) {
-    const firstEver = exploreHex(room, room.pendingHex);
-    const discovered = room.pendingHex;
+    const clearedHex = room.pendingHex;
+    const icon = getHexIcon(clearedHex, room.hexMap.icons); // before exploreHex is fine; icons are stable
+    const firstEver = exploreHex(room, clearedHex);
     room.pendingHex = null;
+
+    // Recorders (XP accrual, then contract progress — registry order is load-bearing, §4.3). All
+    // synchronous SQLite, separate transactions — never joined to the R13.2 commitExplore transaction.
+    emitRunEvent(room, io, {
+      type: "encounter-won",
+      runId: room.runId,
+      hex: clearedHex,
+      icon,
+      firstEver,
+      // Cleared this run, origins excluded, cumulative across travel (04-portals flag #8).
+      clearedCount: room.runClearedCount,
+    });
+
+    if (room.contract?.completed) {
+      settleRun(room, io, "victory"); // short-circuit to gameover (§4.5)
+      return;
+    }
     room.phase = "overworld";
     setRunPhase(room.runId, "overworld"); // back to overworld after a win (durable SSOT)
-    // XP/stat/title recorder (§6): after exploreHex, before the broadcast so it carries new levels.
-    // A separate synchronous transaction — never joined to the R13.2 commitExplore transaction.
-    awardEncounterWin(room, io);
-    broadcastRoomState(room, io);
+    broadcastRoomState(room, io); // now carries contract progress
     broadcastHexMapState(room, io);
     // First-ever discovery in this dimension is a community KEY MOMENT — celebrate it.
-    if (firstEver) io.broadcast(room, { type: "hexDiscovered", coord: discovered });
+    if (firstEver) io.broadcast(room, { type: "hexDiscovered", coord: clearedHex });
   } else {
-    // Party wipe -> a HELD Game Over end state (the previously-dead `gameover` RoomPhase, now used).
-    // Finalize the run immediately (locked decision): a disconnect from Game Over lands on HOME and a
-    // crash can never resurrect a wiped party. The in-memory room stays live at `gameover` so any
-    // player can Play Again (-> a fresh active run via resetToOrigin) or Return to Home (-> leave).
     room.pendingHex = null;
-    room.phase = "gameover";
-    finalizeRun(room.runId, "defeat"); // the single run-end owner (also persists phase='gameover')
-    recordWipe(room, io); // wipes stat + title check (§6) before the broadcast
-    broadcastRoomState(room, io);
-    io.broadcast(room, { type: "gameOver", outcome: "defeat" });
+    settleRun(room, io, "defeat");
   }
+}
+
+/**
+ * The single in-room run-end path (victory/defeat/retreat): finalize + the run-ended hook +
+ * broadcasts. The room enters a HELD Game Over end state — the run is final (a disconnect from
+ * Game Over lands on HOME; a crash can never resurrect it) while the in-memory room stays live at
+ * `gameover` so any player can Play Again or Return to Home. `resetToOrigin`/abandon stay separate
+ * (they continue the room on a fresh run).
+ */
+export function settleRun(room: Room, io: RoomIO, outcome: "victory" | "defeat" | "retreat"): void {
+  if (outcome === "victory") {
+    // Contract reward accrues to pending BEFORE finalize so it banks at the victory multiplier.
+    // Priced by the run's START tier (the contract was chosen against that map, 02 flag #12); a
+    // contract is not hex-local, so distance is 0. Tier 0 = today's exact reward (05 §4.6).
+    const startMeta = getDimensionMeta(room.startDimensionId);
+    if (!startMeta) throw new Error(`settleRun: start dimension ${room.startDimensionId} missing`);
+    const reward = scaledXp(contractById(room.contract!.type).xpReward, startMeta.tier, 0);
+    for (const seat of eligibleSeats(room)) accruePendingXp(room.runId, seat.accountId!, reward);
+  }
+  if (room.vote) cancelVote(room, io); // an open vote cannot outlive the run
+  room.phase = "gameover";
+  room.outcome = outcome;
+  const changed = finalizeRun(room.runId, outcome); // banks the ledger atomically (§1.3)
+  // First-writer-wins discipline: the run-ended hook and its pushes fire only on the one real
+  // transition (a lost race means another path already settled and emitted).
+  if (changed) {
+    emitRunEvent(room, io, { type: "run-ended", runId: room.runId, outcome, contract: room.contract });
+  }
+  broadcastRoomState(room, io); // phase gameover + outcome + contract
+  io.broadcast(room, { type: "gameOver", outcome });
 }
 
 /**
@@ -1122,41 +1386,99 @@ function exploreHex(room: Room, target: HexCoord): boolean {
     hexes: { ...room.hexMap.hexes, [tk]: "explored" as const },
   };
   room.visitedThisRun.add(tk);
+  room.runClearedCount++; // combat-cleared, cumulative across travel (flag #8; origins never reach here)
   const icon = getHexIcon(target, room.hexMap.icons);
   // Write point 4 (R13.2): global discovery + icon + this-run cleared + party_q/r in one transaction.
   return commitExplore(room.dimensionId, room.runId, target, icon ?? null);
 }
 
 /**
+ * Mid-run gateway travel: swap the CURRENT dimension without ending the run (04-portals §4.3), the
+ * counterpart of resetToOrigin that preserves the run. One durable transaction (commitTravel) writes
+ * the dimension swap + party reset + destination discovery/origin state so a crash resumes there.
+ */
+function travelToDimension(room: Room, io: RoomIO, gateway: GatewayInfo): void {
+  const toDim = gateway.toDimensionId;
+  const meta = getDimensionMeta(toDim);
+  if (!meta) throw new Error(`travelToDimension: destination dimension ${toDim} missing`); // fail loud
+  commitTravel(room.runId, toDim, DISCOVERY_RADIUS); // ONE durable transaction (§1.3)
+
+  room.dimensionId = toDim;
+  room.dimensionName = meta.name;
+  room.dimensionTier = meta.tier;
+  const originKey = hexKey(ORIGIN);
+  const hexes = loadDiscoveredHexes(toDim);
+  hexes[originKey] = "explored";
+  const icons: Record<string, HexIconType> = { [originKey]: "town" };
+  for (const [k, icon] of Object.entries(loadDiscoveredHexIcons(toDim))) icons[k] = icon as HexIconType;
+  room.hexMap = { playerPos: ORIGIN, hexes, icons };
+  room.visitedThisRun = new Set([originKey]);
+  room.gateways = loadGatewaysForDimension(toDim);
+  room.pendingHex = null;
+  // Deliberately UNTOUCHED: room.runId, room.contract, room.runClearedCount, pending-XP ledger,
+  // seat inventories/presets — the run CONTINUES (locked #8: descent, not restart).
+
+  emitRunEvent(room, io, { type: "dimension-entered", runId: room.runId, dimensionId: toDim, tier: meta.tier });
+  broadcastRoomState(room, io); // dimensionId change triggers the client's sprite reload
+  broadcastHexMapState(room, io); // destination map + gateways
+}
+
+/**
  * Run defeat -> swap to a fresh run (write point 9 / R13.5 / R30): mark the old run inactive
- * (left_at-stamps all seats), start a new run at ORIGIN, re-key the registry, reset overworld
- * state, and persist seats with fresh starter inventory.
+ * (left_at-stamps all seats), start a new run at the run's START dimension (flag #6 — a wipe forfeits
+ * earned depth), re-key the registry, reset overworld state, and persist seats with fresh inventory.
  */
 export function resetToOrigin(room: Room, io: RoomIO, outcome: "defeat" | "abandoned" = "defeat"): void {
+  if (room.vote) cancelVote(room, io); // an open vote cannot outlive the run (its timer would fire into the new run)
   const oldRunId = room.runId;
-  finalizeRun(oldRunId, outcome); // single run-end owner (no-op if already final, e.g. play-again after a wipe)
-  const newRunId = startNewRun(room.dimensionId, hostClientId(room), room.capacity);
+  const oldContract = room.contract;
+  const changed = finalizeRun(oldRunId, outcome); // single run-end owner (no-op if already final, e.g. play-again after a wipe)
+  if (changed) {
+    emitRunEvent(room, io, { type: "run-ended", runId: oldRunId, outcome, contract: oldContract });
+  }
+  const startDim = room.startDimensionId; // flag #6: restart at the lobby-picked start, NOT the depth
+  const newRunId = startNewRun(startDim, hostClientId(room), room.capacity); // stamps start_dimension_id too
   setRunPhase(newRunId, "overworld"); // a play-again / abandon run resumes at the overworld, never a lobby
   // Discovery is GLOBAL per dimension and persists across runs — do NOT re-seed it. The fresh run
   // only re-clears its own origin; the community map (loadDiscoveredHexes) carries forward.
-  markRunCleared(newRunId, ORIGIN);
+  markRunCleared(newRunId, startDim, ORIGIN);
 
   room.runId = newRunId;
   rooms.rekeyRun(oldRunId, room);
 
+  if (room.dimensionId !== startDim) {
+    room.dimensionId = startDim;
+    const meta = getDimensionMeta(startDim)!; // was valid at run start; fail loud if it vanished
+    room.dimensionName = meta.name;
+    room.dimensionTier = meta.tier;
+  }
   const originKey = hexKey(ORIGIN);
-  const hexes = loadDiscoveredHexes(room.dimensionId);
+  const hexes = loadDiscoveredHexes(startDim);
   hexes[originKey] = "explored";
   const icons: Record<string, HexIconType> = { [originKey]: "town" };
-  for (const [key, icon] of Object.entries(loadDiscoveredHexIcons(room.dimensionId))) icons[key] = icon as HexIconType;
+  for (const [key, icon] of Object.entries(loadDiscoveredHexIcons(startDim))) icons[key] = icon as HexIconType;
   room.hexMap = { playerPos: ORIGIN, hexes, icons };
   room.visitedThisRun = new Set([originKey]);
+  room.gateways = loadGatewaysForDimension(startDim);
+  room.runClearedCount = 0;
+  room.lootPool = []; // fresh run: unclaimed drops from the old run are gone (flag #12)
+  room.rested = false; // fresh run starts un-rested (rest is granted on arrival, never at start; flag #8)
   room.phase = "overworld";
   room.pendingHex = null;
+  room.outcome = null;
+  // This path skips the lobby entirely, so the fresh run gets the default contract (flag #2).
+  assignContract(room, DEFAULT_CONTRACT_TYPE);
 
-  // Persist seats + fresh starter inventory for the new run.
+  // Persist seats + fresh starter inventory for the new run. Manifests are permanent knowledge, so
+  // re-apply each seat's still-eligible picks against the start dimension's tier (flag #12).
+  const startingTier = effectiveStartingTier(room.dimensionTier);
   for (const seat of room.seats) {
-    seat.inventory = buildPresetInventory(DEFAULT_PRESET_ID, room.dimensionId);
+    seat.manifestIds = seat.manifestIds.filter((id) => {
+      if (!seat.accountId) return false;
+      const e = loadCodexEntry(seat.accountId, id);
+      return e ? isManifestable(JSON.parse(e.item_json) as ItemDefinition, e.tier, startingTier) : false;
+    });
+    seat.inventory = buildSeatLoadout(DEFAULT_PRESET_ID, manifestItemsFor(seat));
     seat.presetId = DEFAULT_PRESET_ID;
     seat.animSet = getAnimSet(seat.inventory.equipped);
     persistSeat(room, seat);
@@ -1406,12 +1728,14 @@ export function reconstructRoomForRun(
   const runRow = loadRun(runId);
   if (!runRow || !runRow.active) return null;
 
-  const dimensionId = runRow.dimension_id;
+  const dimensionId = runRow.dimension_id; // CURRENT dimension (a crash after travel resumes here)
   const capacity = runRow.capacity;
+  const meta = getDimensionMeta(dimensionId);
+  if (!meta) throw new Error(`reconstructRoomForRun: dimension ${dimensionId} missing for run ${runId}`);
 
   // Hex map: visibility from the GLOBAL community discovery set (per dimension), icons from
   // persisted + derived, cleared set is the PER-RUN durable visitedThisRun (R13.2 — NEVER rebuilt
-  // from visibility).
+  // from visibility), scoped to the CURRENT dimension (v8: cleared state is per-dimension).
   const hexes = loadDiscoveredHexes(dimensionId);
   const originKey = hexKey(ORIGIN);
   if (!(originKey in hexes)) hexes[originKey] = "explored";
@@ -1419,8 +1743,8 @@ export function reconstructRoomForRun(
   const icons: Record<string, HexIconType> = { [originKey]: "town" };
   for (const [key, icon] of Object.entries(iconRows)) icons[key] = icon as HexIconType;
   const playerPos: HexCoord = { q: runRow.party_q, r: runRow.party_r };
-  const visitedThisRun = loadRunCleared(runId);
-  // Empty only for a corrupt row: every run durably clears ORIGIN at creation/reset, so this
+  const visitedThisRun = loadRunCleared(runId, dimensionId);
+  // Empty only for a corrupt row: every run durably clears ORIGIN at creation/reset/travel, so this
   // fallback re-adds ORIGIN alone and never leaks another run's cleared hexes (no cross-run skip).
   if (visitedThisRun.size === 0) visitedThisRun.add(originKey);
 
@@ -1434,7 +1758,7 @@ export function reconstructRoomForRun(
     const row = seatRows.find((r) => r.seat_index === i);
     const isHuman = row?.controller_kind === "human" && !!row.client_id;
     // Durable rows rehydrate the bag (R13.3); a seat with no row falls back to a starter loadout.
-    const inventory = row ? loadSeatInventory(runId, i, dimensionId) : buildPresetInventory(DEFAULT_PRESET_ID, dimensionId);
+    const inventory = row ? loadSeatInventory(runId, i) : buildPresetInventory(DEFAULT_PRESET_ID);
     const seat: Seat = {
       seatId,
       seatIndex: i,
@@ -1447,6 +1771,7 @@ export function reconstructRoomForRun(
       brain: null, // sovereignFor installed below for liveness
       inventory,
       presetId: null, // rehydrated from durable rows; the original preset choice isn't persisted
+      manifestIds: [], // manifests are lobby state; after start they are just bag items (flag #12)
       animSet: getAnimSet(inventory.equipped),
       displayName: row?.display_name || `Player ${i + 1}`,
       accountId: isHuman ? (row?.account_id ?? null) : null,
@@ -1475,10 +1800,16 @@ export function reconstructRoomForRun(
     generation: 0,
     combat: null,
     dimensionId,
+    startDimensionId: runRow.start_dimension_id,
+    dimensionName: meta.name,
+    dimensionTier: meta.tier,
+    gateways: loadGatewaysForDimension(dimensionId),
     runId,
     hexMap: { playerPos, hexes, icons },
     visitedThisRun,
+    runClearedCount: countRunCombatCleared(runId),
     pendingHex: null,
+    rested: false, // ephemeral; a crash-recovered run re-arms rest on the next rest-node arrival (flag #3)
     capacity,
     seats,
     listed: true,
@@ -1486,6 +1817,12 @@ export function reconstructRoomForRun(
     session: null,
     defendRound: null,
     vote: null,
+    // Rehydrated from run_loot snapshots (no items-table dependency, flag #8); manifestIds empty above.
+    lootPool: loadUnassignedLoot(runId).map(rowToPoolEntry),
+    // Rehydrated verbatim (§4.6); NULL stays null (legacy pre-contract runs, flag #11). Only
+    // active runs are reconstructed, so there is no outcome yet.
+    contract: runRow.contract_json ? (JSON.parse(runRow.contract_json) as ContractState) : null,
+    outcome: null,
     chatLog: [],
     reapTimer: null,
     lastActivityMs: Date.now(),

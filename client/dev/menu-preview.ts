@@ -11,10 +11,11 @@
 import type { RoomConnection } from "../src/net/connection.js";
 import { SeatContext } from "../src/state/seat-context.js";
 import { AccountStore } from "../src/state/account-store.js";
+import { CodexStore } from "../src/state/codex-store.js";
 import { HomeScreen } from "../src/screens/home-screen.js";
 import { LobbyScreen } from "../src/screens/lobby-screen.js";
 import { GameOverScreen } from "../src/screens/game-over-screen.js";
-import { mockRooms, lobbyRoom, type MenuScreen } from "./mock-data.js";
+import { mockRooms, lobbyRoom, mockAuth, type MenuScreen } from "./mock-data.js";
 
 const params = new URLSearchParams(location.search);
 const screen = (params.get("screen") ?? "home") as MenuScreen;
@@ -32,16 +33,18 @@ async function main() {
 function renderReal(which: MenuScreen) {
   // Screens only ever call conn.on(...) and conn.send(...); both are inert in the harness.
   const conn = { on() {}, send() {} } as unknown as RoomConnection;
+  const account = new AccountStore();
+  account.setAuth(mockAuth());
   if (which === "home" || which === "home-rooms") {
-    const home = new HomeScreen(conn, new SeatContext(), 1, new AccountStore(), () => {});
+    const home = new HomeScreen(conn, new SeatContext(), 1, account, new CodexStore(), () => {});
     home.enter();
     home.setRooms(which === "home-rooms" ? mockRooms : []);
   } else if (which === "lobby") {
     const seat = new SeatContext();
     seat.setRoom(lobbyRoom());
-    new LobbyScreen(conn, seat, () => {}).enter();
+    new LobbyScreen(conn, seat, account, new CodexStore(), () => {}).enter();
   } else if (which === "gameover") {
-    new GameOverScreen(conn).enter();
+    new GameOverScreen(conn, new SeatContext(), () => null, () => null).enter();
   }
 }
 

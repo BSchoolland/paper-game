@@ -324,6 +324,10 @@ export function loadProfilePayload(accountId: string): ProfilePayload {
     hexesCharted: stats["hexes_charted"] ?? 0,
     dimensionsDiscovered: stats["dimensions_discovered"] ?? 0,
     wipes: stats["wipes"] ?? 0,
+    contractsCompleted: stats["contracts_completed"] ?? 0,
+    dimensionsTraveled: stats["dimensions_traveled"] ?? 0,
+    designsRecovered: stats["designs_recovered"] ?? 0,
+    firstsRecovered: stats["firsts_recovered"] ?? 0,
   };
   return {
     accountId,
@@ -370,6 +374,9 @@ export function equipTitle(accountId: string, titleId: string | null): void {
 
 // --- XP / stats ---
 
+// Accounts-domain XP primitive. Since feature 2, src encounter/contract XP flows through the
+// per-run pending ledger (db.accruePendingXp + finalizeRun banking); this direct writer is kept
+// for the accounts unit tests and any future non-run grant.
 export function awardXp(accountId: string, amount: number): { xp: number; level: number; leveledUp: boolean } {
   const before = profileRow(accountId).xp;
   addXpStmt.run(amount, nowIso(), accountId);

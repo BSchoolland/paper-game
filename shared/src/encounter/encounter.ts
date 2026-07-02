@@ -1,25 +1,17 @@
-import type { EnemyTag, UnitTemplate } from "../core/types.js";
+import type { UnitTemplate } from "../core/types.js";
 import type { Dimension, StructureEntry } from "./dimension.js";
 import type { MapObjectPlacement } from "../map/map-definition.js";
 import { placeObjects } from "../map/map-definition.js";
 import { Rng } from "../core/rng.js";
 import type { EncounterProfile, EncounterType } from "./encounter-profiles.js";
 import { getEncounterProfile } from "./encounter-profiles.js";
+import type { EncounterScaling } from "./difficulty.js";
+import { effectiveEnemyBudget, MAX_ENCOUNTER_ENEMIES } from "./difficulty.js";
+import type { ArchetypeId } from "./archetypes.js";
+import { pickArchetype, fillArchetype } from "./archetypes.js";
 
 export type { EncounterProfile, EncounterType };
 export { getEncounterProfile };
-
-function scoreEnemy(
-  template: UnitTemplate,
-  tagWeights: Partial<Record<EnemyTag, number>>
-): number {
-  const tags = template.tags ?? [];
-  let score = 1;
-  for (const tag of tags) {
-    score += tagWeights[tag] ?? 0;
-  }
-  return score;
-}
 
 /** The map for an encounter is one of two sources, never both. */
 export type EncounterMapSource =
@@ -29,6 +21,10 @@ export type EncounterMapSource =
 export interface GeneratedEncounter {
   readonly enemies: readonly UnitTemplate[];
   readonly map: EncounterMapSource;
+  /** The themed group this encounter rolled (combat banner + tests). */
+  readonly archetype: ArchetypeId;
+  /** effectiveEnemyBudget(profile.enemyBudget, scaling) — telemetry/test handle. */
+  readonly effectiveBudget: number;
 }
 
 /**
@@ -57,13 +53,17 @@ export function generateEncounter(
   dimension: Dimension,
   x: number,
   y: number,
-  runId: number
+  runId: number,
+  scaling: EncounterScaling,          // REQUIRED (flag #9)
 ): GeneratedEncounter {
   const profile = getEncounterProfile(hexType);
   const layoutRng = Rng.seeded(x, y);
   const enemyRng = Rng.perRun(runId, x, y);
 
-  const enemies = rollEnemies(dimension.enemies, profile, enemyRng);
+  const effectiveBudget = effectiveEnemyBudget(profile.enemyBudget, scaling);
+  const archetype = pickArchetype(profile.archetypeWeights, enemyRng); // draw #1
+  const enemies = fillArchetype(dimension.enemies, archetype, effectiveBudget,
+    MAX_ENCOUNTER_ENEMIES, enemyRng);                                  // draws #2..n
 
   // One map source, chosen here: a pre-generated single image when the dimension
   // has maps for this type, otherwise the legacy structure roll.
@@ -72,43 +72,7 @@ export function generateEncounter(
     ? { kind: "image", mapImage, maskImage }
     : { kind: "structures", structures: rollStructures(dimension.structures, profile, layoutRng) };
 
-  return { enemies, map };
-}
-
-function rollEnemies(
-  pool: readonly UnitTemplate[],
-  profile: EncounterProfile,
-  rng: Rng
-): UnitTemplate[] {
-  if (pool.length === 0) return [];
-
-  const result: UnitTemplate[] = [];
-  let budgetRemaining = profile.enemyBudget;
-
-  const affordable = () => pool.filter((e) => (e.cost ?? 1) <= budgetRemaining);
-
-  let candidates = affordable();
-  while (candidates.length > 0) {
-    const weights = candidates.map((e) => scoreEnemy(e, profile.tagWeights));
-    const totalWeight = weights.reduce((a, b) => a + b, 0);
-    const roll = rng.next() * totalWeight;
-
-    let acc = 0;
-    let picked = candidates[0]!;
-    for (let i = 0; i < candidates.length; i++) {
-      acc += weights[i]!;
-      if (roll < acc) {
-        picked = candidates[i]!;
-        break;
-      }
-    }
-
-    result.push(picked);
-    budgetRemaining -= picked.cost ?? 1;
-    candidates = affordable();
-  }
-
-  return result;
+  return { enemies, map, archetype: archetype.id, effectiveBudget };
 }
 
 function rollStructures(

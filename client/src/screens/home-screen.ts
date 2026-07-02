@@ -2,11 +2,12 @@ import type { Screen } from "./screen-manager.js";
 import type { RoomConnection } from "../net/connection.js";
 import type { SeatContext } from "../state/seat-context.js";
 import type { AccountStore } from "../state/account-store.js";
+import type { CodexStore } from "../state/codex-store.js";
 import type { AuthMode } from "./auth-modal.js";
 import { ProfileCard } from "./profile-card.js";
 import { FriendsPanel } from "./friends-panel.js";
 import { clearStoredSeat, getStoredSeat } from "../net/player-token.js";
-import type { RoomBrowserEntry, RoomCapacity } from "shared";
+import type { CodexEntryPayload, RoomBrowserEntry, RoomCapacity } from "shared";
 import { assetUrl } from "../renderer/asset-url.js";
 import {
   THEME,
@@ -20,6 +21,8 @@ import {
   seatPips,
   mapIconDot,
   errorNote,
+  designChip,
+  RARITY_COLOR,
 } from "./ui-kit.js";
 
 const LIST_POLL_MS = 3000;
@@ -44,6 +47,9 @@ export class HomeScreen implements Screen {
   private profileCard: ProfileCard;
   private friendsPanel: FriendsPanel;
   private authNotice: HTMLDivElement;
+  /** Persistent codex shelf (browserList discipline): populated in place on CodexStore notify so a
+   *  late `codex` response never triggers a full re-render (which would blur the code input). */
+  private codexShelf: HTMLDivElement;
   private rooms: readonly RoomBrowserEntry[] = [];
   private joinError = "";
   private capacity: RoomCapacity = 2;
@@ -54,6 +60,7 @@ export class HomeScreen implements Screen {
     private seat: SeatContext,
     private dimensionId: number,
     private account: AccountStore,
+    private codex: CodexStore,
     openAuth: (mode: AuthMode) => void,
   ) {
     this.container = document.createElement("div");
@@ -82,6 +89,11 @@ export class HomeScreen implements Screen {
     this.authNotice.style.marginBottom = "12px";
     this.account.subscribe(() => this.populateAuthNotice());
     this.populateAuthNotice();
+
+    this.codexShelf = document.createElement("div");
+    this.codexShelf.style.cssText = "position:relative; padding:0 48px 26px; flex:0 0 auto;";
+    this.codex.subscribe(() => this.populateCodexShelf());
+    this.populateCodexShelf();
 
     this.conn.on("error", (msg) => {
       switch (msg.code) {
@@ -138,6 +150,7 @@ export class HomeScreen implements Screen {
     this.container.style.display = "flex";
     this.joinError = "";
     this.requestList();
+    this.conn.send({ type: "getCodex" });
     this.pollTimer = window.setInterval(() => this.requestList(), LIST_POLL_MS);
     this.render();
   }
@@ -158,22 +171,27 @@ export class HomeScreen implements Screen {
     card.style.width = "1080px";
     card.style.maxWidth = "94vw";
     card.style.maxHeight = "90vh";
+    card.style.display = "flex";
+    card.style.flexDirection = "column";
 
     const grid = document.createElement("div");
-    grid.style.cssText = `position:relative; display:grid; grid-template-columns:1fr 440px; min-height:560px; max-height:90vh;`;
+    grid.style.cssText = `position:relative; display:grid; grid-template-columns:1fr 440px; flex:1 1 auto; min-height:0;`;
 
     grid.appendChild(this.leftColumn());
     grid.appendChild(this.rightColumn());
 
     card.appendChild(grid);
+    card.appendChild(this.codexShelf);
     this.container.appendChild(card);
   }
 
   /** Left column: hero copy, reclaim (if any), Quick Match, Create (capacity), Join by code, errors. */
   private leftColumn(): HTMLDivElement {
     const left = document.createElement("div");
+    // `safe center`: with the codex shelf below the grid the column can overflow its track —
+    // plain `center` would clip the profile card off the unreachable top.
     left.style.cssText = `
-      padding:38px 48px 44px; display:flex; flex-direction:column; justify-content:center;
+      padding:38px 48px 44px; display:flex; flex-direction:column; justify-content:safe center;
       overflow-y:auto;
     `;
 
@@ -461,5 +479,80 @@ export class HomeScreen implements Screen {
       row.appendChild(seatsWrap);
       wrap.appendChild(row);
     }
+  }
+
+  /**
+   * The full-width codex shelf under the grid (03-loot-codex §6.5): a horizontally scrollable
+   * row of banked design cards with rarity name, tier, and first-recovery provenance.
+   * Populated in place on CodexStore notify (persistent-node discipline, see field doc).
+   */
+  private populateCodexShelf(): void {
+    const entries = this.codex.entries;
+    const wrap = this.codexShelf;
+    wrap.innerHTML = "";
+    wrap.appendChild(rule());
+
+    const head = document.createElement("div");
+    head.style.cssText = "display:flex; align-items:baseline; gap:14px; margin:16px 0 0;";
+    head.appendChild(eyebrow("Codex"));
+    const count = document.createElement("div");
+    count.textContent = `${entries.length} designs recovered`;
+    count.style.cssText = `font:13px ${FONT.body}; color:${THEME.faint};`;
+    head.appendChild(count);
+    wrap.appendChild(head);
+
+    if (entries.length === 0) {
+      const empty = document.createElement("div");
+      empty.textContent = "No designs recovered yet — win an expedition to bank your first.";
+      empty.style.cssText = `font:13px ${FONT.body}; color:${THEME.faint}; font-style:italic; margin-top:12px;`;
+      wrap.appendChild(empty);
+      return;
+    }
+
+    const shelf = document.createElement("div");
+    shelf.style.cssText = `display:flex; overflow-x:auto; gap:${THEME.gap}; padding:12px 0;`;
+    for (const entry of entries) shelf.appendChild(this.designCard(entry));
+    wrap.appendChild(shelf);
+  }
+
+  private designCard(entry: CodexEntryPayload): HTMLDivElement {
+    const card = document.createElement("div");
+    card.style.cssText = `
+      flex:0 0 auto; width:150px; box-sizing:border-box; padding:12px;
+      display:flex; flex-direction:column; align-items:center; gap:6px; text-align:center;
+      border:1px solid ${THEME.goldLine}; border-radius:10px; background:rgba(11,9,6,0.45);
+    `;
+    card.appendChild(designChip(entry.item, 44));
+
+    const name = document.createElement("div");
+    name.textContent = entry.item.name;
+    name.style.cssText = `font:700 13px ${FONT.cinzel}; color:${RARITY_COLOR[entry.item.rarity]};`;
+    card.appendChild(name);
+
+    const tier = document.createElement("div");
+    tier.textContent = `TIER ${entry.tier}`;
+    tier.style.cssText = `font:11px ${FONT.body}; letter-spacing:.1em; color:${THEME.goldDeep};`;
+    card.appendChild(tier);
+
+    if (entry.item.type === "consumable") {
+      const tag = document.createElement("div");
+      tag.textContent = "Run-scoped";
+      tag.style.cssText = `font:10px ${FONT.body}; color:${THEME.faint};`;
+      card.appendChild(tag);
+    }
+
+    const provenance = document.createElement("div");
+    provenance.style.cssText = `font:11px/1.4 ${FONT.body}; color:${THEME.faint};`;
+    const by = document.createElement("span");
+    if (entry.first.mine) {
+      by.textContent = "you";
+      by.style.cssText = `color:${THEME.gold}; text-shadow:0 0 8px rgba(232,200,122,.4);`;
+    } else {
+      by.textContent = entry.first.displayName;
+    }
+    provenance.append(document.createTextNode(`First recovered from ${entry.dimensionName} by `), by);
+    card.appendChild(provenance);
+
+    return card;
   }
 }

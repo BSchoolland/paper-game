@@ -20,6 +20,10 @@ export const TITLES: readonly TitleDef[] = [
   { id: "worldwalker", name: "Worldwalker", description: "Set foot in 3 dimensions.",  sortOrder: 3, requirement: { stat: "dimensions_discovered", gte: 3 } },
   { id: "veteran",     name: "Veteran",     description: "Reach level 5.",             sortOrder: 4, requirement: { stat: "level", gte: 5 } },
   { id: "unbroken",    name: "Unbroken",    description: "Survive 10 party wipes.",    sortOrder: 5, requirement: { stat: "wipes", gte: 10 } },
+  { id: "sealbearer",  name: "Sealbearer",  description: "Fulfill your first contract.", sortOrder: 6, requirement: { stat: "contracts_completed", gte: 1 } },
+  { id: "depthfarer",  name: "Depthfarer",  description: "Pass through a gateway to a deeper dimension.", sortOrder: 7, requirement: { stat: "dimensions_traveled", gte: 1 } },
+  { id: "archivist",   name: "Archivist",   description: "Bank 10 item designs into your codex.", sortOrder: 8, requirement: { stat: "designs_recovered", gte: 10 } },
+  { id: "trailblazer", name: "Trailblazer", description: "Be the first in the multiverse to recover a design.", sortOrder: 9, requirement: { stat: "firsts_recovered", gte: 1 } },
 ];
 
 export function titleById(id: string): TitleDef {

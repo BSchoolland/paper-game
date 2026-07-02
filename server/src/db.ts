@@ -2,8 +2,9 @@ import { Database } from "bun:sqlite";
 import { createHmac, timingSafeEqual, randomBytes } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { HexCoord, HexStatus, UnitTemplate, ItemDefinition, InventoryState, AttachmentData } from "shared";
-import type { StructureEntry, Dimension, MapManifest, RoomCode, WireLogRecord } from "shared";
+import type { HexCoord, HexStatus, HexIconType, UnitTemplate, ItemDefinition, InventoryState, AttachmentData } from "shared";
+import type { StructureEntry, Dimension, MapManifest, RoomCode, WireLogRecord, RunOutcome, ContractState } from "shared";
+import { bankedXp } from "shared";
 
 const PUBLIC_DIR = resolve(import.meta.dir, "../../client/public");
 
@@ -298,6 +299,161 @@ const SCHEMA_VERSION = 3;
   }
 }
 
+// v7: contracts & run outcomes (docs/meta-loop/02-contracts.md).
+// runs.contract_json: the run's ContractState snapshot (shared/src/overworld/contracts.ts),
+// NULL for legacy/pre-contract runs. run_pending_xp: the per-run pending-XP ledger, banked
+// into profiles.xp by finalizeRun with the outcome multiplier (rows kept as audit).
+{
+  const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
+  if (user_version < 7) {
+    const migrate = db.transaction(() => {
+      try {
+        db.exec("ALTER TABLE runs ADD COLUMN contract_json TEXT");
+      } catch (e) {
+        if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+      }
+      db.exec(`CREATE TABLE IF NOT EXISTS run_pending_xp (
+        run_id     INTEGER NOT NULL,
+        account_id TEXT NOT NULL,
+        amount     INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY (run_id, account_id),
+        FOREIGN KEY (run_id) REFERENCES runs(id)
+      )`);
+      db.exec(`PRAGMA user_version = 7`);
+    });
+    migrate();
+  }
+}
+
+// v8: portals & tiered multiverse (docs/meta-loop/04-portals.md).
+// dimensions.tier: descent depth; NULL = not yet placed (attunement-pool candidate when ready).
+// dimension_gateways: community-permanent portal graph — (from_dimension, hex) -> to_dimension,
+// destination fixed forever on first attunement; UNIQUE(to_dimension_id) keeps it a tree.
+// runs.start_dimension_id: the lobby-picked start (resetToOrigin/rematch target; feature 3
+// derives the run's starting tier from it). runs.dimension_id becomes "current dimension".
+// run_cleared_hexes rebuilt with dimension_id in the PK (per-run cleared state is now
+// per-dimension; backfill joins runs.dimension_id — pre-v8 runs never changed dimension).
+{
+  const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
+  if (user_version < 8) {
+    const migrate = db.transaction(() => {
+      for (const sql of [
+        "ALTER TABLE dimensions ADD COLUMN tier INTEGER",
+        "ALTER TABLE runs ADD COLUMN start_dimension_id INTEGER",
+      ]) {
+        try {
+          db.exec(sql);
+        } catch (e) {
+          if (!(e instanceof Error && /duplicate column/i.test(e.message))) throw e;
+        }
+      }
+      // Tier backfill for pre-portal dimensions — mapping flagged in 04-portals §0.2 (ADJUST ME).
+      db.exec("UPDATE dimensions SET tier = 0 WHERE id IN (0, 1) AND tier IS NULL");
+      db.exec("UPDATE dimensions SET tier = 1 WHERE id IN (2, 501) AND tier IS NULL");
+      db.exec("UPDATE dimensions SET tier = 2 WHERE id = 3 AND tier IS NULL");
+      db.exec("UPDATE runs SET start_dimension_id = dimension_id WHERE start_dimension_id IS NULL");
+      db.exec(`CREATE TABLE IF NOT EXISTS dimension_gateways (
+        from_dimension_id     INTEGER NOT NULL,
+        q                     INTEGER NOT NULL,
+        r                     INTEGER NOT NULL,
+        to_dimension_id       INTEGER NOT NULL UNIQUE,
+        attuned_at            INTEGER NOT NULL,
+        attuned_by_account_id TEXT,
+        PRIMARY KEY (from_dimension_id, q, r),
+        FOREIGN KEY (from_dimension_id) REFERENCES dimensions(id),
+        FOREIGN KEY (to_dimension_id)   REFERENCES dimensions(id)
+      )`);
+      // Legacy item-id dedup (03-loot-codex §9): pre-collision-check data may carry a duplicated id
+      // ("short-sword" in dims 0 AND 501). getItemById's global WHERE id = ? resolution — and
+      // feature 3's codex_firsts(item_id) PK — require uniqueness. Keep the lowest-dimension owner;
+      // rename other rows to the d<dim>-<id> convention saveItems' error prescribes, rewriting
+      // item_json.id and re-pointing seat rows for runs at that dimension.
+      const dupeIds = db.query("SELECT id FROM items GROUP BY id HAVING COUNT(*) > 1").all() as { id: string }[];
+      for (const { id } of dupeIds) {
+        const owners = db.query("SELECT dimension_id FROM items WHERE id = ? ORDER BY dimension_id").all(id) as { dimension_id: number }[];
+        for (const { dimension_id } of owners.slice(1)) {
+          const newId = `d${dimension_id}-${id}`;
+          db.prepare("UPDATE items SET id = ?, item_json = json_set(item_json, '$.id', ?) WHERE id = ? AND dimension_id = ?")
+            .run(newId, newId, id, dimension_id);
+          db.prepare("UPDATE run_seat_items SET item_id = ? WHERE item_id = ? AND run_id IN (SELECT id FROM runs WHERE dimension_id = ?)")
+            .run(newId, id, dimension_id);
+          db.prepare("UPDATE run_seat_attachments SET item_id = ? WHERE item_id = ? AND run_id IN (SELECT id FROM runs WHERE dimension_id = ?)")
+            .run(newId, id, dimension_id);
+        }
+      }
+      const clearedCols = (db.query("PRAGMA table_info(run_cleared_hexes)").all() as { name: string }[])
+        .map((c) => c.name);
+      if (!clearedCols.includes("dimension_id")) {
+        db.exec(`CREATE TABLE run_cleared_hexes_v8 (
+          run_id       INTEGER NOT NULL,
+          dimension_id INTEGER NOT NULL,
+          q            INTEGER NOT NULL,
+          r            INTEGER NOT NULL,
+          PRIMARY KEY (run_id, dimension_id, q, r),
+          FOREIGN KEY (run_id) REFERENCES runs(id)
+        )`);
+        db.exec(`INSERT INTO run_cleared_hexes_v8 (run_id, dimension_id, q, r)
+          SELECT rc.run_id, r.dimension_id, rc.q, rc.r
+          FROM run_cleared_hexes rc JOIN runs r ON r.id = rc.run_id`);
+        db.exec("DROP TABLE run_cleared_hexes");
+        db.exec("ALTER TABLE run_cleared_hexes_v8 RENAME TO run_cleared_hexes");
+      }
+      db.exec(`PRAGMA user_version = 8`);
+    });
+    migrate();
+  }
+}
+
+// v9: loot & codex (docs/meta-loop/03-loot-codex.md).
+// run_loot: the run's drop ledger + shared party pool (assigned_seat_index NULL = still in the
+// pool). item_json snapshots the ItemDefinition at drop time so loot outlives pool rewrites.
+// codex_entries: per-account banked designs (full snapshot + tier resolved at bank time).
+// codex_firsts: global first-recovery provenance — one row per design, ever, across all accounts.
+{
+  const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
+  if (user_version < 9) {
+    const migrate = db.transaction(() => {
+      db.exec(`CREATE TABLE IF NOT EXISTS run_loot (
+        id                  INTEGER PRIMARY KEY,
+        run_id              INTEGER NOT NULL,
+        item_id             TEXT NOT NULL,
+        dimension_id        INTEGER NOT NULL,   -- the item's native dimension (item.dimensionId)
+        item_json           TEXT NOT NULL,      -- ItemDefinition snapshot at drop time
+        source_q            INTEGER NOT NULL,
+        source_r            INTEGER NOT NULL,
+        source_icon         TEXT,               -- hex icon at drop time (richness provenance)
+        dropped_at          INTEGER NOT NULL,   -- ms epoch (run-table convention)
+        assigned_seat_index INTEGER,            -- NULL = unclaimed (in the party pool)
+        assigned_account_id TEXT,
+        assigned_at         INTEGER,
+        FOREIGN KEY (run_id) REFERENCES runs(id)
+      )`);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_run_loot_run ON run_loot (run_id)");
+      db.exec(`CREATE TABLE IF NOT EXISTS codex_entries (
+        account_id   TEXT NOT NULL,
+        item_id      TEXT NOT NULL,
+        dimension_id INTEGER NOT NULL,
+        tier         INTEGER NOT NULL,          -- snapshot at bank time (flag #4)
+        item_json    TEXT NOT NULL,
+        acquired_at  TEXT NOT NULL,             -- ISO-8601 (account-table convention, 01 §1.1)
+        PRIMARY KEY (account_id, item_id),
+        FOREIGN KEY (account_id) REFERENCES accounts(id)
+      )`);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_codex_entries_item ON codex_entries (item_id)");
+      db.exec(`CREATE TABLE IF NOT EXISTS codex_firsts (
+        item_id      TEXT PRIMARY KEY,
+        dimension_id INTEGER NOT NULL,
+        account_id   TEXT NOT NULL,             -- the discoverer (flag #6)
+        recovered_at TEXT NOT NULL,             -- ISO-8601
+        FOREIGN KEY (account_id) REFERENCES accounts(id)
+      )`);
+      db.exec(`PRAGMA user_version = 9`);
+    });
+    migrate();
+  }
+}
+
 
 // --- Wire event log persistence ---
 
@@ -385,24 +541,37 @@ export function seedDiscovery(dimensionId: number, radius: number): void {
   tx();
 }
 
-// --- Cleared-this-run: PER-RUN combat progress (durable visitedThisRun). ---
+// --- Cleared-this-run: PER-RUN combat progress (durable visitedThisRun), now per-dimension (v8). ---
 const insertClearedStmt = db.prepare(
-  "INSERT OR IGNORE INTO run_cleared_hexes (run_id, q, r) VALUES (?, ?, ?)"
+  "INSERT OR IGNORE INTO run_cleared_hexes (run_id, dimension_id, q, r) VALUES (?, ?, ?, ?)"
 );
-const clearedForRunStmt = db.prepare("SELECT q, r FROM run_cleared_hexes WHERE run_id = ?");
+const clearedForRunStmt = db.prepare(
+  "SELECT q, r FROM run_cleared_hexes WHERE run_id = ? AND dimension_id = ?"
+);
+// Count of combat-cleared hexes for the whole run: every dimension's origin is (0,0) and is
+// auto-cleared at entry (run start / travel), never combat-cleared — so excluding (0,0) rows
+// yields exactly the encounter-win count (feeds Room.runClearedCount on crash recovery).
+const combatClearedCountStmt = db.prepare(
+  "SELECT COUNT(*) AS n FROM run_cleared_hexes WHERE run_id = ? AND NOT (q = 0 AND r = 0)"
+);
 const delClearedForRunStmt = db.prepare("DELETE FROM run_cleared_hexes WHERE run_id = ?");
 
-export function markRunCleared(runId: number, coord: HexCoord): void {
-  insertClearedStmt.run(runId, coord.q, coord.r);
+export function markRunCleared(runId: number, dimensionId: number, coord: HexCoord): void {
+  insertClearedStmt.run(runId, dimensionId, coord.q, coord.r);
 }
 
-export function loadRunCleared(runId: number): Set<string> {
-  const rows = clearedForRunStmt.all(runId) as { q: number; r: number }[];
+export function loadRunCleared(runId: number, dimensionId: number): Set<string> {
+  const rows = clearedForRunStmt.all(runId, dimensionId) as { q: number; r: number }[];
   const cleared = new Set<string>();
   for (const row of rows) cleared.add(`${row.q},${row.r}`);
   return cleared;
 }
 
+export function countRunCombatCleared(runId: number): number {
+  return (combatClearedCountStmt.get(runId) as { n: number }).n;
+}
+
+/** Whole-run reset semantics: erase every dimension's cleared rows for the run. */
 export function clearRunCleared(runId: number): void {
   delClearedForRunStmt.run(runId);
 }
@@ -417,7 +586,7 @@ export function commitExplore(dimensionId: number, runId: number, coord: HexCoor
   const tx = db.transaction(() => {
     firstEver = insertDiscoveredStmt.run(dimensionId, coord.q, coord.r).changes > 0;
     if (icon) insertDiscoveredIconStmt.run(dimensionId, coord.q, coord.r, icon);
-    insertClearedStmt.run(runId, coord.q, coord.r);
+    insertClearedStmt.run(runId, dimensionId, coord.q, coord.r);
     updatePartyPosStmt.run(coord.q, coord.r, Date.now(), runId);
   });
   tx();
@@ -427,11 +596,13 @@ export function commitExplore(dimensionId: number, runId: number, coord: HexCoor
 // --- Runs ---
 /** The run's lifecycle phase — the single durable source of truth (same value set as the wire RoomPhase). */
 export type RunPhase = "lobby" | "overworld" | "combat" | "gameover";
-export type RunOutcome = "victory" | "defeat" | "abandoned";
+// The durable run outcome set now lives in shared (gained "retreat"); re-export for db.ts consumers.
+export type { RunOutcome };
 
 export interface RunRow {
   id: number;
   dimension_id: number;
+  start_dimension_id: number; // v8 backfill guarantees non-null (the lobby-picked start dimension)
   capacity: number;
   host_client_id: string | null;
   active: number;
@@ -442,13 +613,15 @@ export interface RunRow {
   updated_at: number;
   completed_at: number | null;
   outcome: string | null;
+  contract_json: string | null; // the run's ContractState snapshot (v7); NULL for legacy/pre-contract runs.
   started_at: number | null; // dead column (subsumed by `phase`); kept because SQLite can't cheaply DROP.
 }
 
 const insertRunStmt = db.prepare(
-  `INSERT INTO runs (dimension_id, capacity, host_client_id, active, party_q, party_r, created_at, updated_at)
-   VALUES (?, ?, ?, 1, 0, 0, ?, ?)`
-);
+  `INSERT INTO runs (dimension_id, start_dimension_id, capacity, host_client_id, active,
+                     party_q, party_r, created_at, updated_at)
+   VALUES (?, ?, ?, ?, 1, 0, 0, ?, ?)`
+); // startNewRun passes dimensionId for BOTH — a fresh run starts where it starts.
 const runByIdStmt = db.prepare("SELECT * FROM runs WHERE id = ?");
 const updatePartyPosStmt = db.prepare("UPDATE runs SET party_q = ?, party_r = ?, updated_at = ? WHERE id = ?");
 const setHostStmt = db.prepare("UPDATE runs SET host_client_id = ?, updated_at = ? WHERE id = ?");
@@ -459,6 +632,54 @@ const markRunInactiveStmt = db.prepare("UPDATE runs SET active = 0, completed_at
 const stampSeatsLeftStmt = db.prepare("UPDATE run_seats SET left_at = ? WHERE run_id = ? AND left_at IS NULL");
 const staleRunsStmt = db.prepare("SELECT id FROM runs WHERE active = 1 AND updated_at < ?");
 const activeRunIdsStmt = db.prepare("SELECT id FROM runs WHERE active = 1");
+
+// --- Contract snapshot (SSOT for crash recovery). `AND active = 1` mirrors setRunPhase: a
+// finalized run's contract is frozen. ---
+const setRunContractStmt = db.prepare(
+  "UPDATE runs SET contract_json = ?, updated_at = ? WHERE id = ? AND active = 1",
+);
+export function saveRunContract(runId: number, contract: ContractState): void {
+  setRunContractStmt.run(JSON.stringify(contract), Date.now(), runId);
+}
+
+const clearRunContractStmt = db.prepare(
+  "UPDATE runs SET contract_json = NULL, updated_at = ? WHERE id = ? AND active = 1",
+);
+/** Drop the run's contract selection (a lobby dimension change that voids the current type, §4.5). */
+export function clearRunContract(runId: number): void {
+  clearRunContractStmt.run(Date.now(), runId);
+}
+
+// --- Pending-XP ledger (per run, per account). Banked into profiles.xp by finalizeRun. ---
+const accruePendingXpStmt = db.prepare(
+  `INSERT INTO run_pending_xp (run_id, account_id, amount, updated_at) VALUES (?, ?, ?, ?)
+   ON CONFLICT(run_id, account_id) DO UPDATE SET
+     amount = amount + excluded.amount, updated_at = excluded.updated_at`,
+);
+const pendingXpForRunStmt = db.prepare(
+  "SELECT account_id, amount FROM run_pending_xp WHERE run_id = ?",
+);
+const singlePendingXpStmt = db.prepare(
+  "SELECT amount FROM run_pending_xp WHERE run_id = ? AND account_id = ?",
+);
+const bankXpStmt = db.prepare(
+  "UPDATE profiles SET xp = xp + ?, updated_at = ? WHERE account_id = ?",
+);
+export interface PendingXpRow {
+  account_id: string;
+  amount: number;
+}
+
+/** Accrue provisional XP for one account on one run. Returns the new pending total. */
+export function accruePendingXp(runId: number, accountId: string, amount: number): number {
+  accruePendingXpStmt.run(runId, accountId, amount, Date.now());
+  const row = singlePendingXpStmt.get(runId, accountId) as { amount: number };
+  return row.amount;
+}
+
+export function loadPendingXp(runId: number): PendingXpRow[] {
+  return pendingXpForRunStmt.all(runId) as PendingXpRow[];
+}
 
 /**
  * Every still-active run id. Drives boot-time crash recovery (a run left active=1 by a crash).
@@ -472,8 +693,41 @@ export function loadActiveRunIds(): number[] {
 
 export function startNewRun(dimensionId: number, hostClientId: string | null, capacity = 2): number {
   const now = Date.now();
-  const info = insertRunStmt.run(dimensionId, capacity, hostClientId, now, now);
+  const info = insertRunStmt.run(dimensionId, dimensionId, capacity, hostClientId, now, now);
   return Number(info.lastInsertRowid);
+}
+
+// Lobby-only re-pick (chooseDimension): current AND start move together, pre-start.
+const setRunStartDimensionStmt = db.prepare(
+  "UPDATE runs SET dimension_id = ?, start_dimension_id = ?, updated_at = ? WHERE id = ? AND active = 1"
+);
+export function setRunStartDimension(runId: number, dimensionId: number): void {
+  setRunStartDimensionStmt.run(dimensionId, dimensionId, Date.now(), runId);
+}
+
+const setRunDimensionStmt = db.prepare(
+  "UPDATE runs SET dimension_id = ?, party_q = 0, party_r = 0, updated_at = ? WHERE id = ? AND active = 1"
+);
+
+/**
+ * Mid-run gateway travel (write point: 04-portals §4.3). ONE transaction: re-point the run's
+ * current dimension + reset party pos to origin, seed the destination's community discovery disc +
+ * origin icon, and mark the destination origin cleared for this run — a crash can never persist the
+ * dimension swap without the origin state that makes it resumable. start_dimension_id is untouched.
+ */
+export function commitTravel(runId: number, toDimensionId: number, radius: number): void {
+  const now = Date.now();
+  const tx = db.transaction(() => {
+    setRunDimensionStmt.run(toDimensionId, now, runId);
+    for (let q = -radius; q <= radius; q++) {
+      const r1 = Math.max(-radius, -q - radius);
+      const r2 = Math.min(radius, -q + radius);
+      for (let r = r1; r <= r2; r++) insertDiscoveredStmt.run(toDimensionId, q, r);
+    }
+    insertDiscoveredIconStmt.run(toDimensionId, 0, 0, "town");
+    insertClearedStmt.run(runId, toDimensionId, 0, 0);
+  });
+  tx();
 }
 
 export function loadRun(runId: number): RunRow | null {
@@ -505,7 +759,17 @@ export function finalizeRun(runId: number, outcome: RunOutcome): boolean {
   let changed = false;
   const tx = db.transaction(() => {
     changed = markRunInactiveStmt.run(now, outcome, runId).changes > 0;
-    if (changed) stampSeatsLeftStmt.run(now, runId);
+    if (changed) {
+      stampSeatsLeftStmt.run(now, runId);
+      // Bank the pending-XP ledger with the outcome multiplier (locked decisions 6/7). Rows are
+      // kept (audit + settlement pushes); the `changed` guard makes this once-ever. profiles.updated_at
+      // is ISO TEXT (v6 schema), so stamp it with an ISO string, not the ms `now`.
+      const nowIso = new Date().toISOString();
+      for (const row of pendingXpForRunStmt.all(runId) as PendingXpRow[]) {
+        const banked = bankedXp(row.amount, outcome);
+        if (banked > 0) bankXpStmt.run(banked, nowIso, row.account_id);
+      }
+    }
   });
   tx();
   return changed;
@@ -528,6 +792,8 @@ const delSeatItemsForRunStmt = db.prepare("DELETE FROM run_seat_items WHERE run_
 const delSeatAttachForRunStmt = db.prepare("DELETE FROM run_seat_attachments WHERE run_id = ?");
 const delSeatsForRunStmt = db.prepare("DELETE FROM run_seats WHERE run_id = ?");
 const delClearedForRunEraseStmt = db.prepare("DELETE FROM run_cleared_hexes WHERE run_id = ?");
+const delPendingXpForRunStmt = db.prepare("DELETE FROM run_pending_xp WHERE run_id = ?");
+const delLootForRunStmt = db.prepare("DELETE FROM run_loot WHERE run_id = ?");
 const delRunStmt = db.prepare("DELETE FROM runs WHERE id = ?");
 
 /**
@@ -545,6 +811,8 @@ export function eraseClient(clientId: string): number {
       delSeatAttachForRunStmt.run(runId);
       delSeatsForRunStmt.run(runId);
       delClearedForRunEraseStmt.run(runId);
+      delPendingXpForRunStmt.run(runId);
+      delLootForRunStmt.run(runId);
       delRunStmt.run(runId);
     }
   });
@@ -686,13 +954,12 @@ export function saveSeatInventory(runId: number, seatIndex: number, inv: Invento
   tx();
 }
 
-export function loadSeatInventory(runId: number, seatIndex: number, dimensionId: number): InventoryState {
-  const merged = { ...loadItems(0), ...loadItems(1), ...loadItems(2), ...loadItems(3), ...loadItems(dimensionId) };
+export function loadSeatInventory(runId: number, seatIndex: number): InventoryState {
   const itemRows = seatItemsStmt.all(runId, seatIndex) as { location: string; slot_order: number; item_id: string }[];
   const bag: (ItemDefinition | null)[] = new Array(16).fill(null);
   const equippedPairs: { order: number; item: ItemDefinition }[] = [];
   for (const row of itemRows) {
-    const item = merged[row.item_id];
+    const item = resolveItemForRun(runId, row.item_id); // live pool -> this run's drops -> codex snapshot (flag #8)
     if (!item) {
       console.warn(`[db] seat inventory: unknown item_id "${row.item_id}" (run ${runId} seat ${seatIndex}) — skipped`);
       continue;
@@ -712,6 +979,113 @@ export function loadSeatInventory(runId: number, seatIndex: number, dimensionId:
     if (owned) attachments[row.item_id] = JSON.parse(row.attachment_json) as AttachmentData;
   }
   return { bag, equipped, attachments };
+}
+
+// --- Loot ledger + party pool (run-scoped; docs/meta-loop/03-loot-codex.md §1.3) ---
+export interface RunLootRow {
+  id: number; run_id: number; item_id: string; dimension_id: number; item_json: string;
+  source_q: number; source_r: number; source_icon: string | null; dropped_at: number;
+  assigned_seat_index: number | null; assigned_account_id: string | null; assigned_at: number | null;
+}
+
+const insertRunLootStmt = db.prepare(
+  `INSERT INTO run_loot (run_id, item_id, dimension_id, item_json, source_q, source_r, source_icon, dropped_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+const unassignedLootStmt = db.prepare(
+  "SELECT * FROM run_loot WHERE run_id = ? AND assigned_seat_index IS NULL ORDER BY id");
+const allLootForRunStmt = db.prepare("SELECT * FROM run_loot WHERE run_id = ? ORDER BY id");
+// First-writer-wins claim (mirrors finalizeRun's AND active = 1 discipline).
+const assignLootStmt = db.prepare(
+  `UPDATE run_loot SET assigned_seat_index = ?, assigned_account_id = ?, assigned_at = ?
+   WHERE id = ? AND run_id = ? AND assigned_seat_index IS NULL`);
+const lootSnapshotForRunStmt = db.prepare(
+  "SELECT item_json FROM run_loot WHERE run_id = ? AND item_id = ? LIMIT 1");
+
+/** Insert one drop; returns its lootId (rowid). */
+export function insertRunLoot(runId: number, item: ItemDefinition, source: HexCoord,
+    icon: HexIconType | null): number {
+  const info = insertRunLootStmt.run(runId, item.id, item.dimensionId, JSON.stringify(item),
+    source.q, source.r, icon, Date.now());
+  return Number(info.lastInsertRowid);
+}
+export function loadUnassignedLoot(runId: number): RunLootRow[] {
+  return unassignedLootStmt.all(runId) as RunLootRow[];
+}
+export function loadRunLoot(runId: number): RunLootRow[] {
+  return allLootForRunStmt.all(runId) as RunLootRow[];
+}
+
+/**
+ * Claim commit (write-point discipline of commitExplore): mark the drop assigned AND persist the
+ * claimant's new bag in ONE transaction — a crash can never assign an item without the bag row
+ * (or vice versa). Returns false when another path already assigned it (stale vote resolve).
+ */
+export function commitLootAssignment(runId: number, lootId: number, seatIndex: number,
+    accountId: string | null, inv: InventoryState): boolean {
+  let claimed = false;
+  const tx = db.transaction(() => {
+    claimed = assignLootStmt.run(seatIndex, accountId, Date.now(), lootId, runId).changes > 0;
+    if (claimed) saveSeatInventory(runId, seatIndex, inv); // nested tx = savepoint (bun:sqlite)
+  });
+  tx();
+  return claimed;
+}
+
+// --- Codex (account-scoped, permanent; NOT touched by eraseClient) ---
+export interface CodexEntryRow {
+  account_id: string; item_id: string; dimension_id: number; tier: number;
+  item_json: string; acquired_at: string;
+}
+export interface CodexFirstRow {
+  item_id: string; dimension_id: number; account_id: string; recovered_at: string;
+}
+
+const insertCodexEntryStmt = db.prepare(
+  `INSERT OR IGNORE INTO codex_entries (account_id, item_id, dimension_id, tier, item_json, acquired_at)
+   VALUES (?, ?, ?, ?, ?, ?)`);
+const insertCodexFirstStmt = db.prepare(
+  `INSERT OR IGNORE INTO codex_firsts (item_id, dimension_id, account_id, recovered_at)
+   VALUES (?, ?, ?, ?)`);
+const codexForAccountStmt = db.prepare(
+  "SELECT * FROM codex_entries WHERE account_id = ? ORDER BY acquired_at DESC, item_id");
+const codexEntryStmt = db.prepare(
+  "SELECT * FROM codex_entries WHERE account_id = ? AND item_id = ?");
+const codexFirstStmt = db.prepare("SELECT * FROM codex_firsts WHERE item_id = ?");
+const codexSnapshotStmt = db.prepare(
+  "SELECT item_json FROM codex_entries WHERE item_id = ? LIMIT 1"); // identical per design
+
+/** True iff the row was newly inserted (dedup-aware — drives the codexBanked push contents). */
+export function bankCodexEntry(accountId: string, item: ItemDefinition, tier: number): boolean {
+  return insertCodexEntryStmt.run(accountId, item.id, item.dimensionId, tier,
+    JSON.stringify(item), new Date().toISOString()).changes > 0;
+}
+/** True iff this call recorded the global first (INSERT OR IGNORE first-writer-wins). */
+export function recordCodexFirst(item: ItemDefinition, accountId: string): boolean {
+  return insertCodexFirstStmt.run(item.id, item.dimensionId, accountId,
+    new Date().toISOString()).changes > 0;
+}
+export function loadCodex(accountId: string): CodexEntryRow[] {
+  return codexForAccountStmt.all(accountId) as CodexEntryRow[];
+}
+export function loadCodexEntry(accountId: string, itemId: string): CodexEntryRow | null {
+  return (codexEntryStmt.get(accountId, itemId) as CodexEntryRow | null) ?? null;
+}
+export function loadCodexFirst(itemId: string): CodexFirstRow | null {
+  return (codexFirstStmt.get(itemId) as CodexFirstRow | null) ?? null;
+}
+
+/**
+ * Resolve an item id for a run's seat rows: live pool -> this run's drop snapshot -> the design
+ * archive. Canonical sources in fixed order; null only for a genuinely unknown id.
+ */
+export function resolveItemForRun(runId: number, itemId: string): ItemDefinition | null {
+  const live = getItemById(itemId);
+  if (live) return live;
+  const drop = lootSnapshotForRunStmt.get(runId, itemId) as { item_json: string } | null;
+  if (drop) return JSON.parse(drop.item_json) as ItemDefinition;
+  const design = codexSnapshotStmt.get(itemId) as { item_json: string } | null;
+  if (design) return JSON.parse(design.item_json) as ItemDefinition;
+  return null;
 }
 
 // --- Session-token (HMAC) helpers (R29). v1: single GAME_TOKEN_SECRET, no rotation. ---
@@ -742,8 +1116,18 @@ export function verifySessionToken(token: string, clientId: string, salt: string
 
 // --- Dimension & Enemy Template Queries ---
 
+// Upsert (NOT INSERT OR REPLACE): a re-save must never wipe `tier` — an attuned dimension's tier
+// is community-permanent multiverse state (04-portals), owned by the v8 backfill and attunement,
+// while every other column is owned by the seeds/generator that call saveDimension.
 const insertDimensionStmt = db.prepare(
-  "INSERT OR REPLACE INTO dimensions (id, name, structures_json, background_path, hex_decorations_path, status) VALUES (?, ?, ?, ?, ?, ?)"
+  `INSERT INTO dimensions (id, name, structures_json, background_path, hex_decorations_path, status)
+   VALUES (?, ?, ?, ?, ?, ?)
+   ON CONFLICT(id) DO UPDATE SET
+     name = excluded.name,
+     structures_json = excluded.structures_json,
+     background_path = excluded.background_path,
+     hex_decorations_path = excluded.hex_decorations_path,
+     status = excluded.status`
 );
 const getDimensionStmt = db.prepare("SELECT * FROM dimensions WHERE id = ?");
 
@@ -835,12 +1219,37 @@ export function setDimensionStatus(id: number, status: string): void {
   setDimensionStatusStmt.run(status, id);
 }
 
+/**
+ * Stamp the canonical (pre-portal) dimensions with their fixed tiers — 04-portals §0.2 mapping.
+ * The v8 migration backfills these on existing DBs, but on a FRESH DB the migration runs against
+ * an empty table and the seeds insert with tier NULL, so the seed step must apply the mapping.
+ * Called from initSeeds after the seedDimensionN calls. `AND tier IS NULL` mirrors the migration:
+ * the backfill is the ONLY place existing rows get tiers (04-portals §1.1) — everything else earns
+ * a tier via attunement, and a tier adjusted in the migration or live DB is never re-stamped here.
+ */
+export function applyCanonicalDimensionTiers(): void {
+  db.exec("UPDATE dimensions SET tier = 0 WHERE id IN (0, 1) AND tier IS NULL");
+  db.exec("UPDATE dimensions SET tier = 1 WHERE id IN (2, 501) AND tier IS NULL");
+  db.exec("UPDATE dimensions SET tier = 2 WHERE id = 3 AND tier IS NULL");
+}
+
+/** Lightweight dimension identity (v8): id + name + descent tier (NULL = not yet placed). */
+export interface DimensionMeta {
+  id: number;
+  name: string;
+  tier: number | null;
+}
+const dimensionMetaStmt = db.prepare("SELECT id, name, tier FROM dimensions WHERE id = ?");
+export function getDimensionMeta(id: number): DimensionMeta | null {
+  return (dimensionMetaStmt.get(id) as DimensionMeta | null) ?? null;
+}
+
 const listDimensionsStmt = db.prepare(
-  "SELECT id, name, status FROM dimensions ORDER BY id"
+  "SELECT id, name, status, tier FROM dimensions ORDER BY id"
 );
 
-export function listDimensions(): { id: number; name: string; status: string }[] {
-  return listDimensionsStmt.all() as { id: number; name: string; status: string }[];
+export function listDimensions(): { id: number; name: string; status: string; tier: number | null }[] {
+  return listDimensionsStmt.all() as { id: number; name: string; status: string; tier: number | null }[];
 }
 
 export function loadEnemyTemplateRegistry(
@@ -876,6 +1285,13 @@ const insertItemStmt = db.prepare(
 const getItemsByDimensionStmt = db.prepare(
   "SELECT * FROM items WHERE dimension_id = ?"
 );
+const itemByIdStmt = db.prepare("SELECT item_json FROM items WHERE id = ?");
+
+/** Resolve one item by its globally-unique id (saveItems enforces cross-dimension uniqueness). */
+export function getItemById(id: string): ItemDefinition | null {
+  const row = itemByIdStmt.get(id) as { item_json: string } | null;
+  return row ? (JSON.parse(row.item_json) as ItemDefinition) : null;
+}
 
 export function saveItems(
   dimensionId: number,

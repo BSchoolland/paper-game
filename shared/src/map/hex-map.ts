@@ -56,6 +56,13 @@ export function isAdjacent(a: HexCoord, b: HexCoord): boolean {
   return NEIGHBOR_OFFSETS.some((d) => d.q === dq && d.r === dr);
 }
 
+/** Axial (cube) distance in hex steps. */
+export function hexDistance(a: HexCoord, b: HexCoord): number {
+  const dq = a.q - b.q;
+  const dr = a.r - b.r;
+  return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+}
+
 import { HEX_SPAWN_TABLE, HEX_SPAWN_WEIGHT_TOTAL } from "./hex-config.js";
 
 function pickIconForHex(coord: HexCoord): HexIconType | null {

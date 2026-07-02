@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from "bun:test";
-import type { ServerMessage, SeatId, Entity, GameState } from "shared";
+import type { ServerMessage, SeatId, Entity, GameState, ItemDefinition } from "shared";
+import { hexKey, createContractState, archetypeById, effectiveEnemyBudget, getEncounterProfile, getHexIcon, isDecorationHex, hexDistance, scaledXp, levelForXp, XP_ENCOUNTER_WIN, contractById } from "shared";
 import { startServer, connectClient, hello, sleep, type HarnessServer, type MockClient } from "./coop-harness.js";
 import { rooms } from "../room-registry.js";
 
@@ -917,7 +918,7 @@ describe("accounts & community integration", () => {
     host.close();
   });
 
-  it("an encounter win awards 25 XP + greenhorn PRIVATELY, the roster carries the level, a wipe bumps wipes; bot seats stay null (§6)", async () => {
+  it("an encounter win accrues 25 PENDING XP + greenhorn PRIVATELY (profile xp unchanged mid-run); a wipe banks 50% and bumps wipes; bot seats stay null (§6/02 §7.7)", async () => {
     const host = await connectClient(server);
     const w = await hello(host); // fresh clientId -> fresh guest at 0 XP
     const accountId = w.auth.accountId;
@@ -931,7 +932,7 @@ describe("accounts & community integration", () => {
     host.send({ type: "debugWin" });
 
     const xp = await host.nextOf("xpAward", { fromNow: true, timeoutMs: 8000 });
-    expect(xp).toMatchObject({ amount: 25, xp: 25, level: 1, leveledUp: false });
+    expect(xp).toMatchObject({ amount: 25, pending: 25 }); // provisional accrual, no level
     const titles = await host.nextOf("titlesEarned", { fromNow: true, timeoutMs: 4000 });
     expect(titles.titleIds).toEqual(["greenhorn"]);
 
@@ -952,21 +953,24 @@ describe("accounts & community integration", () => {
     host.mark();
     host.send({ type: "getProfile" });
     const prof = await host.nextOf("profile", { fromNow: true, timeoutMs: 4000 });
-    expect(prof.profile.xp).toBe(25);
+    expect(prof.profile.xp).toBe(0); // the reconciliation proof: XP is pending, NOT on the profile
     expect(prof.profile.stats.encountersWon).toBe(1);
     expect(prof.profile.stats.hexesCharted).toBe(1);
     expect(prof.profile.stats.dimensionsDiscovered).toBe(1); // recorded at startGame
     expect(prof.profile.titles).toContain("greenhorn");
 
-    // Now wipe on a fresh encounter -> wipes+1.
+    // Now wipe on a fresh encounter -> wipes+1 and the pending ledger banks at 0.5.
     host.mark();
     host.send({ type: "proposeMove", target: { q: 1, r: 1 } });
     await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
     host.send({ type: "debugLose" });
+    const banked = await host.nextOf("xpBanked", { fromNow: true, timeoutMs: 8000 });
+    expect(banked).toMatchObject({ pending: 25, multiplier: 0.5, banked: 12, xp: 12, level: 1, leveledUp: false });
     await host.waitFor((m): m is ServerMessage => m.type === "gameOver", { consumeBuffered: false, timeoutMs: 8000 });
     host.mark();
     host.send({ type: "getProfile" });
     const prof2 = await host.nextOf("profile", { fromNow: true, timeoutMs: 4000 });
+    expect(prof2.profile.xp).toBe(12); // floor(25 * 0.5) banked by the wipe
     expect(prof2.profile.stats.wipes).toBe(1);
     expect(prof2.profile.stats.encountersWon).toBe(1);
     host.close();
@@ -1011,4 +1015,641 @@ describe("accounts & community integration", () => {
     a.close();
     b.close();
   });
+});
+
+// =====================================================================================
+// Contracts & run outcomes (docs/meta-loop/02-contracts.md §8 integration additions)
+// =====================================================================================
+
+describe("contracts & run outcomes integration", () => {
+  it("lobby offer board: host and joiner receive contractOffers; the pick is host-gated and rides roomState.contract", async () => {
+    const host = await connectClient(server);
+    const guest = await connectClient(server);
+    await hello(host);
+    await hello(guest);
+    const { code } = await createRoom(host, 2);
+
+    const hostOffers = await host.nextOf("contractOffers", { timeoutMs: 4000 });
+    expect(hostOffers.offers.some((o) => o.type === "chart-hexes")).toBe(true); // always available
+
+    guest.send({ type: "joinRoom", code });
+    await guest.nextOf("welcome");
+    const guestOffers = await guest.nextOf("contractOffers", { timeoutMs: 4000 });
+    expect(guestOffers.offers.map((o) => o.type)).toEqual(hostOffers.offers.map((o) => o.type)); // deterministic scan
+
+    // Pre-pick, the lobby has no contract yet (flag #2: the default lands at startGame).
+    const lobbyRs = await guest.waitFor(isRoomState, { timeoutMs: 4000 });
+    expect(lobbyRs.room.contract).toBeNull();
+
+    // Non-host pick -> NOT_HOST.
+    guest.mark();
+    guest.send({ type: "chooseContract", contractType: "chart-hexes" });
+    const err = await guest.nextOf("error", { fromNow: true, timeoutMs: 4000 });
+    expect(err.code).toBe("NOT_HOST");
+
+    // Host pick -> both sockets see the selection on roomState.contract.
+    host.mark();
+    guest.mark();
+    host.send({ type: "chooseContract", contractType: "chart-hexes" });
+    for (const c of [host, guest]) {
+      const rs = await c.waitFor(
+        (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+          m.type === "roomState" && m.room.contract?.type === "chart-hexes",
+        { timeoutMs: 4000 },
+      );
+      expect(rs.room.contract).toMatchObject({ type: "chart-hexes", progress: 0, required: 10, completed: false });
+    }
+
+    host.close();
+    guest.close();
+  });
+
+  it("startGame without a host pick assigns the default chart-hexes contract (exactly-one invariant)", async () => {
+    const host = await connectClient(server);
+    await hello(host);
+    await createRoom(host, 2);
+    const overworld = await startAndReachOverworld(host);
+    expect(overworld.room.contract).toMatchObject({ type: "chart-hexes", progress: 0, completed: false });
+    host.close();
+  });
+
+  it("full chart-hexes victory: 10 cleared hexes settle the run — gameOver victory, 1.0 bank with the reward, sealbearer (§8)", async () => {
+    const host = await connectClient(server);
+    const w = await hello(host); // fresh guest at 0 XP
+    await createRoom(host, 2);
+    host.send({ type: "chooseContract", contractType: "chart-hexes" });
+    await startAndReachOverworld(host);
+
+    // March east: each target is adjacent to the party (which advances onto every won hex).
+    for (let k = 1; k <= 10; k++) {
+      host.mark();
+      host.send({ type: "proposeMove", target: { q: k, r: 0 } });
+      await host.nextOf("combatStart", { fromNow: true, timeoutMs: 10000 });
+      host.mark();
+      host.send({ type: "debugWin" });
+      if (k < 10) {
+        const rs = await host.waitFor(
+          (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+            m.type === "roomState" && m.room.phase === "overworld" && m.room.contract?.progress === k,
+          { consumeBuffered: false, timeoutMs: 10000 },
+        );
+        expect(rs.room.contract).toMatchObject({ type: "chart-hexes", progress: k, completed: false });
+      }
+    }
+
+    // The 10th win completes the contract -> victory settles the run.
+    const over = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "gameOver" }> => m.type === "gameOver",
+      { consumeBuffered: false, timeoutMs: 10000 },
+    );
+    expect(over.outcome).toBe("victory");
+    const rs = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "gameover",
+      { timeoutMs: 8000 },
+    );
+    expect(rs.room.outcome).toBe("victory");
+    expect(rs.room.contract).toMatchObject({ type: "chart-hexes", progress: 10, required: 10, completed: true });
+
+    // 10 wins + the chart-hexes reward, banked at the 1.0 victory multiplier. Under feature 5 the win
+    // XP scales by hex distance from origin (hexes 3-10 sit past the grace radius), so the total is
+    // computed from the same shared scaledXp the server accrues with (§4.5/§4.6, start tier 0).
+    let expectedPending = scaledXp(contractById("chart-hexes").xpReward, 0, 0); // reward at start tier 0, distance 0
+    for (let k = 1; k <= 10; k++) expectedPending += scaledXp(XP_ENCOUNTER_WIN, 0, hexDistance({ q: k, r: 0 }, { q: 0, r: 0 }));
+    const expectedLevel = levelForXp(expectedPending);
+    const banked = host.inbox.find((m) => m.type === "xpBanked") as Extract<ServerMessage, { type: "xpBanked" }>;
+    expect(banked).toMatchObject({ pending: expectedPending, multiplier: 1, banked: expectedPending, xp: expectedPending, level: expectedLevel, leveledUp: expectedLevel > levelForXp(0) });
+    const titleSends = host.inbox.filter(
+      (m): m is Extract<ServerMessage, { type: "titlesEarned" }> => m.type === "titlesEarned",
+    );
+    expect(titleSends.some((t) => t.titleIds.includes("sealbearer"))).toBe(true);
+
+    host.mark();
+    host.send({ type: "getProfile" });
+    const prof = await host.nextOf("profile", { fromNow: true, timeoutMs: 4000 });
+    expect(prof.profile.accountId).toBe(w.auth.accountId);
+    expect(prof.profile.xp).toBe(expectedPending);
+    expect(prof.profile.level).toBe(expectedLevel);
+    expect(prof.profile.stats.contractsCompleted).toBe(1);
+    expect(prof.profile.titles).toContain("sealbearer");
+
+    // Play Again after victory funnels into the rematch lobby exactly as after defeat.
+    host.mark();
+    host.send({ type: "playAgain" });
+    await host.nextOf("welcome", { fromNow: true, timeoutMs: 6000 });
+    const lobby = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "lobby",
+      { consumeBuffered: false, timeoutMs: 6000 },
+    );
+    expect(lobby.room.contract).toBeNull(); // a fresh lobby: no pick yet
+    host.close();
+  }, 90000);
+
+  it("a reconnecting socket lands in the gameover room via reclaim and reads the outcome from roomState (no gameOver message needed)", async () => {
+    const host = await connectClient(server);
+    const guest = await connectClient(server);
+    await hello(host);
+    await hello(guest);
+    const { code } = await createRoom(host, 2);
+    guest.send({ type: "joinRoom", code });
+    await guest.nextOf("welcome");
+    await guest.waitFor(isRoomState);
+    await startAndReachOverworld(host);
+
+    // A second device for the guest helloes while the run is LIVE: its welcome carries the seat's
+    // re-derived HMAC token (seat live -> no auto-reclaim), which stays valid across the settle.
+    const guest2 = await connectClient(server, guest.clientId);
+    const w2 = await hello(guest2);
+    expect(w2.reconnected).toBeUndefined(); // seat live elsewhere -> room-less welcome
+
+    // Drive a defeat with both humans seated.
+    host.mark();
+    host.send({ type: "proposeMove", target: { q: 1, r: 0 } });
+    const vote = await host.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
+    expect(vote.vote!.kind).toBe("move"); // the generalized payload still types move votes
+    guest.send({ type: "castVote", proposalId: vote.vote!.proposalId, vote: "yes" });
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    host.send({ type: "debugLose" });
+    await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "gameover",
+      { consumeBuffered: false, timeoutMs: 8000 },
+    );
+
+    // The guest's first socket drops at the Game Over screen; the second device reclaims the seat.
+    guest.close();
+    await guest.closed;
+    guest2.mark();
+    guest2.send({ type: "reclaimSeat", code, seatId: "s1" });
+    const rw = await guest2.nextOf("welcome", { fromNow: true, timeoutMs: 4000 });
+    expect(rw.reconnected).toEqual({ code, seatId: "s1" });
+
+    // The end screen renders from roomState alone: outcome + contract, no transient gameOver replay.
+    const rs = await guest2.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "gameover",
+      { timeoutMs: 4000 },
+    );
+    expect(rs.room.outcome).toBe("defeat");
+    expect(rs.room.contract).toMatchObject({ type: "chart-hexes", completed: false });
+    expect(guest2.inbox.some((m) => m.type === "gameOver")).toBe(false);
+
+    host.close();
+    guest2.close();
+  }, 30000);
+});
+
+describe("portals & tiered multiverse integration", () => {
+  it("lobby dimensionOptions + host-gated chooseDimension (eligibility, re-derivation, re-sent offers)", async () => {
+    const host = await connectClient(server);
+    const guest = await connectClient(server);
+    const hw = await hello(host);
+    await hello(guest);
+    const hostAccountId = hw.auth.accountId;
+    const { code } = await createRoom(host, 2);
+
+    // The host lands with the run-start picker: tier-0 surface dims present, uncharted deep (dim 2) absent.
+    const opts = await host.nextOf("dimensionOptions", { timeoutMs: 4000 });
+    const ids = opts.options.map((o) => o.id);
+    expect(ids).toContain(0);
+    expect(ids).toContain(1);
+    expect(ids).not.toContain(2); // tier-1, uncharted -> not offered
+    expect(opts.options.find((o) => o.id === 0)).toMatchObject({ tier: 0, name: "Greenlands" });
+
+    // The joiner also receives the picker (re-broadcast on join).
+    guest.send({ type: "joinRoom", code });
+    await guest.nextOf("welcome");
+    const gOpts = await guest.nextOf("dimensionOptions", { timeoutMs: 4000 });
+    expect(gOpts.options.map((o) => o.id).sort()).toEqual(ids.slice().sort());
+
+    // Non-host chooseDimension -> NOT_HOST.
+    guest.mark();
+    guest.send({ type: "chooseDimension", dimensionId: 1 });
+    expect((await guest.nextOf("error", { fromNow: true, timeoutMs: 4000 })).code).toBe("NOT_HOST");
+
+    // Host picks an uncharted deep dim -> INVALID_INPUT.
+    host.mark();
+    host.send({ type: "chooseDimension", dimensionId: 2 });
+    expect((await host.nextOf("error", { fromNow: true, timeoutMs: 4000 })).code).toBe("INVALID_INPUT");
+
+    // Chart dim 2 for the host's account (dynamic import shares the harness :memory: DB), then the pick
+    // succeeds: both sockets see dim 2 (tier 1) on roomState and contractOffers are re-sent.
+    const { recordDimensionSeen } = await import("../accounts.js");
+    recordDimensionSeen(hostAccountId, 2);
+    host.send({ type: "chooseDimension", dimensionId: 2 });
+    for (const c of [host, guest]) {
+      // Scan buffered too: the shared broadcast may land before this seat's waitFor registers.
+      const rs = await c.waitFor(
+        (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.dimensionId === 2,
+        { timeoutMs: 4000 },
+      );
+      expect(rs.room.dimensionName).toBe("The Gloom Hollows");
+      expect(rs.room.dimensionTier).toBe(1);
+    }
+    await host.nextOf("contractOffers", { fromNow: true, timeoutMs: 4000 }); // re-derived per new map
+
+    host.close();
+    guest.close();
+  });
+
+  it("travel end-to-end over ws: gateway clear attunes, reconnect snapshot carries gateways, descent vote travels, wipe rematches at the START dimension", async () => {
+    const db = await import("../db.js");
+    // Destination fixture: the ONLY ready NULL-tier pool candidate in the harness DB (seeded dims are
+    // all tiered). Combat-capable via dim 0's real enemy templates (composite PK — no clobbering).
+    const DEST = 9010;
+    db.saveDimension(DEST, "E2E Depths", [], "bg-e2e.png", undefined, "approved");
+    db.db.prepare(
+      "INSERT OR REPLACE INTO enemy_templates (id, dimension_id, template_json) SELECT id, ?, template_json FROM enemy_templates WHERE dimension_id = 0",
+    ).run(DEST);
+    db.db.prepare("INSERT OR REPLACE INTO items (id, dimension_id, item_json) VALUES ('e2e-depths-item', ?, '{}')").run(DEST);
+    // A gateway hex adjacent to dim 0's origin (community icon override; (0,1) is unused by other tests).
+    const GATE = { q: 0, r: 1 };
+    const GATE_KEY = "0,1";
+    db.saveDiscoveredHexIcon(0, GATE, "gateway");
+
+    const host = await connectClient(server);
+    const guest = await connectClient(server);
+    await hello(host);
+    await hello(guest);
+    const { code } = await createRoom(host, 2);
+    guest.send({ type: "joinRoom", code });
+    await guest.nextOf("welcome");
+    await startAndReachOverworld(host);
+
+    // Move onto the gateway hex (two humans -> movement vote) and win the fight.
+    host.mark();
+    guest.mark();
+    host.send({ type: "proposeMove", target: GATE });
+    const mv = await guest.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
+    guest.send({ type: "castVote", proposalId: mv.vote!.proposalId, vote: "yes" });
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    host.send({ type: "debugWin" });
+
+    // Attunement: both sockets get gatewayUpdate with the fixed destination, and the win's
+    // hexMapState broadcast already carries the new gateway (recorder runs before the broadcast).
+    for (const c of [host, guest]) {
+      const gu = await c.nextOf("gatewayUpdate", { fromNow: true, timeoutMs: 8000 });
+      expect(gu.hex).toEqual(GATE);
+      expect(gu.gateway).toEqual({ toDimensionId: DEST, toName: "E2E Depths", toTier: 1 });
+    }
+    const hm = await host.nextOf("hexMapState", { fromNow: true, timeoutMs: 4000 });
+    expect(hm.gateways[GATE_KEY]).toEqual({ toDimensionId: DEST, toName: "E2E Depths", toTier: 1 });
+
+    // Reconnect (fresh socket + hello auto-reclaim): the overworld snapshot carries the gateways map.
+    guest.close();
+    await guest.closed;
+    const guest2 = await connectClient(server, guest.clientId);
+    const w2 = await hello(guest2);
+    expect(w2.reconnected).toBeTruthy();
+    const snap = await guest2.nextOf("hexMapState", { timeoutMs: 4000 });
+    expect(snap.gateways[GATE_KEY]).toEqual({ toDimensionId: DEST, toName: "E2E Depths", toTier: 1 });
+
+    // Descent: proposeTravel opens a travel vote carrying the destination; the second yes travels.
+    host.mark();
+    guest2.mark();
+    host.send({ type: "proposeTravel" });
+    const tv = await guest2.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
+    expect(tv.vote).toMatchObject({
+      kind: "travel",
+      target: null,
+      travel: { toDimensionId: DEST, toName: "E2E Depths", toTier: 1 },
+    });
+    guest2.send({ type: "castVote", proposalId: tv.vote!.proposalId, vote: "yes" });
+    for (const c of [host, guest2]) {
+      const rs = await c.waitFor(
+        (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.dimensionId === DEST,
+        { timeoutMs: 4000 },
+      );
+      expect(rs.room.dimensionName).toBe("E2E Depths");
+      expect(rs.room.dimensionTier).toBe(1);
+      expect(rs.room.phase).toBe("overworld");
+    }
+    // First travel bumps dimensions_traveled -> Depthfarer (dimension-entered recorder, flag #14).
+    // Emitted BEFORE the arrival broadcasts, so consume it first (fromNow cursor ordering).
+    const titles = await host.nextOf("titlesEarned", { fromNow: true, timeoutMs: 4000 });
+    expect(titles.titleIds).toContain("depthfarer");
+    const arrival = await host.nextOf("hexMapState", { fromNow: true, timeoutMs: 4000 });
+    expect(arrival.hexMap.playerPos).toEqual({ q: 0, r: 0 });
+
+    // Wipe in the destination -> Play Again rematches at the START dimension (flag #6), not the depth.
+    host.mark();
+    guest2.mark();
+    host.send({ type: "proposeMove", target: { q: 1, r: 0 } });
+    const mv2 = await guest2.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
+    guest2.send({ type: "castVote", proposalId: mv2.vote!.proposalId, vote: "yes" });
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    host.send({ type: "debugLose" });
+    await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "gameOver" }> => m.type === "gameOver",
+      { consumeBuffered: false, timeoutMs: 8000 },
+    );
+    host.send({ type: "playAgain" });
+    const rematch = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+        m.type === "roomState" && m.room.phase === "lobby" && m.room.dimensionId === 0,
+      { consumeBuffered: false, timeoutMs: 4000 },
+    );
+    expect(rematch.room.code).not.toBe(code);
+
+    host.close();
+    guest2.close();
+  });
+
+  it("createRoom dimensionId validation + GAME_ALLOW_UNCHARTED_DIMENSIONS dev override", async () => {
+    const solo = await connectClient(server);
+    await hello(solo);
+
+    // An uncharted deep dim is rejected before any room is created.
+    solo.mark();
+    solo.send({ type: "createRoom", capacity: 2, dimensionId: 2 });
+    expect((await solo.nextOf("error", { fromNow: true, timeoutMs: 4000 })).code).toBe("INVALID_INPUT");
+
+    // The dev knob skips the eligibility check (existence still enforced) so a tierless/uncharted dim boots.
+    process.env.GAME_ALLOW_UNCHARTED_DIMENSIONS = "1";
+    try {
+      solo.mark();
+      solo.send({ type: "createRoom", capacity: 2, dimensionId: 2 });
+      await solo.nextOf("welcome", { fromNow: true, timeoutMs: 4000 });
+      const rs = await solo.waitFor(
+        (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.dimensionId === 2,
+        { consumeBuffered: false, timeoutMs: 4000 },
+      );
+      expect(rs.room.dimensionTier).toBe(1);
+    } finally {
+      delete process.env.GAME_ALLOW_UNCHARTED_DIMENSIONS;
+    }
+    solo.close();
+  });
+});
+
+// =====================================================================================
+// Feature 3 — loot & codex (docs/meta-loop/03-loot-codex.md §8 integration additions)
+// =====================================================================================
+
+function isOverworldRoomState(m: ServerMessage): m is Extract<ServerMessage, { type: "roomState" }> {
+  return m.type === "roomState" && m.room.phase === "overworld";
+}
+
+/** Enter combat from the origin frontier and return the live room (icon overrides go on it). */
+async function enterCombatLive(host: MockClient, code: string): Promise<import("../room.js").Room> {
+  host.mark();
+  await enterCombat(host);
+  await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+  const room = rooms.get(code as never)!;
+  expect(room.phase).toBe("combat");
+  return room;
+}
+
+describe("loot & codex integration", () => {
+  it("a treasure-hex win drops loot into the shared pool; a solo claim assigns it instantly", async () => {
+    const host = await connectClient(server);
+    await hello(host);
+    const { code } = await createRoom(host, 2);
+    await startAndReachOverworld(host);
+    const room = await enterCombatLive(host, code);
+    const ph = room.pendingHex!;
+    // Override the winning hex to a treasure icon (dropChance 1.0, 2 rolls) for a guaranteed drop.
+    room.hexMap = { ...room.hexMap, icons: { ...room.hexMap.icons, [hexKey(ph)]: "treasure" } };
+
+    host.mark();
+    host.send({ type: "debugWin" });
+    const found = await host.nextOf("lootFound", { fromNow: true, timeoutMs: 8000 });
+    expect(found.drops.length).toBeGreaterThanOrEqual(1);
+    const rs = await host.waitFor(isOverworldRoomState, { consumeBuffered: false, timeoutMs: 8000 });
+    expect(rs.room.lootPool.length).toBeGreaterThanOrEqual(1);
+    const { lootId, item } = rs.room.lootPool[0]!;
+
+    host.mark();
+    host.send({ type: "claimLoot", lootId });
+    const inv = await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
+    expect(inv.inventory.bag.some((b) => b?.id === item.id)).toBe(true);
+    const drained = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+        m.type === "roomState" && !m.room.lootPool.some((e) => e.lootId === lootId),
+      { consumeBuffered: false, timeoutMs: 8000 },
+    );
+    expect(drained.room.lootPool.some((e) => e.lootId === lootId)).toBe(false);
+    host.close();
+  }, 30000);
+
+  it("a slay-boss victory banks the run's drops; getCodex from a fresh socket returns them with 'by you' provenance", async () => {
+    const dbmod = await import("../db.js");
+    const host = await connectClient(server);
+    const w = await hello(host);
+    const { code } = await createRoom(host, 2);
+    await startAndReachOverworld(host);
+    const room = await enterCombatLive(host, code);
+    // Drops roll from the room's CURRENT dimension pool: point the live room at a private tiered
+    // dimension so the first-recovery assertions can't race other tests' random dim-0 banks
+    // (codex_firsts is global across the process-shared :memory: DB).
+    const bossDim = 9100;
+    dbmod.saveDimension(bossDim, "E2E Boss Vault", []);
+    dbmod.db.prepare("UPDATE dimensions SET tier = 1 WHERE id = ?").run(bossDim);
+    const relic: ItemDefinition = {
+      type: "weapon", id: `e2e-bank-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      name: "E2E Relic", description: "", rarity: "rare", sprite: "x.webp", dimensionId: bossDim,
+      slotCost: { hand: 1 }, animSet: "sword", abilities: [],
+    };
+    dbmod.db.prepare("INSERT OR REPLACE INTO items (id, dimension_id, item_json) VALUES (?, ?, ?)")
+      .run(relic.id, bossDim, JSON.stringify(relic));
+    room.dimensionId = bossDim;
+    const ph = room.pendingHex!;
+    // A boss win completes a slay-boss contract (-> victory) AND drops apex loot that banks at settle.
+    room.hexMap = { ...room.hexMap, icons: { ...room.hexMap.icons, [hexKey(ph)]: "boss" } };
+    room.contract = createContractState("slay-boss", ph, room.dimensionId);
+
+    host.mark();
+    host.send({ type: "debugWin" });
+    const banked = await host.nextOf("codexBanked", { fromNow: true, timeoutMs: 8000 });
+    expect(banked.entries.length).toBe(1); // apex rolls 2 from a one-design pool -> dedup to one entry
+    expect(banked.entries[0]!.item.id).toBe(relic.id);
+    expect(banked.firstItemIds).toEqual([relic.id]); // solo banker gets every first
+    const over = await host.nextOf("gameOver", { fromNow: true, timeoutMs: 8000 });
+    expect(over.outcome).toBe("victory");
+
+    // A FRESH socket for the SAME account fetches the codex with resolved provenance.
+    const fresh = await connectClient(server, host.clientId);
+    await hello(fresh, { authToken: w.auth.authToken });
+    fresh.mark();
+    fresh.send({ type: "getCodex" });
+    const codex = await fresh.nextOf("codex", { fromNow: true, timeoutMs: 8000 });
+    const entry = codex.entries.find((e) => e.item.id === relic.id);
+    expect(entry).toBeDefined();
+    expect(entry!.dimensionName).toBe("E2E Boss Vault");
+    expect(entry!.tier).toBe(1);
+    expect(entry!.first.mine).toBe(true);
+    host.close();
+    fresh.close();
+  }, 30000);
+
+  it("chooseManifest materializes a banked design into the seat loadout; a tier-gated design is rejected", async () => {
+    const dbmod = await import("../db.js");
+    const acctMod = await import("../accounts.js");
+    const host = await connectClient(server);
+    await hello(host);
+    const acctId = acctMod.resolveGuestAccount(host.clientId).id;
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const design: ItemDefinition = {
+      type: "weapon", id: `e2e-mf-${suffix}`, name: "E2E Blade", description: "", rarity: "uncommon",
+      sprite: "x.webp", dimensionId: 0, slotCost: { hand: 1 }, animSet: "sword", abilities: [],
+    };
+    const highDesign: ItemDefinition = { ...design, id: `e2e-mf-high-${suffix}`, rarity: "rare" };
+    dbmod.bankCodexEntry(acctId, design, 0);
+    dbmod.recordCodexFirst(design, acctId);
+    dbmod.bankCodexEntry(acctId, highDesign, 2); // tier 2 > dim-0 starting tier 0
+    dbmod.recordCodexFirst(highDesign, acctId);
+
+    const { roomState } = await createRoom(host, 2);
+    const mySeat = roomState.room.yourSeatId!;
+
+    host.mark();
+    host.send({ type: "chooseManifest", itemIds: [design.id] });
+    // applyInventoryChange emits inventory THEN roomState; wait for the manifestIds roomState, then
+    // read the latest inventory (the just-materialized bag) — avoids racing the createRoom inventory.
+    const rs = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+        m.type === "roomState" && (m.room.seats.find((s) => s.seatId === mySeat)?.manifestIds ?? []).includes(design.id),
+      { consumeBuffered: false, timeoutMs: 8000 },
+    );
+    expect(rs.room.seats.find((s) => s.seatId === mySeat)!.manifestIds).toContain(design.id);
+    const inv = host.latest("inventory")!;
+    expect(inv.inventory.bag.some((b) => b?.id === design.id)).toBe(true);
+
+    host.mark();
+    host.send({ type: "chooseManifest", itemIds: [highDesign.id] });
+    const err = await host.nextOf("error", { fromNow: true, timeoutMs: 8000 });
+    expect(err.message).toBe("That design's tier exceeds this expedition");
+    host.close();
+  }, 30000);
+
+  it("an open loot claim vote survives a reconnect: the snapshot carries voteState and the reclaimed seat can finish the ballot (03 §4.7)", async () => {
+    const host = await connectClient(server);
+    const guest = await connectClient(server);
+    await hello(host);
+    await hello(guest);
+    const { code } = await createRoom(host, 2);
+    guest.send({ type: "joinRoom", code });
+    await guest.nextOf("welcome");
+    await guest.waitFor(isRoomState);
+    await startAndReachOverworld(host);
+
+    // Two humans: entering combat needs the guest's yes on the move vote.
+    guest.mark();
+    host.send({ type: "proposeMove", target: { q: 1, r: 0 } });
+    const mv = await guest.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
+    guest.send({ type: "castVote", proposalId: mv.vote!.proposalId, vote: "yes" });
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    const room = rooms.get(code as never)!;
+    const ph = room.pendingHex!;
+    room.hexMap = { ...room.hexMap, icons: { ...room.hexMap.icons, [hexKey(ph)]: "treasure" } };
+
+    host.mark();
+    host.send({ type: "debugWin" });
+    const found = await host.nextOf("lootFound", { fromNow: true, timeoutMs: 8000 });
+    const entry = found.drops[0]!;
+
+    // Host proposes the claim (electorate of 2 -> a real ballot), then the guest drops mid-vote.
+    guest.mark();
+    host.send({ type: "claimLoot", lootId: entry.lootId });
+    const lv = await guest.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
+    expect(lv.vote!.kind).toBe("loot");
+    guest.close();
+    await guest.closed;
+
+    // Hello with the same clientId auto-reclaims the dead seat; its snapshot must carry the vote.
+    const guest2 = await connectClient(server, guest.clientId);
+    const w2 = await hello(guest2);
+    expect(w2.reconnected).toEqual({ code, seatId: "s1" });
+    const snap = await guest2.nextOf("voteState", { timeoutMs: 4000 });
+    expect(snap.vote).not.toBeNull();
+    expect(snap.vote!.kind).toBe("loot");
+    expect(snap.vote!.loot!.lootId).toBe(entry.lootId);
+
+    // The reclaimed seat is still in the frozen electorate: its yes resolves the claim to the host.
+    host.mark();
+    guest2.send({ type: "castVote", proposalId: snap.vote!.proposalId, vote: "yes" });
+    const inv = await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
+    expect(inv.inventory.bag.some((b) => b?.id === entry.item.id)).toBe(true);
+    host.close();
+    guest2.close();
+  }, 30000);
+});
+
+// =====================================================================================
+// Feature 5 — difficulty & themed encounters (docs/meta-loop/05-difficulty.md §8 additions)
+// =====================================================================================
+
+describe("difficulty & rest integration", () => {
+  it("combatStart carries a themed archetype resolvable via the shared catalog", async () => {
+    const host = await connectClient(server);
+    await hello(host);
+    await createRoom(host, 2);
+    await startAndReachOverworld(host);
+    host.mark();
+    await enterCombat(host);
+    const cs = await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    expect(typeof cs.archetype).toBe("string");
+    const a = archetypeById(cs.archetype); // throws on an unknown id
+    expect(a.id).toBe(cs.archetype);
+    expect(a.flavor.length).toBeGreaterThan(0);
+    host.close();
+  }, 20000);
+
+  it("clearing a town arms rest (restUpdate + roomState truth); the next combat entry consumes it", async () => {
+    const host = await connectClient(server);
+    await hello(host);
+    const { code } = await createRoom(host, 2);
+    await startAndReachOverworld(host);
+    const room = await enterCombatLive(host, code);
+    const ph = room.pendingHex!;
+    // Make the hex the party just entered a town (a rest node): winning it liberates the settlement.
+    room.hexMap = { ...room.hexMap, icons: { ...room.hexMap.icons, [hexKey(ph)]: "town" } };
+
+    host.mark();
+    host.send({ type: "debugWin" });
+
+    // restUpdate is broadcast (io.broadcast fans to every seat — the both-sockets fan-out is asserted
+    // deterministically at the machine level); the overworld roomState truth carries rested: true.
+    const rest = await host.nextOf("restUpdate", { fromNow: true, timeoutMs: 8000 });
+    expect(rest.rested).toBe(true);
+    const restedState = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+        m.type === "roomState" && m.room.phase === "overworld" && m.room.rested,
+      { consumeBuffered: false, timeoutMs: 8000 },
+    );
+    expect(restedState.room.rested).toBe(true);
+    expect(room.rested).toBe(true);
+
+    // Enter the next fight on a different frontier hex -> rest is consumed on entry (server truth
+    // flips synchronously before combatStart is broadcast).
+    host.mark();
+    host.send({ type: "proposeMove", target: { q: 2, r: 0 } }); // solo -> resolves instantly
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+    expect(room.rested).toBe(false);
+
+    host.close();
+  }, 30000);
+
+  it("a capacity-4 room scales its first encounter's budget to party size 4", async () => {
+    const host = await connectClient(server);
+    await hello(host);
+    const { code } = await createRoom(host, 4); // startGame bot-fills to four heroes
+    await startAndReachOverworld(host);
+    host.mark();
+    await enterCombat(host); // single human -> resolves instantly
+    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
+
+    const room = rooms.get(code as never)!;
+    const ph = room.pendingHex!;
+    const hexType = getHexIcon(ph, room.hexMap.icons) ?? (isDecorationHex(ph) ? "dense-wilderness" : "wilderness");
+    const base = getEncounterProfile(hexType).enemyBudget;
+    const expected = effectiveEnemyBudget(base, {
+      dimensionTier: room.dimensionTier,
+      distanceFromOrigin: hexDistance(ph, { q: 0, r: 0 }),
+      partySize: 4,
+    });
+    expect(room.session!.effectiveBudget).toBe(expected);
+
+    const blue = [...room.session!.state.entities.values()].filter((e) => e.teamId === "blue");
+    expect(blue.length).toBeGreaterThanOrEqual(1);
+    expect(blue.length).toBeLessThanOrEqual(12); // MAX_ENCOUNTER_ENEMIES ceiling
+    host.close();
+  }, 20000);
 });
