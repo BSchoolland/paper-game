@@ -177,9 +177,9 @@ async function buildFromSpec(spec: DimensionSpec): Promise<string> {
       prompt: [
         lightContext(spec),
         "",
-        "Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same character proportions, same animation poses.",
+        "Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color quality, character proportions, and animation poses. Ignore the reference's parchment background and any grid or separator lines it shows; put the subjects on plain white.",
         "",
-        "The image must be a 4×4 grid:",
+        "Arrange the subjects in a 4×4 layout, evenly spaced with clear empty white space between them. Do NOT draw any grid lines, cell borders, boxes, or separators between the cells:",
         "  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)",
         "  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)",
         "  - Each enemy is consistent across its column (same character drawn 4 different ways)",
@@ -222,9 +222,9 @@ async function buildFromSpec(spec: DimensionSpec): Promise<string> {
     prompt: [
       lightContext(spec),
       "",
-      "Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its style exactly: same parchment background, same hand-drawn linework, same color quality, same isolated-on-page item presentation.",
+      "Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color quality, and isolated-on-page item presentation. Ignore the reference's parchment background and any grid or separator lines it shows; put the items on plain white.",
       "",
-      "The image must be a 4×4 grid where each cell contains exactly one item. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.",
+      "Arrange the items in a 4×4 layout, one item per cell position, evenly spaced with clear empty white space between them. Do NOT draw any grid lines, cell borders, boxes, or separators. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.",
       "",
       "Items in reading order (left-to-right, top-to-bottom):",
       itemListText,

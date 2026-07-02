@@ -18,10 +18,10 @@ console.log("[debug] spec.name:", spec.name);
 if (spec.id !== dimId) spec.id = dimId;
 
 console.log("[debug] Importing buildFromSpec");
-import { buildFromSpec } from "./build-diffusion-bundles.ts";
+import { buildFromSpec } from "./build-diffusion-bundles.js";
 
 console.log("[debug] Importing generateArt");
-import { generateArt } from "./auto/art-agent.ts";
+import { generateArt } from "./auto/art-agent.js";
 
 console.log("[debug] Calling buildFromSpec");
 const bundlesRoot = await buildFromSpec(spec);

@@ -112,7 +112,7 @@ export function extractSprites(dimId: number, result: BundleResult, spec: any) {
     const names = extractEnemyNames(spec, batchIdx);
 
     const r = spawnSync("python3", [
-      join(SCRIPTS, "process-spritesheet.py"), imagePath, outDir,
+      join(SCRIPTS, "detect-sprites.py"), imagePath, outDir,
       "--cols", "4", "--rows", "4",
       "--names", names,
       "--states", "idle,attack,hit,move",
