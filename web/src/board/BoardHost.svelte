@@ -72,7 +72,14 @@
     driver = new FrameDriver(app);
     onResize = () => driver.invalidate();
     window.addEventListener("resize", onResize);
-    if (import.meta.env.DEV) (window as unknown as { __app: Application }).__app = app;
+    if (import.meta.env.DEV) {
+      (window as unknown as { __app: Application }).__app = app;
+      (window as unknown as { __driver: FrameDriver }).__driver = driver;
+      // Pixi Devtools browser extension looks for this global.
+      (window as unknown as { __PIXI_APP__: Application }).__PIXI_APP__ = app;
+      const { installGpuProfiler } = await import("./render/gpu-profiler.js");
+      installGpuProfiler(app);
+    }
 
     await Promise.all([loadSpriteAssets(), loadMapAssets(), loadMapIconAssets()]);
     if (disposed) return;
