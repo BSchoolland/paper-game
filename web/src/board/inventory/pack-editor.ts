@@ -122,7 +122,7 @@ export class PackEditor {
       border: "1px solid rgba(60, 47, 28, 0.55)",
       borderRadius: "4px",
       color: "#3c2f1c",
-      fontFamily: '"IM Fell English", serif',
+      fontFamily: '"Spectral", serif',
       fontSize: "14px",
       lineHeight: "1.5",
       boxSizing: "border-box",

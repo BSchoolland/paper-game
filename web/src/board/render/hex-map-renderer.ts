@@ -12,7 +12,7 @@ import { PENCIL, PENCIL_LIGHT } from "./sketch-utils.js";
 import { HexCamera } from "./hex-camera.js";
 import { HexPathTrail } from "./hex-path-trail.js";
 import { HexPlayerTween } from "./hex-player-tween.js";
-import type { FramePacer } from "./frame-pacer.js";
+import type { FrameDriver } from "./frame-driver.js";
 import { assetUrl } from "../../lib/urls.js";
 
 const HEX_SIZE = 48;
@@ -77,8 +77,8 @@ export class HexMapRenderer {
   private playerTween = new HexPlayerTween(HEX_SIZE);
   private inputEnabled = true;
 
-  constructor(private app: Application, private pacer: FramePacer) {
-    this.camera = new HexCamera(app, this.worldContainer);
+  constructor(private app: Application, private driver: FrameDriver) {
+    this.camera = new HexCamera(app, this.worldContainer, () => this.driver.invalidate());
   }
 
   init() {
@@ -92,14 +92,6 @@ export class HexMapRenderer {
     this.worldContainer.addChild(this.iconContainer);
     this.worldContainer.addChild(this.hoverGfx);
     this.worldContainer.addChild(this.playerTween.charSprite.container);
-
-    this.pacer.register(() => (this.playerTween.animating ? 60 : 0));
-    this.app.ticker.add((ticker) => {
-      if (!this.playerTween.animating) return;
-      const dt = ticker.deltaTime / 60;
-      const pos = this.playerTween.tick(dt);
-      if (pos) this.pathTrail.drawLive(pos.x, pos.y);
-    });
 
     this.app.canvas.addEventListener("mousemove", (e) => {
       if (!this.inputEnabled) return;
@@ -129,11 +121,13 @@ export class HexMapRenderer {
   show() {
     this.camera.show();
     this.updateResetCameraButton();
+    this.driver.invalidate();
   }
 
   hide() {
     this.camera.hide();
     if (this.cameraControls) this.cameraControls.style.display = "none";
+    this.driver.invalidate();
   }
 
   hideControls() {
@@ -169,7 +163,16 @@ export class HexMapRenderer {
     const to = hexToPixel(target, HEX_SIZE);
     this.pathTrail.addPoint(to);
     this.playerTween.startMove(this.mapState.playerPos, target);
+    this.driver.requestFrames(this.update);
   }
+
+  /** Advance the player-token move tween; unregisters itself when the move lands. */
+  private update = (dtSeconds: number): boolean => {
+    if (!this.playerTween.animating) return false;
+    const pos = this.playerTween.tick(dtSeconds);
+    if (pos) this.pathTrail.drawLive(pos.x, pos.y);
+    return this.playerTween.animating;
+  };
 
   render(state: HexMapState) {
     this.mapState = state;
@@ -184,6 +187,7 @@ export class HexMapRenderer {
     if (!this.playerTween.animating) {
       this.playerTween.placeIdle(px.x, px.y);
     }
+    this.driver.invalidate();
   }
 
   private drawHexes() {
@@ -216,6 +220,7 @@ export class HexMapRenderer {
 
   private drawHover() {
     this.hoverGfx.clear();
+    this.driver.invalidate();
     if (!this.mapState || !this.hoverCoord) return;
     const { hexes, playerPos } = this.mapState;
     const key = hexKey(this.hoverCoord);

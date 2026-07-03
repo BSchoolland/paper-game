@@ -32,7 +32,11 @@ export class HexCamera {
   private keyPanRAF: number | null = null;
   private enabled = true;
 
-  constructor(private app: Application, private worldContainer: Container) {}
+  constructor(
+    private app: Application,
+    private worldContainer: Container,
+    private invalidate: () => void,
+  ) {}
 
   setEnabled(val: boolean) {
     this.enabled = val;
@@ -226,6 +230,8 @@ export class HexCamera {
     this.offsetY = screenH / 2 - this.centeredWorldY * this.scale + this.userOffsetY;
     this.worldContainer.scale.set(this.scale);
     this.worldContainer.position.set(this.offsetX, this.offsetY);
+    // Every camera move (drag, wheel, key-pan, reset, recenter) funnels through here — one repaint.
+    this.invalidate();
   }
 
   private updateMask() {

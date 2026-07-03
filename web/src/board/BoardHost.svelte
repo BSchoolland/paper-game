@@ -12,7 +12,7 @@
     setAnimatingCheck,
   } from "../state/combat.svelte.js";
   import { proposeMove, defendResult } from "../state/actions.js";
-  import { FramePacer } from "./render/frame-pacer.js";
+  import { FrameDriver } from "./render/frame-driver.js";
   import { GameRenderer } from "./render/game-renderer.js";
   import { HexMapRenderer, loadMapIconAssets } from "./render/hex-map-renderer.js";
   import { loadMapAssets } from "./render/grid-renderer.js";
@@ -33,7 +33,8 @@
   let ready = $state(false);
 
   let app: Application;
-  let pacer: FramePacer;
+  let driver: FrameDriver;
+  let onResize: (() => void) | null = null;
   let hexRenderer: HexMapRenderer;
   let gameRenderer: GameRenderer;
   let input: InputManager;
@@ -52,25 +53,31 @@
     return () => {
       disposed = true;
       abilityBar?.hide();
+      if (onResize) window.removeEventListener("resize", onResize);
+      driver?.destroy();
       app?.destroy(true, { children: true });
     };
   });
 
   async function init(): Promise<void> {
     app = new Application();
-    await app.init({ backgroundAlpha: 0, resizeTo: window, antialias: true });
+    // autoStart:false disables Pixi's per-tick auto-render — the FrameDriver owns every paint, so a
+    // static board renders zero frames and the GPU idles.
+    await app.init({ backgroundAlpha: 0, resizeTo: window, antialias: true, autoStart: false });
     if (disposed) {
       app.destroy(true, { children: true });
       return;
     }
     container.appendChild(app.canvas);
-    pacer = new FramePacer(app.ticker);
+    driver = new FrameDriver(app);
+    onResize = () => driver.invalidate();
+    window.addEventListener("resize", onResize);
     if (import.meta.env.DEV) (window as unknown as { __app: Application }).__app = app;
 
     await Promise.all([loadSpriteAssets(), loadMapAssets(), loadMapIconAssets()]);
     if (disposed) return;
 
-    hexRenderer = new HexMapRenderer(app, pacer);
+    hexRenderer = new HexMapRenderer(app, driver);
     hexRenderer.init();
     hexRenderer.hide();
     hexRenderer.onHexClick((coord) => {
@@ -81,7 +88,7 @@
       proposeMove(coord);
     });
 
-    gameRenderer = new GameRenderer(app, clientState, pacer);
+    gameRenderer = new GameRenderer(app, clientState, driver);
     input = new InputManager(app.canvas, clientState, gameRenderer, () => {
       if (!combat.display) return;
       gameRenderer.renderOverlay(input.mouseWorld);

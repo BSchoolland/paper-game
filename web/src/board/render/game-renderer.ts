@@ -13,7 +13,7 @@ import { drawTargetingPreview, drawEffectPreview, drawIncomingAttackPreview } fr
 import { drawZones } from "./zone-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
 import { ScreenFlash, type FlashOptions } from "./screen-flash.js";
-import type { FramePacer } from "./frame-pacer.js";
+import type { FrameDriver } from "./frame-driver.js";
 
 const PADDING = 75;
 const DIM_ALPHA = 0.4;
@@ -57,8 +57,7 @@ export class GameRenderer {
   private mapObjectSprites: Sprite[] = [];
   private debugLayer = new Container();
   private debugVisible = false;
-  private tickerActive = false;
-  private unregisterPacer: (() => void) | null = null;
+  private listenersBound = false;
   private shakeIntensity = 0;
   private shakeTimer = 0;
   private playbackSpeed = 1;
@@ -70,7 +69,7 @@ export class GameRenderer {
   constructor(
     private app: Application,
     private clientState: ClientState,
-    private pacer: FramePacer
+    private driver: FrameDriver
   ) {
     this.outerContainer.addChild(this.dimGfx);
     this.outerContainer.addChild(this.frameGfx);
@@ -82,6 +81,7 @@ export class GameRenderer {
 
   flash(opts?: FlashOptions) {
     this.screenFlash.trigger(opts);
+    this.wake();
   }
 
   /** Locally play the attacker swing + shape flash for an incoming attack — used by the
@@ -90,18 +90,21 @@ export class GameRenderer {
     const state = this.clientState.getState();
     if (!state || !this.entities) return;
     this.entities.previewIncomingAttack(attackerId, attackerPosition, aimDirection, ability, state);
+    this.wake();
   }
 
   /** Locally play the defender block animation + perfect-block screen flash. */
   triggerLocalBlock(defenderId: string, attackerPosition: Vec2, tier: "perfect" | "decent"): void {
     if (!this.entities) return;
     this.entities.triggerLocalBlock(defenderId, attackerPosition, tier);
+    this.wake();
   }
 
   /** Spawn an impact-feedback floating label (CRIT, PARRY, etc.) at a world position. */
   spawnFloatingText(x: number, y: number, message: string, color: number, opts?: import("./floating-text.js").FloatingTextOptions): void {
     if (!this.entities) return;
     this.entities.spawnFloatingText(x, y, message, color, opts);
+    this.wake();
   }
 
   bringToFront() {
@@ -132,57 +135,16 @@ export class GameRenderer {
     this.bringToFront();
     this.outerContainer.visible = true;
 
-    if (!this.unregisterPacer) {
-      this.unregisterPacer = this.pacer.register(() => this.desiredFps());
-    }
-
-    if (!this.tickerActive) {
-      this.tickerActive = true;
-      this.app.ticker.add((ticker) => {
-        if (!this.outerContainer.visible || !this.entities) return;
-        const dt = (ticker.deltaTime / 60) * this.playbackSpeed;
-        const shaking = this.shakeTimer > 0;
-        const flashing = this.screenFlash.active;
-
-        if (flashing) {
-          this.screenFlash.tick(dt);
-        }
-
-        if (shaking) {
-          this.shakeTimer -= dt;
-          const progress = Math.max(0, this.shakeTimer / 0.3);
-          const magnitude = this.shakeIntensity * progress * 6;
-          const shakeX = (Math.random() - 0.5) * 2 * magnitude;
-          const shakeY = (Math.random() - 0.5) * 2 * magnitude;
-          this.worldContainer.position.set(this.baseOffsetX + shakeX, this.baseOffsetY + shakeY);
-          if (this.shakeTimer <= 0) {
-            this.worldContainer.position.set(this.baseOffsetX, this.baseOffsetY);
-          }
-        }
-
-        // While aiming a move, keep redrawing the overlay each frame so the eased target glides to
-        // rest even when the mouse is idle (the selection token already holds ~45fps here).
-        if (this.clientState.getSelectedAbility()?.kind === "move" && this.clientState.selectedEntityId) {
-          this.renderOverlay(this.lastMouseWorld);
-        }
-
-        if (!this.entities.isAnimating()) return;
-        const tickState = this.clientState.getState();
-        if (!tickState) return;
-        this.entities.tick(
-          tickState,
-          this.clientState.selectedEntityId,
-          dt
-        );
-        this.entities.depthSort();
-      });
-
+    if (!this.listenersBound) {
+      this.listenersBound = true;
       window.addEventListener("resize", () => {
         if (!this.outerContainer.visible) return;
         this.layout();
         this.renderOverlay(this.lastMouseWorld);
       });
     }
+
+    this.paintAndAnimate();
   }
 
   exit() {
@@ -191,17 +153,70 @@ export class GameRenderer {
       this.entities.destroy();
       this.entities = null;
     }
-    this.unregisterPacer?.();
-    this.unregisterPacer = null;
+    // The animation updater sees visible === false next frame and unregisters itself.
+    // Repaint once so the now-hidden combat scene actually clears from the canvas.
+    this.driver.invalidate();
   }
 
-  /** FPS this renderer needs this instant — pulled by the pacer every frame. 60 while anything
-   *  animates, 45 to keep the move-aim preview easing smooth while a unit is selected, else 0. */
-  private desiredFps(): number {
-    if (!this.outerContainer.visible || !this.entities) return 0;
-    if (this.entities.isAnimating() || this.shakeTimer > 0 || this.screenFlash.active) return 60;
-    if (this.clientState.selectedEntityId) return 45;
-    return 0;
+  /** Advance one frame of combat animation. Registered with the FrameDriver while there is work to
+   *  do; returns whether it still needs frames (self-unregisters when the board is idle). */
+  private update = (dtSeconds: number): boolean => {
+    if (!this.outerContainer.visible || !this.entities) return false;
+    const dt = dtSeconds * this.playbackSpeed;
+
+    if (this.screenFlash.active) this.screenFlash.tick(dt);
+
+    if (this.shakeTimer > 0) {
+      this.shakeTimer -= dt;
+      const progress = Math.max(0, this.shakeTimer / 0.3);
+      const magnitude = this.shakeIntensity * progress * 6;
+      const shakeX = (Math.random() - 0.5) * 2 * magnitude;
+      const shakeY = (Math.random() - 0.5) * 2 * magnitude;
+      this.worldContainer.position.set(this.baseOffsetX + shakeX, this.baseOffsetY + shakeY);
+      if (this.shakeTimer <= 0) {
+        this.worldContainer.position.set(this.baseOffsetX, this.baseOffsetY);
+      }
+    }
+
+    // While aiming a move, keep redrawing the overlay each frame so the eased target glides to rest
+    // even when the mouse is idle.
+    if (this.clientState.getSelectedAbility()?.kind === "move" && this.clientState.selectedEntityId) {
+      this.renderOverlay(this.lastMouseWorld);
+    }
+
+    if (this.entities.isAnimating()) {
+      const tickState = this.clientState.getState();
+      if (tickState) {
+        this.entities.tick(tickState, this.clientState.selectedEntityId, dt);
+        this.entities.depthSort();
+      }
+    }
+
+    return this.hasFrameWork();
+  };
+
+  /** Paint the current frame, and start the animation loop if anything still needs to move. */
+  private paintAndAnimate(): void {
+    this.driver.invalidate();
+    if (this.hasFrameWork()) this.driver.requestFrames(this.update);
+  }
+
+  /** Start the animation loop after imperatively kicking off an effect (flash, floating text, a
+   *  locally-previewed swing) that isn't driven by a state-change render. Self-stops when done. */
+  private wake(): void {
+    this.driver.requestFrames(this.update);
+  }
+
+  /** Whether the combat scene has ongoing per-frame work: an animation, a lingering shake/flash, or
+   *  a selected unit whose move-aim preview keeps easing. */
+  private hasFrameWork(): boolean {
+    if (!this.outerContainer.visible || !this.entities) return false;
+    return (
+      this.entities.isAnimating() ||
+      this.shakeTimer > 0 ||
+      this.screenFlash.active ||
+      this.clientState.selectedEntityId !== null
+    );
   }
 
   getCombatRect(): { x: number; y: number; w: number; h: number } {
@@ -252,6 +267,8 @@ export class GameRenderer {
     drawZones(this.zonesGfx, renderState.zones);
     this.renderOverlay(this.lastMouseWorld);
     this.debugLayer.visible = this.clientState.showDebugWalls;
+    // sync() drains queued events, which may have started animations — kick the loop if so.
+    this.paintAndAnimate();
   }
 
   renderOverlay(mouseWorld: Vec2) {
@@ -260,6 +277,7 @@ export class GameRenderer {
     this.moveGfx.clear();
     this.costLabel.visible = false;
     if (this.entities) this.entities.clearDamagePreview();
+    this.driver.invalidate();
     const state = this.clientState.getState();
     if (!state) return;
 
