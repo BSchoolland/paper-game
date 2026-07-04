@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { createGrid, setBlocked, isBlocked, isPositionWalkable, worldToCell } from "../map/collision-grid.js";
+import { Rng } from "../core/rng.js";
 
 describe("collision-grid", () => {
   it("new grid has no walls", () => {
@@ -34,8 +35,8 @@ describe("collision-grid", () => {
   });
 
   it("isPositionWalkable (summed-area fast path) matches the per-cell reference on random grids", () => {
-    let rngState = 7;
-    const rand = () => (rngState = (rngState * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const rng = Rng.seeded(7, 77);
+    const rand = () => rng.next();
     // Reference: the original rectangle scan over isBlocked.
     const reference = (grid: ReturnType<typeof createGrid>, pos: { x: number; y: number }, r: number) => {
       const minCx = Math.floor((pos.x - r) / grid.cellSize);

@@ -1561,17 +1561,16 @@ describe("loot & codex integration", () => {
     host.send({ type: "unequip", equippedIndex: hostSwordIdx });
     await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
     host.mark();
+    guest.mark();
     host.send({ type: "equip", bagId: deposited.bagId });
     const after = await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
     expect(after.inventory.equipped.some((i) => i.id === "short-sword")).toBe(true);
     // The guest's specific deposit is gone from the bag; the host's own deposit remains.
-    // (Positive match on the host's deposit so buffered empty-bag lobby states can't satisfy it.)
+    // (fromNow: post-mark roomStates only — buffered empty-bag lobby states can't satisfy this.)
     const drained = await guest.waitFor(
       (m): m is Extract<ServerMessage, { type: "roomState" }> =>
-        m.type === "roomState" &&
-        m.room.partyBag.some((e) => e.item.id === "short-sword") &&
-        !m.room.partyBag.some((e) => e.bagId === deposited.bagId),
-      { timeoutMs: 8000 },
+        m.type === "roomState" && !m.room.partyBag.some((e) => e.bagId === deposited.bagId),
+      { fromNow: true, timeoutMs: 8000 },
     );
     expect(drained.room.partyBag.some((e) => e.item.id === "short-sword")).toBe(true);
     host.close();

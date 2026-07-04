@@ -1,8 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import type { HexCoord, HexIconType, RoomCode, SeatId, ServerMessage } from "shared";
+import type { HexCoord, HexIconType, RoomCode, ServerMessage } from "shared";
 import { hexKey } from "shared";
-import type { Room } from "../room.js";
-import type { RoomIO } from "../room-machine.js";
 
 // db.ts opens its Database at module load from GAME_DB_PATH; set env BEFORE importing (db.test.ts
 // precedent). :memory: keeps the file hermetic; tests use disjoint dimension-id ranges.
@@ -14,24 +12,8 @@ const { createOpenSeats } = await import("../room.js");
 const machine = await import("../room-machine.js");
 const gateways = await import("../gateways.js");
 const { emitRunEvent } = await import("../run-events.js");
-
-interface SentRecord {
-  seatId: SeatId;
-  msg: ServerMessage;
-}
-function recordingIO() {
-  const sends: SentRecord[] = [];
-  const broadcasts: ServerMessage[] = [];
-  const io: RoomIO = {
-    send(seat, msg) {
-      sends.push({ seatId: seat.seatId, msg });
-    },
-    broadcast(_room, msg) {
-      broadcasts.push(msg);
-    },
-  };
-  return { io, sends, broadcasts };
-}
+const fx = await import("./machine-fixtures.js");
+const { recordingIO, errorCodes } = fx;
 
 function mkDim(
   id: number,
@@ -69,62 +51,25 @@ function buildRoom(opts: { sourceDim: number; sourceTier: number | null; humans?
   db.markRunCleared(runId, opts.sourceDim, GATE);
 
   const seats = createOpenSeats(capacity);
-  const accountIds: string[] = [];
-  for (let i = 0; i < humans; i++) {
-    const seat = seats[i]!;
-    const clientId = `travel-${s}-${i}`;
-    const account = accounts.resolveGuestAccount(clientId);
-    seat.state = "human-connected";
-    seat.clientId = clientId;
-    seat.accountId = account.id;
-    seat.socket = {} as never;
-    accountIds.push(account.id);
-    db.upsertRunSeat(runId, i, { clientId, displayName: `P${i}`, controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: account.id });
-  }
-  for (let i = humans; i < capacity; i++) seats[i]!.state = "bot";
+  const accountIds = fx.humanizeSeats(seats, { runId, humans, clientPrefix: `travel-${s}` });
 
-  const meta = db.getDimensionMeta(opts.sourceDim)!;
-  const room: Room = {
+  const room = fx.roomShell({
     code: `TRV${s}` as RoomCode,
-    hostSeatId: seats[0]!.seatId,
-    phase: "overworld",
-    building: false,
-    generation: 0,
-    combat: null,
+    runId,
+    seats,
+    capacity,
     dimensionId: opts.sourceDim,
-    startDimensionId: opts.sourceDim,
-    dimensionName: meta.name,
+    dimensionName: db.getDimensionMeta(opts.sourceDim)!.name,
     dimensionTier: opts.sourceTier,
     gateways: gateways.loadGatewaysForDimension(opts.sourceDim),
-    runId,
     hexMap: {
       playerPos: GATE, // standing ON the gateway hex
       hexes: { [ORIGIN_KEY]: "explored", [GATE_KEY]: "explored" },
       icons: { [ORIGIN_KEY]: "town", [GATE_KEY]: "gateway" as HexIconType },
     },
     visitedThisRun: new Set([ORIGIN_KEY, GATE_KEY]),
-    runClearedCount: 0,
-    pendingHex: null,
-    rested: false,
-    capacity,
-    seats,
-    listed: false,
-    rematchCode: null,
-    session: null,
-    defendRound: null,
-    vote: null,
-    partyBag: [],
-    contract: null,
-    outcome: null,
-    chatLog: [],
-    reapTimer: null,
-    lastActivityMs: Date.now(),
-  };
+  });
   return { room, runId, accountIds };
-}
-
-function errorCodes(sends: SentRecord[]): string[] {
-  return sends.filter((s) => s.msg.type === "error").map((s) => (s.msg as Extract<ServerMessage, { type: "error" }>).code);
 }
 
 describe("proposeTravel guards", () => {

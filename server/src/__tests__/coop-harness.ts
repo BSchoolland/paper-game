@@ -59,10 +59,18 @@ export interface MockClient {
   /** Raw server envelopes received, in order. */
   readonly envelopes: ServerEnvelope[];
   send(msg: ClientMessage): void;
-  /** Resolve with the next (or already-buffered) message matching `pred`. */
+  /**
+   * Resolve with a message matching `pred`.
+   * - default: scan the WHOLE buffered inbox first, then wait. Beware: a predicate that also
+   *   matches an old state (e.g. "the bag no longer holds X" — true before X ever existed) will
+   *   resolve against stale history; either match the POSITIVE post-state or use `fromNow`.
+   * - `fromNow: true`: only consider messages after the `mark()` cursor (and consume the match,
+   *   exactly like `nextOf(type, {fromNow: true})`).
+   * - `consumeBuffered: false`: ignore the buffer entirely; only a future message can match.
+   */
   waitFor<T extends ServerMessage>(
     pred: (m: ServerMessage) => m is T,
-    opts?: { timeoutMs?: number; consumeBuffered?: boolean },
+    opts?: { timeoutMs?: number; consumeBuffered?: boolean; fromNow?: boolean },
   ): Promise<T>;
   /** Convenience: wait for the next message of a given `type`. */
   nextOf<K extends ServerMessageType>(
@@ -75,7 +83,7 @@ export interface MockClient {
   latest<K extends ServerMessageType>(type: K): Extract<ServerMessage, { type: K }> | undefined;
   /** Drop all buffered messages and reset the consumption cursor to "now". */
   clear(): void;
-  /** Mark the inbox cursor so `nextOf(type, {fromNow:true})` only sees messages after this point. */
+  /** Mark the inbox cursor so `{fromNow: true}` waits only see messages after this point. */
   mark(): void;
   close(): void;
   readonly closed: Promise<void>;
@@ -88,9 +96,15 @@ export function connectClient(server: HarnessServer, clientId?: ClientId): Promi
   const ws = new WebSocket(server.url);
   const inbox: ServerMessage[] = [];
   const envelopes: ServerEnvelope[] = [];
-  type Waiter = { pred: (m: ServerMessage) => boolean; resolve: (m: ServerMessage) => void; reject: (e: Error) => void };
+  type Waiter = {
+    pred: (m: ServerMessage) => boolean;
+    resolve: (m: ServerMessage) => void;
+    reject: (e: Error) => void;
+    /** Cursor-consuming waiter: on match, advance the cursor past the matched message. */
+    fromNow: boolean;
+  };
   const waiters: Waiter[] = [];
-  let cursor = 0; // index into inbox; nextOf(fromNow) advances this
+  let cursor = 0; // index into inbox; {fromNow: true} waits consume up to here
 
   let closeResolve!: () => void;
   const closed = new Promise<void>((res) => (closeResolve = res));
@@ -101,9 +115,12 @@ export function connectClient(server: HarnessServer, clientId?: ClientId): Promi
     envelopes.push(env);
     const msg = env.msg;
     inbox.push(msg);
+    const idx = inbox.length - 1;
     for (let i = waiters.length - 1; i >= 0; i--) {
       if (waiters[i]!.pred(msg)) {
         const w = waiters.splice(i, 1)[0]!;
+        // Consume the live match too — without this, the next fromNow wait re-reads it.
+        if (w.fromNow) cursor = Math.max(cursor, idx + 1);
         w.resolve(msg);
       }
     }
@@ -119,39 +136,42 @@ export function connectClient(server: HarnessServer, clientId?: ClientId): Promi
       ws.send(JSON.stringify(msg));
     },
     waitFor(pred, opts) {
+      const fromNow = opts?.fromNow ?? false;
       const consumeBuffered = opts?.consumeBuffered ?? true;
-      if (consumeBuffered) {
+      if (fromNow) {
+        for (let i = cursor; i < inbox.length; i++) {
+          if (pred(inbox[i]!)) {
+            cursor = i + 1;
+            return Promise.resolve(inbox[i] as never);
+          }
+        }
+        cursor = inbox.length; // a miss consumes the scanned history: only future messages match
+      } else if (consumeBuffered) {
         const found = inbox.find((m) => pred(m));
-        if (found) return Promise.resolve(found);
+        if (found) return Promise.resolve(found as never);
       }
       const timeoutMs = opts?.timeoutMs ?? 4000;
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           const idx = waiters.findIndex((w) => w.resolve === wrappedResolve);
           if (idx >= 0) waiters.splice(idx, 1);
-          reject(new Error(`waitFor timed out after ${timeoutMs}ms (client ${id})`));
+          const tail = inbox.slice(-8).map((m) => m.type).join(", ");
+          reject(new Error(
+            `waitFor timed out after ${timeoutMs}ms (client ${id}); ` +
+            `inbox has ${inbox.length} message(s), last: [${tail}]`,
+          ));
         }, timeoutMs);
         const wrappedResolve = (m: ServerMessage) => {
           clearTimeout(timer);
           resolve(m as never);
         };
-        waiters.push({ pred: pred as (m: ServerMessage) => boolean, resolve: wrappedResolve, reject });
+        waiters.push({ pred: pred as (m: ServerMessage) => boolean, resolve: wrappedResolve, reject, fromNow });
       });
     },
     nextOf(type, opts) {
-      const fromNow = opts?.fromNow ?? false;
-      if (fromNow) {
-        for (let i = cursor; i < inbox.length; i++) {
-          if (inbox[i]!.type === type) {
-            cursor = i + 1;
-            return Promise.resolve(inbox[i] as never);
-          }
-        }
-        cursor = inbox.length;
-      }
       return client.waitFor(
         (m): m is Extract<ServerMessage, { type: typeof type }> => m.type === type,
-        { timeoutMs: opts?.timeoutMs, consumeBuffered: !fromNow },
+        opts,
       ) as never;
     },
     has(type) {

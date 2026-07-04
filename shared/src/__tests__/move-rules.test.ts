@@ -4,6 +4,7 @@ import { resolveAction } from "../combat/turn-resolver.js";
 import { getAbilityCost } from "../combat/ability-cost.js";
 import { createGrid, setBlocked, isPositionWalkable } from "../map/collision-grid.js";
 import { makeEntity, makeState } from "./test-helpers.js";
+import { Rng } from "../core/rng.js";
 import type { Entity, GridState, MoveAbility } from "../core/types.js";
 
 function entitiesOf(...list: Entity[]): Map<string, Entity> {
@@ -105,8 +106,8 @@ describe("planMove", () => {
 // with A* — boundary clicks were denied. Both now read one flood; this pins that.
 describe("planMove ⊆ resolver acceptance", () => {
   test("random walls, random clicks: every planned move resolves, at the planned price", () => {
-    let rngState = 424242;
-    const rand = () => (rngState = (rngState * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    const rng = Rng.seeded(42, 4242);
+    const rand = () => rng.next();
 
     let planned = 0;
     for (let round = 0; round < 60; round++) {

@@ -58,6 +58,13 @@ export class EncounterSession {
     });
   }
 
+  /** Construct a session around a prebuilt GameState — the seam that lets tests drive the real
+   *  applyAction / AI machinery without a dimension in the DB. Not a gameplay construction path;
+   *  live encounters go through `createEncounter` (ruling R25). */
+  static fromState(state: GameState, opts?: { archetype?: ArchetypeId; effectiveBudget?: number }): EncounterSession {
+    return new EncounterSession(state, opts?.archetype ?? "warband", opts?.effectiveBudget ?? 0);
+  }
+
   /**
    * Co-op encounter: one red hero per seat (from each seat's loadout snapshot) vs the generated
    * blue enemies. This is the sole encounter construction path (ruling R25).

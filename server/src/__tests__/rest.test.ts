@@ -1,8 +1,6 @@
 import { describe, it, expect } from "bun:test";
-import type { HexCoord, HexIconType, RoomCode, SeatId, ServerMessage } from "shared";
+import type { HexCoord, HexIconType, RoomCode, ServerMessage } from "shared";
 import { hexKey, REST_BARRIER_HP } from "shared";
-import type { Room } from "../room.js";
-import type { RoomIO } from "../room-machine.js";
 
 // db.ts opens its Database at module load from GAME_DB_PATH, so set env BEFORE importing anything
 // that pulls it in (db.test.ts precedent). :memory: keeps the file hermetic; dimension 0 is seeded
@@ -16,26 +14,10 @@ const machine = await import("../room-machine.js");
 const recorders = await import("../run-recorders.js");
 const { emitRunEvent } = await import("../run-events.js");
 const { seedDimension0 } = await import("../seed.js");
+const fx = await import("./machine-fixtures.js");
+const { recordingIO } = fx;
 
 seedDimension0(); // dimension 0 with real enemy templates, for the beginCombatEntry build tests
-
-interface SentRecord {
-  seatId: SeatId;
-  msg: ServerMessage;
-}
-function recordingIO() {
-  const sends: SentRecord[] = [];
-  const broadcasts: ServerMessage[] = [];
-  const io: RoomIO = {
-    send(seat, msg) {
-      sends.push({ seatId: seat.seatId, msg });
-    },
-    broadcast(_room, msg) {
-      broadcasts.push(msg);
-    },
-  };
-  return { io, sends, broadcasts };
-}
 
 const ORIGIN_KEY = hexKey({ q: 0, r: 0 });
 let seq = 0;
@@ -69,57 +51,24 @@ function buildRoom(opts?: {
   db.markRunCleared(runId, dimensionId, { q: 0, r: 0 });
 
   const seats = createOpenSeats(capacity);
-  const accountIds: string[] = [];
-  for (let i = 0; i < humans; i++) {
-    const seat = seats[i]!;
-    const clientId = `rest-${s}-${i}`;
-    const account = accounts.resolveGuestAccount(clientId);
-    seat.state = "human-connected";
-    seat.clientId = clientId;
-    seat.accountId = account.id;
-    seat.socket = {} as never; // recording io never touches it; non-null so per-seat sends happen
-    accountIds.push(account.id);
-    db.upsertRunSeat(runId, i, { clientId, displayName: `P${i}`, controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: account.id });
-  }
-  for (let i = humans; i < capacity; i++) seats[i]!.state = "bot";
+  const accountIds = fx.humanizeSeats(seats, { runId, humans, clientPrefix: `rest-${s}` });
 
-  const meta = db.getDimensionMeta(dimensionId);
-  const room: Room = {
+  const room = fx.roomShell({
     code: `REST${s}` as RoomCode,
-    hostSeatId: seats[0]!.seatId,
-    phase: "overworld",
-    building: false,
-    generation: 0,
-    combat: null,
+    runId,
+    seats,
+    capacity,
     dimensionId,
     startDimensionId,
-    dimensionName: meta?.name ?? "Rest Dim",
+    dimensionName: db.getDimensionMeta(dimensionId)?.name ?? "Rest Dim",
     dimensionTier: opts?.dimensionTier ?? 0,
-    gateways: {},
-    runId,
     hexMap: {
       playerPos: opts?.playerPos ?? { q: 0, r: 0 },
       hexes: { [ORIGIN_KEY]: "explored" },
       icons: { [ORIGIN_KEY]: "town", ...(opts?.icons ?? {}) },
     },
-    visitedThisRun: new Set([ORIGIN_KEY]),
-    runClearedCount: 0,
-    pendingHex: null,
     rested: opts?.rested ?? false,
-    capacity,
-    seats,
-    listed: false,
-    rematchCode: null,
-    session: null,
-    defendRound: null,
-    vote: null,
-    partyBag: [],
-    contract: null,
-    outcome: null,
-    chatLog: [],
-    reapTimer: null,
-    lastActivityMs: Date.now(),
-  };
+  });
   return { room, runId, accountIds };
 }
 

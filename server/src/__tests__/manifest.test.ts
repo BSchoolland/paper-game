@@ -1,8 +1,4 @@
 import { describe, it, expect } from "bun:test";
-import type { HexCoord, HexIconType, RoomCode, SeatId, ServerMessage, ItemDefinition, ItemRarity } from "shared";
-import { hexKey } from "shared";
-import type { Room } from "../room.js";
-import type { RoomIO } from "../room-machine.js";
 
 // Machine/db-level: the index.ts WS handlers (chooseManifest/chooseDimension guard ladder) are
 // exercised end-to-end in coop-integration.test.ts; this file covers the importable machine pieces
@@ -10,17 +6,10 @@ import type { RoomIO } from "../room-machine.js";
 process.env.GAME_DB_PATH = ":memory:";
 process.env.GAME_SKIP_SEED = "1";
 const db = await import("../db.js");
-const accounts = await import("../accounts.js");
-const room = await import("../room.js");
-const { createOpenSeats, seatContribution, manifestItemsFor } = room;
+const { seatContribution, manifestItemsFor } = await import("../room.js");
 const machine = await import("../room-machine.js");
-
-function mkWeapon(id: string, dimensionId: number, rarity: ItemRarity = "common"): ItemDefinition {
-  return {
-    type: "weapon", id, name: id, description: "", rarity, sprite: `${id}.webp`,
-    dimensionId, slotCost: { hand: 1 }, animSet: "sword", abilities: [],
-  };
-}
+const fx = await import("./machine-fixtures.js");
+const { mkWeapon, noopIO } = fx;
 
 function mkReadyDim(id: number, tier: number | null): void {
   db.saveDimension(id, `Dim ${id}`, [], `bg-${id}.png`);
@@ -30,43 +19,10 @@ function mkReadyDim(id: number, tier: number | null): void {
   if (tier !== null) db.db.prepare("UPDATE dimensions SET tier = ? WHERE id = ?").run(tier, id);
 }
 
-const ORIGIN: HexCoord = { q: 0, r: 0 };
-const ORIGIN_KEY = hexKey(ORIGIN);
-let seq = 0;
-
-function noopIO(): RoomIO { return { send() {}, broadcast() {} }; }
-
 function buildRoom(opts: { dim: number; tier: number | null }) {
-  const s = ++seq;
-  const clientId = `mf-${s}-0`;
-  const account = accounts.resolveGuestAccount(clientId);
-  const runId = db.startNewRun(opts.dim, clientId, 2);
-  db.setRunPhase(runId, "overworld");
-  db.markRunCleared(runId, opts.dim, ORIGIN);
-
-  const seats = createOpenSeats(2);
-  const seat = seats[0]!;
-  seat.state = "human-connected";
-  seat.clientId = clientId;
-  seat.accountId = account.id;
-  seat.presetId = "default";
-  seats[1]!.state = "bot";
-  db.upsertRunSeat(runId, 0, { clientId, displayName: "P0", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: account.id });
-
-  const meta = db.getDimensionMeta(opts.dim)!;
-  const r: Room = {
-    code: `MF${s}` as RoomCode,
-    hostSeatId: seat.seatId,
-    phase: "overworld", building: false, generation: 0, combat: null,
-    dimensionId: opts.dim, startDimensionId: opts.dim, dimensionName: meta.name, dimensionTier: opts.tier,
-    gateways: {}, runId,
-    hexMap: { playerPos: ORIGIN, hexes: { [ORIGIN_KEY]: "explored" }, icons: { [ORIGIN_KEY]: "town" as HexIconType } },
-    visitedThisRun: new Set([ORIGIN_KEY]), runClearedCount: 0, pendingHex: null, rested: false,
-    capacity: 2, seats, listed: false, rematchCode: null,
-    session: null, defendRound: null, vote: null, partyBag: [],
-    contract: null, outcome: null, chatLog: [], reapTimer: null, lastActivityMs: Date.now(),
-  };
-  return { room: r, seat, runId, accountId: account.id };
+  const built = fx.buildTestRoom({ dim: opts.dim, tier: opts.tier, humans: 1, capacity: 2, prefix: "mf" });
+  built.seat.presetId = "default";
+  return { room: built.room, seat: built.seat, runId: built.runId, accountId: built.accountIds[0]! };
 }
 
 describe("seatContribution + manifestItemsFor (§4.6)", () => {
