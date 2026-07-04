@@ -31,4 +31,10 @@
   <HomeScreen />
 {/if}
 
+{#if import.meta.env.DEV}
+  {#await import("./dev/DevLayer.svelte") then { default: DevLayer }}
+    <DevLayer />
+  {/await}
+{/if}
+
 <Toasts />

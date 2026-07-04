@@ -5,13 +5,13 @@
  *   bun hero-arena/src/t2/replay-presets-3v3.ts <redPreset> <bluePreset> <seed> [outName]
  *   bun hero-arena/src/t2/replay-presets-3v3.ts smart seer 42 replay-smart-vs-seer
  *
- *   Open:  http://localhost:5173/?mode=replay&log=/<outName>.json
+ *   Open:  bun dev → backtick (dev hub) → <outName>.json
  */
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { resolveAction, serializeGameState } from "../../../shared/src/index.js";
 import type { EntityId, GameEvent, PlayerAction, TeamId, GameState } from "../../../shared/src/index.js";
-import { LEGACY_PUBLIC_DIR } from "../../../shared/src/paths.js";
+import { REPLAYS_DIR } from "../../../shared/src/paths.js";
 import type { HeroController } from "../types.js";
 import type { ReplayFrame } from "../match.js";
 import type { ArenaConfig } from "./types.js";
@@ -122,8 +122,8 @@ const outcome = state.winner ?? (Math.abs(hpR - hpB) < 1e-6 ? "draw" : (hpR > hp
 console.log(`\nResult: ${outcome === "red" ? `${redPreset} (red) WINS` : outcome === "blue" ? `${bluePreset} (blue) WINS` : "DRAW"}  ` +
             `(${state.turnNumber} turns, HP%: red ${(hpR*100).toFixed(0)} / blue ${(hpB*100).toFixed(0)})`);
 
-const outPath = join(LEGACY_PUBLIC_DIR, `${outName}.json`);
+const outPath = join(REPLAYS_DIR, `${outName}.json`);
 mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, JSON.stringify({ seed, dimensions: [0], frames }));
 console.log(`\nWrote ${frames.length}-frame replay → ${outPath}`);
-console.log(`Watch:  http://localhost:5173/?mode=replay&log=/${outName}.json`);
+console.log(`Watch:  bun dev → backtick (dev hub) → ${outName}.json`);

@@ -10,9 +10,9 @@
  *
  * Prints a turn-by-turn log to stdout (positions, moves, attacks, and any invariant violations —
  * no-op actions or attacks that hit nothing, the tell-tales of "confused" planning) and writes a
- * replay log to `client-legacy/public/replay.json` that the legacy client can step through with
- * `?mode=replay` (`.` = next frame, Enter = next turn, `[` / `]` = playback speed). The replay
- * carries the dimension ids so the client knows which sprite sheets to load.
+ * replay log to `replays/replay.json` that the web dev hub's replay viewer can step through
+ * (backtick opens the hub). The replay carries the dimension ids so the client knows which
+ * sprite sheets to load.
  */
 import {
   buildScenarioMap, makeEntity, createGameState, AiController, resolveAction,
@@ -21,7 +21,7 @@ import {
 import type { Entity, GameEvent, PlayerAction, TeamId, UnitTemplate, Vec2 } from "../shared/src/index.js";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { LEGACY_PUBLIC_DIR } from "../shared/src/paths.js";
+import { REPLAYS_DIR } from "../shared/src/paths.js";
 
 const redDim = Number(process.argv[2] ?? 1);
 const blueDim = Number(process.argv[3] ?? 3);
@@ -141,13 +141,13 @@ for (let turn = 0; turn < maxTurns && !state.winner; turn++) {
 
 log.push("", state.winner ? `Winner: ${state.winner} (${state.winner === "red" ? `dim${redDim}` : `dim${blueDim}`})` : `Stalemate after ${maxTurns} turns`, `Warnings: ${warnings}`, `Replay frames: ${frames.length}`);
 
-const replayPath = join(LEGACY_PUBLIC_DIR, "replay.json");
+const replayPath = join(REPLAYS_DIR, "replay.json");
 mkdirSync(dirname(replayPath), { recursive: true });
 writeFileSync(replayPath, JSON.stringify({ seed, dimensions, redDim, blueDim, frames }));
 
 console.log(log.join("\n"));
 console.log(`\nWrote ${frames.length}-frame replay (dimensions ${dimensions.join(", ")}) → ${replayPath}`);
-console.log(`View it:  http://localhost:5174/?mode=replay`);
+console.log(`View it:  bun dev → backtick (dev hub) → replay.json`);
 if (warnings > 0) {
   console.error(`\n${warnings} invariant warning(s) — see "!!" lines above.`);
   process.exit(1);

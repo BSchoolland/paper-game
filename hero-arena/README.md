@@ -82,8 +82,8 @@ bun hero-arena/src/harness.ts agent-01 agent-03 7 200  # seed 7, 200-turn cap
 ```
 
 `harness.ts` prints a turn-by-turn log (every hero action; allies summarised; rule violations and
-over-budget turns flagged), the winner, and timing. It also writes `client/public/replay.json` —
-open **`http://localhost:5173/?mode=replay`** to scrub the match visually (`.` step a frame,
+over-budget turns flagged), the winner, and timing. Replay logs land in `replays/` —
+run `bun dev` and press backtick to open the dev hub's replay viewer (`.` step a frame,
 `Enter` play a turn, `[` / `]` change speed).
 
 Run the whole tournament:

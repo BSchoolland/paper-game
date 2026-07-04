@@ -2,12 +2,10 @@
   "name": "paper-game",
   "private": true,
   "type": "module",
-  "workspaces": ["shared", "client-legacy", "server", "web"],
+  "workspaces": ["shared", "server", "web"],
   "scripts": {
     "predev": "fuser -k 3001/tcp 5173/tcp 5174/tcp 2>/dev/null; true",
     "dev": "bun --filter web --filter server dev",
-    "predev:legacy": "fuser -k 3001/tcp 5173/tcp 5174/tcp 2>/dev/null; true",
-    "dev:legacy": "bun --filter client-legacy --filter server dev",
     "sim-battle": "bun scripts/sim-battle.ts",
     "test": "bun test",
     "typecheck": "bunx tsc && bun --filter web check",

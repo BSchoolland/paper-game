@@ -4,13 +4,13 @@
  *
  *   bun hero-arena/src/t2/replay-duel-mob.ts <agent> <seed> [outName=replay-duel-mob]
  *
- *   Open:  http://localhost:5173/?mode=replay&log=/<outName>.json
+ *   Open:  bun dev → backtick (dev hub) → <outName>.json
  */
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { resolveAction, serializeGameState } from "../../../shared/src/index.js";
 import type { EntityId, GameEvent, PlayerAction, TeamId, GameState } from "../../../shared/src/index.js";
-import { LEGACY_PUBLIC_DIR } from "../../../shared/src/paths.js";
+import { REPLAYS_DIR } from "../../../shared/src/paths.js";
 import { strategyForEntity } from "../../../shared/src/ai/strategy.js";
 import type { ReplayFrame } from "../match.js";
 import type { ArenaConfig } from "./types.js";
@@ -134,11 +134,11 @@ for (const team of ["red", "blue"] as TeamId[]) {
   }
 }
 
-const outPath = join(LEGACY_PUBLIC_DIR, `${outName}.json`);
+const outPath = join(REPLAYS_DIR, `${outName}.json`);
 mkdirSync(dirname(outPath), { recursive: true });
 writeFileSync(outPath, JSON.stringify({ seed, dimensions: [0], frames }));
 console.log(`\nWrote ${frames.length}-frame replay → ${outPath}`);
-console.log(`Watch:  http://localhost:5173/?mode=replay&log=/${outName}.json`);
+console.log(`Watch:  bun dev → backtick (dev hub) → ${outName}.json`);
 
 function closestEnemyDist(e: { teamId: TeamId; position: { x: number; y: number } }): number {
   let best = Infinity;

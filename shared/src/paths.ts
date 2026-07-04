@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 // regardless of its own directory depth.
 //
 // Node/Bun only — these are filesystem paths. Deliberately NOT re-exported from shared's
-// barrel (src/index.ts) so browser bundles (web, client-legacy) can't pull node:path in.
+// barrel (src/index.ts) so browser bundles (web) can't pull node:path in.
 const REPO_ROOT = resolve(import.meta.dir, "..", "..");
 
 /** Shared static asset store: sprites, encounter maps, collision masks, item art. Served by the
@@ -16,9 +16,9 @@ export const ASSETS_DIR = resolve(REPO_ROOT, "public");
  *  art agent. Separate from ASSETS_DIR because these are generated per-dimension, not static. */
 export const SERVER_SPRITES_DIR = resolve(REPO_ROOT, "server", "sprites");
 
-/** The archived Pixi client's asset dir. Holds legacy combat replays that only its ?mode=replay
- *  viewer consumes (written by sim-battle and the hero-arena replay presets). */
-export const LEGACY_PUBLIC_DIR = resolve(REPO_ROOT, "client-legacy", "public");
+/** Combat replay logs (written by sim-battle and the hero-arena replay presets). The web dev
+ *  server lists and serves this dir for the dev-hub replay viewer; gitignored, regenerable. */
+export const REPLAYS_DIR = resolve(REPO_ROOT, "replays");
 
 /** Built web frontend (`vite build` output). In production the server serves this as the single
  *  origin for static + /api + /ws; empty in dev, where Vite serves the frontend on its own port. */
