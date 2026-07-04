@@ -8,6 +8,7 @@ bun.lock
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+*.sqlite.bak-*
 ScriptableByteArray*
 scripts/__pycache__/
 # Local scratch: agent worktrees (embedded git repos) and UI prototypes — not part of the app.
