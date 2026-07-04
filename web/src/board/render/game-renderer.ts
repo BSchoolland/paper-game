@@ -363,7 +363,7 @@ export class GameRenderer {
       const budget = getAffordableMoveDistance(entity);
       // Real (snapped) destination a click commits to; ease the displayed target toward it so the
       // line/marker glide rather than snapping in 12px steps.
-      const snapped = reachableArea(entity, state.grid, state.entities, budget).flood.pathTo(mouseWorld, budget);
+      const snapped = reachableArea(entity, state.grid, state.entities, budget).pathTo(mouseWorld, budget);
       this.movePreviewTarget = snapped ? easeToward(this.movePreviewTarget, snapped) : null;
       drawMovePreview(this.moveGfx, entity, this.movePreviewTarget, state);
       // Bill the cost for the real path distance to where the click lands (not the eased point).

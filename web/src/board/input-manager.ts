@@ -65,7 +65,7 @@ export class InputManager {
           // server's path-based rule and the preview's deformed area), so dense maps don't require
           // pixel-perfect clicks. Ignore the click only when nothing is reachable near it.
           const budget = getAffordableMoveDistance(entity);
-          const dest = reachableArea(entity, state.grid, state.entities, budget).flood.pathTo(pos, budget);
+          const dest = reachableArea(entity, state.grid, state.entities, budget).pathTo(pos, budget);
           if (!dest) return;
           this.clientState.submitAction({
             type: "ability",
