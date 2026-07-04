@@ -47,7 +47,8 @@ function easeOutQuad(t: number): number {
 const DEATH_DURATION = 0.5;
 const STATUS_CHIP_SIZE = 10;
 const STATUS_CHIP_GAP = 3;
-const STATUS_ROW_Y = HP_BAR_Y + HP_BAR_H + 4;
+// Chips sit ABOVE the hp bar (their duration ticks hang below them, in the gap).
+const STATUS_ROW_Y = HP_BAR_Y - STATUS_CHIP_SIZE - 6;
 const CHIP_GLYPH = 0xfaf3e3;
 const COMBAT_STATES: AnimState[] = ["idle", "attack", "hit", "move"];
 
