@@ -158,7 +158,11 @@ a { color: var(--slate); }
 .pip { width: 10px; height: 10px; border-radius: 50%; border: 1px solid var(--ink-55); background: transparent; }
 .pip.lit { background: radial-gradient(circle at 40% 35%, #ffe9a8, #d9a943 65%, #9c7526); border-color: #8a6c37; box-shadow: 0 0 8px 1px rgba(233, 190, 94, 0.55); }
 .candle { width: 9px; height: 9px; border-radius: 50%; display: inline-block; border: 1px solid var(--ink-55); vertical-align: 1px; }
-.candle.lit { background: radial-gradient(circle at 40% 35%, #ffefb5, #dfae44 60%, #9c7526); border-color: #8a6c37; box-shadow: 0 0 7px 1px rgba(233, 190, 94, 0.6); animation: flicker 3.2s ease-in-out infinite; }
+/* steps(): the glow jumps between a few states instead of interpolating every frame. Each visual
+   change forces a full-window recomposite (~10ms GPU on an iGPU), so a smooth infinite animation
+   costs a third of the GPU at 60fps while stepped flicker is ~30x cheaper — and jumpier reads
+   more like candlelight anyway. */
+.candle.lit { background: radial-gradient(circle at 40% 35%, #ffefb5, #dfae44 60%, #9c7526); border-color: #8a6c37; box-shadow: 0 0 7px 1px rgba(233, 190, 94, 0.6); animation: flicker 3.2s steps(6) infinite; }
 @keyframes flicker {
   0%, 100% { box-shadow: 0 0 7px 1px rgba(233, 190, 94, 0.6); }
   48% { box-shadow: 0 0 4px 0 rgba(233, 190, 94, 0.35); }
