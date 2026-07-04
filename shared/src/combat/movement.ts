@@ -1,5 +1,4 @@
-import type { Entity, GameState, MoveAbility, Vec2 } from "../core/types.js";
-import { distance, sub, normalize, add, scale } from "../core/vec2.js";
+import type { Entity, GameState, GridState, MoveAbility, Vec2 } from "../core/types.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { getEffectiveDistance } from "./status-modifiers.js";
 import { isPositionWalkable, isWithinBounds } from "../map/collision-grid.js";
@@ -11,48 +10,81 @@ export function moveRadiusOf(entity: Pick<Entity, "collisionRadius" | "moveRadiu
   return entity.moveRadius ?? entity.collisionRadius;
 }
 
-function entitiesOverlap(
-  pos: Vec2,
-  radius: number,
-  entities: ReadonlyMap<string, Entity>,
-  excludeId: string
-): boolean {
+/** Flat typed-array snapshot of blocker entities. Pathfinding iterates this in hot inner loops —
+ *  no Map iterator overhead, no per-cell `r * r`, no dead/self filtering. */
+export interface BlockerArrays {
+  bx: Float64Array;
+  by: Float64Array;
+  br2: Float64Array; // (agentRadius + entityRadius)²
+  n: number;
+}
+
+export function buildBlockers(
+  entities: ReadonlyMap<string, Entity>, selfId: string, agentRadius: number,
+): BlockerArrays {
+  let n = 0;
+  for (const e of entities.values()) if (!e.dead && e.id !== selfId) n++;
+  const bx = new Float64Array(n);
+  const by = new Float64Array(n);
+  const br2 = new Float64Array(n);
+  let i = 0;
   for (const e of entities.values()) {
-    if (e.id === excludeId || e.dead) continue;
-    if (distance(pos, e.position) < radius + moveRadiusOf(e)) return true;
+    if (e.dead || e.id === selfId) continue;
+    bx[i] = e.position.x;
+    by[i] = e.position.y;
+    const r = agentRadius + moveRadiusOf(e);
+    br2[i] = r * r;
+    i++;
+  }
+  return { bx, by, br2, n };
+}
+
+export function overlapsBlocker(px: number, py: number, b: BlockerArrays): boolean {
+  const { bx, by, br2, n } = b;
+  for (let i = 0; i < n; i++) {
+    const dx = px - bx[i]!;
+    const dy = py - by[i]!;
+    if (dx * dx + dy * dy < br2[i]!) return true;
   }
   return false;
 }
 
-/**
- * Whether `entity` could legally stand at `position`: inside the map, clear of walls, and not
- * overlapping any other living entity. The single spatial-occupancy rule shared by the
- * authoritative move resolver and the client's pre-submit check, so client prediction can never
- * drift from server truth. Uses the movement radius (`moveRadius`), not the hurtbox.
- */
-export function canEntityOccupy(state: GameState, entity: Entity, position: Vec2): boolean {
-  const r = moveRadiusOf(entity);
+/** THE "may a body of `radius` stand at `p`" predicate: clear of walls, inside bounds, and not
+ *  overlapping another living entity. Every occupancy decision — resolver, pathfinding endpoints,
+ *  knockback slides, click snapping — funnels through this one rule. */
+export function canStopAt(grid: GridState, radius: number, p: Vec2, blockers: BlockerArrays): boolean {
   return (
-    isPositionWalkable(state.grid, position, r) &&
-    isWithinBounds(state.grid, position, r) &&
-    !entitiesOverlap(position, r, state.entities, entity.id)
+    isPositionWalkable(grid, p, radius) &&
+    isWithinBounds(grid, p, radius) &&
+    !overlapsBlocker(p.x, p.y, blockers)
   );
 }
 
-export function getAffordableMoveDistance(entity: Entity): number {
-  const ability = entity.abilities.find(a => a.kind === "move") as MoveAbility | undefined;
-  if (!ability || !canAffordAbility(entity, ability)) return 0;
-  const reach = ability.variableCost && entity.energy.blue < (getAbilityCost(ability, { distance: ability.distance }).blue ?? 0)
-    ? ability.distance / 2
-    : ability.distance;
-  return getEffectiveDistance(entity, reach);
+/** `canStopAt` for a specific entity in a game state. */
+export function canEntityOccupy(state: GameState, entity: Entity, position: Vec2): boolean {
+  const r = moveRadiusOf(entity);
+  return canStopAt(state.grid, r, position, buildBlockers(state.entities, entity.id, r));
 }
 
-export function clampToMovementRange(entity: Entity, target: Vec2, moveDistance?: number): Vec2 {
-  const maxDist = moveDistance ?? getAffordableMoveDistance(entity);
-  const dist = distance(entity.position, target);
-  if (dist <= maxDist) return target;
-  if (dist < 0.01) return target;
-  const dir = normalize(sub(target, entity.position));
-  return add(entity.position, scale(dir, maxDist));
+function findMoveAbility(entity: Entity): MoveAbility | undefined {
+  return entity.abilities.find(a => a.kind === "move") as MoveAbility | undefined;
+}
+
+/** Full status-adjusted range of `entity`'s move ability (0 if it has none), ignoring energy.
+ *  The reach yardstick for AI planning and straight-line (non-path-based) move validation. */
+export function getMoveReach(entity: Entity, ability?: MoveAbility): number {
+  const mv = ability ?? findMoveAbility(entity);
+  return mv ? getEffectiveDistance(entity, mv.distance) : 0;
+}
+
+/** The move budget `entity` can pay for *right now*: full reach when the full-distance cost is
+ *  affordable, half reach when only the cheap half-move is (variable-cost moves), 0 when neither.
+ *  THE budget for player moves — the client's planner and the authoritative resolver both read it. */
+export function getAffordableMoveDistance(entity: Entity, ability?: MoveAbility): number {
+  const mv = ability ?? findMoveAbility(entity);
+  if (!mv || !canAffordAbility(entity, mv)) return 0;
+  const reach = mv.variableCost && entity.energy.blue < (getAbilityCost(mv, { distance: mv.distance }).blue ?? 0)
+    ? mv.distance / 2
+    : mv.distance;
+  return getEffectiveDistance(entity, reach);
 }

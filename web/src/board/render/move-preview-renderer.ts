@@ -10,8 +10,8 @@ import {
 /**
  * Draws the path-based move preview: a dotted line that bends around obstacles to `displayTarget`,
  * ending at the move-radius landing marker. `displayTarget` is the *eased* on-screen target (see
- * GameRenderer) — it glides between the 12px-snapped destinations and may sit briefly between cells
- * while easing, which is fine since it's purely visual. Pass `null` to draw nothing (no reachable
+ * GameRenderer) — it glides between planned destinations and may sit briefly between them while
+ * easing, which is fine since it's purely visual. Pass `null` to draw nothing (no reachable
  * target near the cursor). The line uses the same smoothing as move playback, so preview and
  * animation match.
  */

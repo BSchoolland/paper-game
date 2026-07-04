@@ -1,5 +1,5 @@
 import type { AttackAbility, Vec2 } from "shared";
-import { distance, sub, getAffordableMoveDistance, reachableArea } from "shared";
+import { distance, sub, planMove } from "shared";
 import type { ClientState } from "./client-state.svelte.js";
 import type { GameRenderer } from "./render/game-renderer.js";
 import { TimingBar } from "./timing-bar.js";
@@ -61,17 +61,16 @@ export class InputManager {
       if (selectedAbility?.kind === "move" && this.clientState.selectedEntityId) {
         const entity = state.entities.get(this.clientState.selectedEntityId);
         if (entity && this.clientState.canSelectAbility(selectedAbility.id)) {
-          // Snap the click to the nearest *path-reachable* tile within move range (matches the
-          // server's path-based rule and the preview's deformed area), so dense maps don't require
-          // pixel-perfect clicks. Ignore the click only when nothing is reachable near it.
-          const budget = getAffordableMoveDistance(entity);
-          const dest = reachableArea(entity, state.grid, state.entities, budget).pathTo(pos, budget);
-          if (!dest) return;
+          // Snap the click to the nearest reachable stop within move range — the same shared ruler
+          // the server validates against — so dense maps don't require pixel-perfect clicks.
+          // Ignore the click only when nothing is reachable near it.
+          const plan = planMove(entity, pos, state.grid, state.entities);
+          if (!plan) return;
           this.clientState.submitAction({
             type: "ability",
             entityId: this.clientState.selectedEntityId,
             abilityId: selectedAbility.id,
-            destination: dest,
+            destination: plan.dest,
           });
         }
       }

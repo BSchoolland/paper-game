@@ -1,6 +1,6 @@
 import { Application, Container, Graphics, Sprite, Text } from "pixi.js";
 import type { AttackAbility, BarrierAbility, GameEvent, GridState, Vec2, ZoneAbility } from "shared";
-import { CELL_WALL, CELL_COVER, distance, getAbilityCost, resolveAction, sub, length as vecLength, scaleAttack, powerToMultiplier, reachableArea, playerMovePath, getAffordableMoveDistance } from "shared";
+import { CELL_WALL, CELL_COVER, distance, getAbilityCost, resolveAction, sub, length as vecLength, scaleAttack, powerToMultiplier, planMove } from "shared";
 import type { ClientState } from "../client-state.svelte.js";
 import {
   createBackground,
@@ -36,8 +36,8 @@ export class GameRenderer {
   private zonesGfx = new Graphics();
   private targetingGfx = new Graphics();
   private moveGfx = new Graphics();
-  /** Eased on-screen move target — chases the (12px-snapped) reachable destination so the preview
-   *  line/marker glide instead of jumping. May sit briefly between cells while easing. */
+  /** Eased on-screen move target — chases the planned reachable destination so the preview
+   *  line/marker glide instead of jumping. May sit briefly between spots while easing. */
   private movePreviewTarget: Vec2 | null = null;
   private costLabel = new Text({ text: "", style: { fontSize: 11, fontFamily: "monospace", fontWeight: "bold", fill: 0x4a3728 } });
   private camera: CombatCamera;
@@ -360,15 +360,13 @@ export class GameRenderer {
       selectedAbility?.kind === "move" &&
       entity.energy.blue > 0
     ) {
-      const budget = getAffordableMoveDistance(entity);
-      // Real (snapped) destination a click commits to; ease the displayed target toward it so the
-      // line/marker glide rather than snapping in 12px steps.
-      const snapped = reachableArea(entity, state.grid, state.entities, budget).pathTo(mouseWorld, budget);
-      this.movePreviewTarget = snapped ? easeToward(this.movePreviewTarget, snapped) : null;
+      // Real (snapped) destination a click commits to, priced by the same shared ruler the server
+      // charges from; ease the displayed target toward it so the line/marker glide.
+      const plan = planMove(entity, mouseWorld, state.grid, state.entities);
+      this.movePreviewTarget = plan ? easeToward(this.movePreviewTarget, plan.dest) : null;
       drawMovePreview(this.moveGfx, entity, this.movePreviewTarget, state);
       // Bill the cost for the real path distance to where the click lands (not the eased point).
-      const dist = snapped ? playerMovePath(entity, snapped, state.grid, budget).cost : 0;
-      const moveCost = getAbilityCost(selectedAbility, { distance: dist });
+      const moveCost = getAbilityCost(selectedAbility, { distance: plan?.cost ?? 0 });
       const cost = Math.min(moveCost.blue ?? 0, entity.energy.blue);
       this.showCostLabel(entity, cost, entity.energy.blue, "#2980b9");
     }

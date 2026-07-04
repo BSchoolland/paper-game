@@ -28,10 +28,10 @@ export interface HeroContext {
 export type HeroController = (ctx: HeroContext) => _PlayerAction[];
 // Import from specific modules (not "../index.js") to avoid module-init cycles via ai-runner.
 import type {
-  AttackAbility, Entity, EntityId, GameState, MoveAbility, PlayerAction, TeamId, Vec2,
+  AttackAbility, Entity, EntityId, GameState, PlayerAction, TeamId, Vec2,
 } from "../core/types.js";
 import { canAffordAbility } from "../combat/ability-cost.js";
-import { getEffectiveDistance } from "../combat/status-modifiers.js";
+import { getMoveReach } from "../combat/movement.js";
 import { ShapeKind } from "../core/types.js";
 import { strategyForEntity } from "./strategy.js";
 import { add, normalize, scale, sub } from "../core/vec2.js";
@@ -580,14 +580,14 @@ export function staticEval(s: GameState, ec: EvalCtx): number {
     const enemies = livingEnemies(s, heroId);
     let incoming = 0;
     for (const e of enemies) {
-      const reach = enemyMoveReach(e) + enemyAttackReach(e);
+      const reach = getMoveReach(e) + enemyAttackReach(e);
       const d = dist(e.position, hero.position) - hero.collisionRadius - e.collisionRadius;
       if (d <= reach) incoming += enemyBestDamage(e);
     }
     v -= w.heroThreat * (incoming / hero.maxHp);
 
     if (enemies.length > 0) {
-      const myReach = enemyMoveReach(hero) + Math.max(0, ...attackAbilities(hero).map(attackRange));
+      const myReach = getMoveReach(hero) + Math.max(0, ...attackAbilities(hero).map(attackRange));
       let threatenable = false;
       for (const e of enemies) {
         const d = dist(e.position, hero.position) - hero.collisionRadius - e.collisionRadius;
@@ -675,10 +675,6 @@ export function bestAoeRadius(hero: Entity): number | null {
   return best > 0 ? best : null;
 }
 
-function enemyMoveReach(e: Entity): number {
-  const mv = e.abilities.find(a => a.kind === "move") as MoveAbility | undefined;
-  return mv ? getEffectiveDistance(e, mv.distance) : 0;
-}
 function enemyAttackReach(e: Entity): number {
   let r = 0;
   for (const a of e.abilities) if (a.kind === "attack") r = Math.max(r, attackRange(a as AttackAbility));

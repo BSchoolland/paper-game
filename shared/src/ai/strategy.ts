@@ -2,8 +2,8 @@ import { ShapeKind } from "../core/types.js";
 import type { AiStrategyType, AttackAbility, Entity, GameState, MoveAbility, PlayerAction, Vec2 } from "../core/types.js";
 import { distance, sub, normalize, add, scale } from "../core/vec2.js";
 import { pathfindMove } from "../map/pathfinding.js";
+import { getMoveReach } from "../combat/movement.js";
 import { canAffordAbility } from "../combat/ability-cost.js";
-import { getEffectiveDistance } from "../combat/status-modifiers.js";
 import { resolveAction } from "../combat/turn-resolver.js";
 import { resolveWeaponAttack } from "../combat/combat.js";
 
@@ -94,7 +94,7 @@ function pursue(entity: Entity, target: Entity, state: GameState): PlayerAction[
   const moveAbility = getMoveAbility(entity);
   if (!moveAbility || !canAffordAbility(entity, moveAbility)) return [];
 
-  const moveDistance = getEffectiveDistance(entity, moveAbility.distance);
+  const moveDistance = getMoveReach(entity, moveAbility);
   const destination = pathfindMove(entity, target.position, state.grid, state.entities, moveDistance);
   if (!destination) return [];
 
@@ -156,7 +156,7 @@ export const kiteStrategy: AiStrategy = {
 function findRetreatPos(entity: Entity, threat: Entity, state: GameState): Vec2 | null {
   const moveAbility = getMoveAbility(entity);
   if (!moveAbility || !canAffordAbility(entity, moveAbility)) return null;
-  const moveDistance = getEffectiveDistance(entity, moveAbility.distance);
+  const moveDistance = getMoveReach(entity, moveAbility);
 
   const awayDir = normalize(sub(entity.position, threat.position));
   const retreatTarget = add(entity.position, scale(awayDir, moveDistance));

@@ -2,9 +2,9 @@ import type { ActionResult, Entity, EntityEffect, GameEvent, StatusEffect, TeamI
 import { STATUS_META } from "../core/status-meta.js";
 import { makeEntity } from "./entity-factory.js";
 import { applyDamage } from "../combat/combat.js";
-import { normalize, sub, add, scale, distance } from "../core/vec2.js";
-import { isPositionWalkable, isWithinBounds, findWalkablePosition } from "../map/collision-grid.js";
-import { moveRadiusOf } from "../combat/movement.js";
+import { normalize, sub, add, scale } from "../core/vec2.js";
+import { findWalkablePosition } from "../map/collision-grid.js";
+import { canEntityOccupy } from "../combat/movement.js";
 import { createReactionBus, on, type ReactionHandler } from "../combat/reaction-bus.js";
 import { consequenceApplies } from "../combat/defense.js";
 
@@ -25,19 +25,6 @@ function getTemplate(key: string): UnitTemplate | undefined {
 function nextSpawnId(state: ActionResult["state"]): { id: string; state: ActionResult["state"] } {
   const next = state.nextSpawnId + 1;
   return { id: `spawn-${next}`, state: { ...state, nextSpawnId: next } };
-}
-
-function entitiesOverlap(
-  pos: Vec2,
-  radius: number,
-  entities: ReadonlyMap<string, Entity>,
-  excludeId: string
-): boolean {
-  for (const e of entities.values()) {
-    if (e.id === excludeId || e.dead) continue;
-    if (distance(pos, e.position) < radius + moveRadiusOf(e)) return true;
-  }
-  return false;
 }
 
 const attackReaction: ReactionHandler<"attack"> = (event, state, ctx) => {
@@ -147,14 +134,9 @@ function slideEntity(
   if (dir.x === 0 && dir.y === 0) return { state, events: [], blocked: false };
 
   let full = true;
-  const moveR = moveRadiusOf(entity);
   for (let d = maxDist; d > 0; d -= 5) {
     const dest = add(entity.position, scale(dir, d));
-    if (
-      isPositionWalkable(state.grid, dest, moveR) &&
-      isWithinBounds(state.grid, dest, moveR) &&
-      !entitiesOverlap(dest, moveR, state.entities, entity.id)
-    ) {
+    if (canEntityOccupy(state, entity, dest)) {
       const from = entity.position;
       const entities = new Map(state.entities);
       entities.set(entity.id, { ...entity, position: dest });

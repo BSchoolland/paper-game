@@ -209,14 +209,14 @@
     }
   },
   "ai04-two-sovereigns-vs-rush-squad": {
-    "hash": "929f26f4b6ff1b49aa16de43bab836c55be0fce3e3f328ad9bbc6ff81cbd56b9",
+    "hash": "4d2785b15d3d8a7bccd4ddb0069f031b8af4194178e1a883c0474de690222f12",
     "summary": {
-      "events": 11,
+      "events": 10,
       "eventTypes": {
-        "attack": 4,
-        "collision": 3,
+        "attack": 5,
+        "collision": 2,
         "knockback": 2,
-        "move": 2
+        "move": 1
       },
       "winner": "red",
       "turnNumber": 1,
@@ -242,19 +242,19 @@
     }
   },
   "ai06-sovereign-knockback-near-wall": {
-    "hash": "2447efee1826ef02c16eb9a2ec01d10c2d0869696a7ef6d485a6ea54c880b89b",
+    "hash": "77e6dff5dfc0e94b1da642fb0e08b1b672705ee1f47f3e1d66460b9611ceb31c",
     "summary": {
-      "events": 9,
+      "events": 8,
       "eventTypes": {
         "attack": 3,
         "collision": 1,
         "knockback": 3,
-        "move": 2
+        "move": 1
       },
       "winner": "red",
       "turnNumber": 1,
       "entities": 2,
-      "actionCount": 5
+      "actionCount": 4
     }
   }
 }

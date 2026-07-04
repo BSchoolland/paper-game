@@ -32,4 +32,31 @@ describe("collision-grid", () => {
     // Position far from wall
     expect(isPositionWalkable(grid, { x: 20, y: 20 }, 16)).toBe(true);
   });
+
+  it("isPositionWalkable (summed-area fast path) matches the per-cell reference on random grids", () => {
+    let rngState = 7;
+    const rand = () => (rngState = (rngState * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+    // Reference: the original rectangle scan over isBlocked.
+    const reference = (grid: ReturnType<typeof createGrid>, pos: { x: number; y: number }, r: number) => {
+      const minCx = Math.floor((pos.x - r) / grid.cellSize);
+      const maxCx = Math.floor((pos.x + r) / grid.cellSize);
+      const minCy = Math.floor((pos.y - r) / grid.cellSize);
+      const maxCy = Math.floor((pos.y + r) / grid.cellSize);
+      for (let cy = minCy; cy <= maxCy; cy++) {
+        for (let cx = minCx; cx <= maxCx; cx++) {
+          if (isBlocked(grid, cx, cy)) return false;
+        }
+      }
+      return true;
+    };
+    for (let round = 0; round < 10; round++) {
+      let grid = createGrid(30, 30, 4); // 120×120 world
+      for (let i = 0; i < 40; i++) grid = setBlocked(grid, Math.floor(rand() * 30), Math.floor(rand() * 30));
+      for (let q = 0; q < 200; q++) {
+        const pos = { x: rand() * 140 - 10, y: rand() * 140 - 10 }; // includes out-of-bounds probes
+        const r = [0, 3, 10, 16][q % 4]!;
+        expect(isPositionWalkable(grid, pos, r)).toBe(reference(grid, pos, r));
+      }
+    }
+  });
 });

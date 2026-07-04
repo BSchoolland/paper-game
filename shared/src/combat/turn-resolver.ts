@@ -1,12 +1,12 @@
 import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, TeamId, Vec2, ZoneAbility } from "../core/types.js";
 import { distance, add, scale, normalize, length } from "../core/vec2.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
-import { canEntityOccupy } from "./movement.js";
-import { playerMovePath } from "../map/pathfinding.js";
+import { canEntityOccupy, getMoveReach } from "./movement.js";
+import { plannedMoveCost } from "../map/move-rules.js";
 import { resolveWeaponAttack, applyDamage } from "./combat.js";
 import { runReactions } from "./reaction-bus.js";
 import { coreReactionBus } from "../encounter/effects.js";
-import { getEffectiveDistance, getEffectiveRegen } from "./status-modifiers.js";
+import { getEffectiveRegen } from "./status-modifiers.js";
 import { createZone, canPlaceWallZone, tickZones } from "./zones.js";
 import { powerToMultiplier, scaleAttack } from "./power.js";
 
@@ -46,20 +46,20 @@ function resolveMove(
   pathBased: boolean
 ): ActionResult {
   const entityId = entity.id;
-  const maxDistance = getEffectiveDistance(entity, ability.distance);
   if (!canEntityOccupy(state, entity, destination)) return NO_CHANGE(state);
 
-  // `pathBased` (player moves): cost = the route the body actually travels around obstacles, and the
-  // move is illegal if no such route fits within budget. Default (AI / scripted): cheap straight-line
-  // distance + endpoint check — the historical behaviour, no per-resolve pathfinding.
+  // `pathBased` (player moves): cost = the route around obstacles, read from the SAME flood the
+  // client plans and prices with (move-rules.ts), so a client-approved move is accepted here at the
+  // same cost by construction. Default (AI / scripted): cheap straight-line distance + endpoint
+  // check — the historical behaviour, no per-resolve pathfinding.
   let dist: number;
   if (pathBased) {
-    const plan = playerMovePath(entity, destination, state.grid, maxDistance);
-    if (!plan.reachable) return NO_CHANGE(state);
-    dist = plan.cost;
+    const cost = plannedMoveCost(entity, destination, state.grid, state.entities, ability);
+    if (cost === null) return NO_CHANGE(state);
+    dist = cost;
   } else {
     dist = distance(entity.position, destination);
-    if (dist > maxDistance + 0.01) return NO_CHANGE(state);
+    if (dist > getMoveReach(entity, ability) + 0.01) return NO_CHANGE(state);
   }
 
   const actualCost = getAbilityCost(ability, { distance: dist });
@@ -342,9 +342,10 @@ export interface ResolveOptions {
   readonly defenseMap?: ReadonlyMap<string, number>;
   /** Skip the active-team / dead-entity check. For preview dry-runs only. */
   readonly allowOutOfTurn?: boolean;
-  /** Resolve move actions as path-based (cost = body-clearance route distance, illegal if no route
-   *  fits within budget) instead of straight-line. Set by trusted server code for player moves; AI
-   *  call sites leave it off. Never read from the serialized action, so a client can't spoof it. */
+  /** Resolve move actions as path-based (cost = route distance from the shared move-rules flood,
+   *  illegal if no route reaches the destination within budget) instead of straight-line. Set by
+   *  trusted server code for player moves; AI call sites leave it off. Never read from the
+   *  serialized action, so a client can't spoof it. */
   readonly pathBased?: boolean;
 }
 

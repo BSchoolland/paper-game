@@ -8,8 +8,7 @@
 // `ai-runner` re-exports through `index.ts` and back into this file via `sovereign-strategy`.
 import { resolveAction as engineResolve } from "../combat/turn-resolver.js";
 import { pathfindMove, pathfindFlood } from "../map/pathfinding.js";
-import { getEffectiveDistance } from "../combat/status-modifiers.js";
-import { moveRadiusOf } from "../combat/movement.js";
+import { moveRadiusOf, getMoveReach } from "../combat/movement.js";
 import { getTemplateRegistry } from "../encounter/effects.js";
 import type { FloodResult } from "../map/pathfinding.js";
 import type {
@@ -92,8 +91,7 @@ export function attackHits(s: GameState, attacker: Entity, ability: AttackAbilit
 export function pathToward(s: GameState, entityId: EntityId, target: Vec2, maxDistance?: number): Vec2 | null {
   const e = s.entities.get(entityId);
   if (!e) return null;
-  const mv = moveAbility(e);
-  const cap = maxDistance ?? (mv ? getEffectiveDistance(e, mv.distance) : 0);
+  const cap = maxDistance ?? getMoveReach(e);
   if (cap < 1) return null;
   return pathfindMove(e, target, s.grid, s.entities, cap);
 }
@@ -104,8 +102,7 @@ export function pathToward(s: GameState, entityId: EntityId, target: Vec2, maxDi
 export function pathFloodFor(s: GameState, entityId: EntityId): { flood: FloodResult; cap: number } | null {
   const e = s.entities.get(entityId);
   if (!e) return null;
-  const mv = moveAbility(e);
-  const cap = mv ? getEffectiveDistance(e, mv.distance) : 0;
+  const cap = getMoveReach(e);
   if (cap < 1) return null;
   // Move-candidate destinations are deduped to ~8px downstream, and the flood already requires full
   // body clearance (so it never threads sub-body corridors), so an 8px node step settles ~15× fewer

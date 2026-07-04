@@ -49,6 +49,29 @@ export function setBlocked(
   return { ...grid, walls };
 }
 
+// Summed-area table of wall cells, cached per grid (immutable: setBlocked & zone stamps return new
+// GridState objects, so the WeakMap key invalidates itself). Turns the body-footprint rectangle
+// check below from an O(footprint-area) cell scan into 4 array reads — what makes full-grid
+// walkable-mask builds (pathfinding) and per-frame occupancy checks cheap even on fine grids.
+const wallIntegralCache = new WeakMap<GridState, Uint32Array>();
+
+function getWallIntegral(grid: GridState): Uint32Array {
+  const cached = wallIntegralCache.get(grid);
+  if (cached) return cached;
+  const { width: w, height: h, walls } = grid;
+  const stride = w + 1;
+  const integral = new Uint32Array(stride * (h + 1));
+  for (let cy = 0; cy < h; cy++) {
+    let rowSum = 0;
+    for (let cx = 0; cx < w; cx++) {
+      if (walls[cy * w + cx] === CELL_WALL) rowSum++;
+      integral[(cy + 1) * stride + (cx + 1)] = integral[cy * stride + (cx + 1)]! + rowSum;
+    }
+  }
+  wallIntegralCache.set(grid, integral);
+  return integral;
+}
+
 export function isPositionWalkable(
   grid: GridState,
   pos: Vec2,
@@ -59,12 +82,17 @@ export function isPositionWalkable(
   const minCy = Math.floor((pos.y - collisionRadius) / grid.cellSize);
   const maxCy = Math.floor((pos.y + collisionRadius) / grid.cellSize);
 
-  for (let cy = minCy; cy <= maxCy; cy++) {
-    for (let cx = minCx; cx <= maxCx; cx++) {
-      if (isBlocked(grid, cx, cy)) return false;
-    }
-  }
-  return true;
+  // Cells outside the grid count as blocked (matches `isBlocked`).
+  if (minCx < 0 || minCy < 0 || maxCx >= grid.width || maxCy >= grid.height) return false;
+
+  const integral = getWallIntegral(grid);
+  const stride = grid.width + 1;
+  const wallCount =
+    integral[(maxCy + 1) * stride + (maxCx + 1)]! -
+    integral[minCy * stride + (maxCx + 1)]! -
+    integral[(maxCy + 1) * stride + minCx]! +
+    integral[minCy * stride + minCx]!;
+  return wallCount === 0;
 }
 
 export function isWithinBounds(
