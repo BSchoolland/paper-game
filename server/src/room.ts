@@ -142,8 +142,8 @@ export interface Room {
    *  lost on crash/reap by design (05-difficulty flag #3); one walk-back to a rest node re-arms. */
   rested: boolean;
 
-  capacity: number; // 2..4, fixed at create
-  seats: Seat[]; // length === capacity, index-stable
+  capacity: number; // 2..4 in the lobby; shrinks to the seated humans at startGame (open seats dropped)
+  seats: Seat[]; // lobby: one per capacity slot. after start: only the started party (seatIndex stable, may be non-contiguous)
 
   /** Listed in the public room browser + eligible for quickMatch. Private rematch rooms set false. */
   listed: boolean;

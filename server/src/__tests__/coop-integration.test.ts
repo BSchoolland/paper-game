@@ -66,7 +66,7 @@ describe("co-op integration lifecycle", () => {
     a.close();
   });
 
-  it("create + join: roster shows two humans; start bot-fills the empty seat; party reaches overworld", async () => {
+  it("create + join: roster shows two humans; start drops the empty seat (no bots); party reaches overworld", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
     await hello(host);
@@ -93,17 +93,17 @@ describe("co-op integration lifecycle", () => {
     expect(hostRoster.room.seats.filter((s) => s.state === "human-connected").length).toBe(2);
     expect(hostRoster.room.seats[2]!.state).toBe("open");
 
-    // host starts; the empty seat (s2) becomes a bot, party in overworld
+    // host starts; the empty seat (s2) is dropped — no bots — leaving a party of the two humans
     const overworld = await startAndReachOverworld(host);
     expect(overworld.room.phase).toBe("overworld");
-    expect(overworld.room.seats[2]!.state).toBe("bot");
-    expect(overworld.room.seats.filter((s) => s.state === "human-connected").length).toBe(2);
+    expect(overworld.room.seats.length).toBe(2);
+    expect(overworld.room.seats.every((s) => s.state === "human-connected")).toBe(true);
 
     host.close();
     guest.close();
   });
 
-  it("lobby leave clears the seat's account identity; bot-fill + host reset survive it", async () => {
+  it("lobby leave clears the seat's account identity; drop-empty-seats + host reset survive it", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
     await hello(host);
@@ -128,10 +128,11 @@ describe("co-op integration lifecycle", () => {
     expect(reopened.room.seats[1]!.level).toBeNull();
     expect(reopened.room.seats[1]!.equippedTitleId).toBeNull();
 
-    // Start bot-fills the reopened seat; the host reset re-persists every seat and must complete
-    // (a stale accountId on the bot seat would throw in upsertRunSeat mid-run-swap).
+    // Start drops the reopened seat (no bots) -> the host starts solo; the host reset then re-persists
+    // the lone seat and must complete (a stale accountId anywhere would throw in upsertRunSeat).
     const overworld = await startAndReachOverworld(host);
     const oldRunId = overworld.room.runId;
+    expect(overworld.room.seats.length).toBe(1);
     host.send({ type: "reset" });
     const afterReset = await host.waitFor(
       (m): m is Extract<ServerMessage, { type: "roomState" }> =>
@@ -139,18 +140,19 @@ describe("co-op integration lifecycle", () => {
       { consumeBuffered: false },
     );
     expect(afterReset.room.phase).toBe("overworld");
-    expect(afterReset.room.seats[1]!.state).toBe("bot");
-    expect(afterReset.room.seats[1]!.accountId).toBeNull();
+    expect(afterReset.room.seats.length).toBe(1);
+    expect(afterReset.room.seats[0]!.state).toBe("human-connected");
 
     host.close();
     guest.close();
   });
 
-  it("solo: create + start with bot-fill, enter combat with per-seat heroes carrying controllerId", async () => {
+  it("solo: create + start with no bots, enter combat with the lone hero carrying controllerId", async () => {
     const host = await connectClient(server);
     await hello(host);
     await createRoom(host, 2);
-    await startAndReachOverworld(host);
+    const overworld = await startAndReachOverworld(host);
+    expect(overworld.room.seats.length).toBe(1); // the unfilled seat was dropped, not bot-filled
 
     // single human -> propose resolves instantly -> combat
     host.mark();
@@ -161,22 +163,18 @@ describe("co-op integration lifecycle", () => {
     const state = await host.nextOf("state", { timeoutMs: 8000 });
     const entities = state.state.entities;
     const s0Hero = entities["s0-hero"];
-    const s1Hero = entities["s1-hero"];
     expect(s0Hero).toBeTruthy();
-    expect(s1Hero).toBeTruthy();
+    expect(entities["s1-hero"]).toBeUndefined(); // no bot hero for the dropped seat
     expect(s0Hero!.controllerId).toBe("s0");
-    expect(s1Hero!.controllerId).toBe("s1");
     expect(s0Hero!.teamId).toBe("red");
     // there is at least one blue enemy
     expect(Object.values(entities).some((e) => e.teamId === "blue")).toBe(true);
 
-    // coopStatus reports the player phase, s0 human, s1 bot
+    // coopStatus reports the player phase with the single human seat
     const coop = await host.nextOf("coopStatus", { timeoutMs: 8000 });
     expect(coop.coop.phase).toBe("player");
-    const s0Status = coop.coop.seats.find((s) => s.seatId === "s0")!;
-    const s1Status = coop.coop.seats.find((s) => s.seatId === "s1")!;
-    expect(s0Status.controller).toBe("human");
-    expect(s1Status.controller).toBe("ai");
+    expect(coop.coop.seats.length).toBe(1);
+    expect(coop.coop.seats.find((s) => s.seatId === "s0")!.controller).toBe("human");
 
     host.close();
   });
@@ -634,18 +632,33 @@ describe("co-op integration lifecycle", () => {
   });
 
   it("an unanswered (bot-owned) defend target takes FULL damage, not zero (R11 neutral=power 0)", async () => {
-    // Solo: s0 human, s1 bot. Inject one blue enemy adjacent to the BOT hero (s1) so the enemy phase
-    // attacks it. The defend round has no human target -> resolves with the neutral default, which
-    // MUST be full damage (the bug made it zero = invulnerable). Assert s1-hero loses HP.
+    // s0 human, s1 a guest who disconnects mid-combat -> s1 flips to a bot. Inject one blue enemy
+    // adjacent to the BOT hero (s1) so the enemy phase attacks it. The defend round has no human
+    // target -> resolves with the neutral default, which MUST be full damage (the bug made it zero =
+    // invulnerable). Assert s1-hero loses HP.
     const host = await connectClient(server);
+    const guest = await connectClient(server);
     await hello(host);
+    await hello(guest);
     const { code } = await createRoom(host, 2);
+    guest.send({ type: "joinRoom", code });
+    await guest.nextOf("welcome");
+    await guest.waitFor(isRoomState);
     await startAndReachOverworld(host);
 
+    // Two humans -> proposeMove opens a vote; both vote yes to enter combat.
     host.mark();
-    await enterCombat(host);
+    guest.mark();
+    host.send({ type: "proposeMove", target: { q: 1, r: 0 } });
+    const vote = await host.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
+    guest.send({ type: "castVote", proposalId: vote.vote!.proposalId, vote: "yes" });
     await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
     await host.nextOf("coopStatus", { timeoutMs: 8000 });
+
+    // Guest drops; after the 3s grace its seat (s1) is bot-driven.
+    guest.close();
+    await guest.closed;
+    await sleep(3500);
 
     const room = rooms.get(code)!;
     expect(room.phase).toBe("combat");
@@ -918,7 +931,7 @@ describe("accounts & community integration", () => {
     host.close();
   });
 
-  it("an encounter win accrues 25 PENDING XP + greenhorn PRIVATELY (profile xp unchanged mid-run); a wipe banks 50% and bumps wipes; bot seats stay null (§6/02 §7.7)", async () => {
+  it("an encounter win accrues 25 PENDING XP + greenhorn PRIVATELY (profile xp unchanged mid-run); a wipe banks 50% and bumps wipes (§6/02 §7.7)", async () => {
     const host = await connectClient(server);
     const w = await hello(host); // fresh clientId -> fresh guest at 0 XP
     const accountId = w.auth.accountId;
@@ -936,19 +949,15 @@ describe("accounts & community integration", () => {
     const titles = await host.nextOf("titlesEarned", { fromNow: true, timeoutMs: 4000 });
     expect(titles.titleIds).toEqual(["greenhorn"]);
 
-    // The post-award roomState carries account/level on the human seat; the bot seat is all-null.
+    // The post-award roomState carries account/level on the lone human seat (solo start, no bots).
     const rs = await host.waitFor(
       (m): m is Extract<ServerMessage, { type: "roomState" }> => m.type === "roomState" && m.room.phase === "overworld",
       { consumeBuffered: false, timeoutMs: 8000 },
     );
+    expect(rs.room.seats.length).toBe(1);
     const s0 = rs.room.seats[0]!;
-    const s1 = rs.room.seats[1]!;
     expect(s0.accountId).toBe(accountId);
     expect(s0.level).toBe(1);
-    expect(s1.state).toBe("bot");
-    expect(s1.accountId).toBeNull();
-    expect(s1.level).toBeNull();
-    expect(s1.equippedTitleId).toBeNull();
 
     host.mark();
     host.send({ type: "getProfile" });
@@ -1627,23 +1636,25 @@ describe("difficulty & rest integration", () => {
     host.close();
   }, 30000);
 
-  it("a capacity-4 room scales its first encounter's budget to party size 4", async () => {
+  it("a solo start scales its first encounter's budget down to party size 1 (no bot padding)", async () => {
     const host = await connectClient(server);
     await hello(host);
-    const { code } = await createRoom(host, 4); // startGame bot-fills to four heroes
-    await startAndReachOverworld(host);
+    const { code } = await createRoom(host, 4); // 4-seat room, but only the host starts -> party of 1
+    const overworld = await startAndReachOverworld(host);
+    expect(overworld.room.seats.length).toBe(1); // the three open seats were dropped, not bot-filled
     host.mark();
     await enterCombat(host); // single human -> resolves instantly
     await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
 
     const room = rooms.get(code as never)!;
+    expect(room.seats.length).toBe(1);
     const ph = room.pendingHex!;
     const hexType = getHexIcon(ph, room.hexMap.icons) ?? (isDecorationHex(ph) ? "dense-wilderness" : "wilderness");
     const base = getEncounterProfile(hexType).enemyBudget;
     const expected = effectiveEnemyBudget(base, {
       dimensionTier: room.dimensionTier,
       distanceFromOrigin: hexDistance(ph, { q: 0, r: 0 }),
-      partySize: 4,
+      partySize: 1, // seats.length, not the room capacity of 4
     });
     expect(room.session!.effectiveBudget).toBe(expected);
 

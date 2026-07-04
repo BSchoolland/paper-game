@@ -60,12 +60,13 @@ describe("distanceBudgetMult", () => {
 
 describe("partySizeBudgetMult", () => {
   it("table values", () => {
+    expect(partySizeBudgetMult(1)).toBeCloseTo(0.8); // solo (empty seats dropped, no bots)
     expect(partySizeBudgetMult(2)).toBeCloseTo(1.0);
     expect(partySizeBudgetMult(3)).toBeCloseTo(1.2);
     expect(partySizeBudgetMult(4)).toBeCloseTo(1.4);
   });
   it("throws on unknown party sizes (fail loud)", () => {
-    expect(() => partySizeBudgetMult(1)).toThrow();
+    expect(() => partySizeBudgetMult(0)).toThrow();
     expect(() => partySizeBudgetMult(5)).toThrow();
   });
 });

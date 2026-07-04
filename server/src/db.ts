@@ -705,6 +705,12 @@ export function startNewRun(dimensionId: number, hostClientId: string | null, ca
   return Number(info.lastInsertRowid);
 }
 
+// Shrink a run's capacity to the humans present at start (empty seats dropped, never bot-filled).
+const setRunCapacityStmt = db.prepare("UPDATE runs SET capacity = ?, updated_at = ? WHERE id = ?");
+export function setRunCapacity(runId: number, capacity: number): void {
+  setRunCapacityStmt.run(capacity, Date.now(), runId);
+}
+
 // Lobby-only re-pick (chooseDimension): current AND start move together, pre-start.
 const setRunStartDimensionStmt = db.prepare(
   "UPDATE runs SET dimension_id = ?, start_dimension_id = ?, updated_at = ? WHERE id = ? AND active = 1"

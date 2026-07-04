@@ -83,7 +83,7 @@
     <div class="plate startblock">
       <button class="btn wax playbtn" onclick={() => play(capacity)}>PLAY</button>
       <div class="playcap">
-        Creates a {capacity}-seat room — friends join with your code, bots fill any empty seats.
+        Creates a room for up to {capacity} — friends join with your code; unfilled seats are dropped at start (no bots).
         <span class="sizewrap">
           <button class="linkish" data-popover-toggle onclick={() => (sizeOpen = !sizeOpen)}>room size: {capacity} ▾</button>
           <Popover bind:open={sizeOpen} class="sizepop">

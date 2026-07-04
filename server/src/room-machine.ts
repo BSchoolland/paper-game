@@ -88,7 +88,7 @@ import { emitRunEvent } from "./run-events.js";
 import { eligibleSeats } from "./run-recorders.js";
 import { assignContract } from "./contract-engine.js";
 import { rooms } from "./room-registry.js";
-import { buildPresetInventory, buildSeatLoadout, manifestItemsFor, freshRoomCode, heroEntityIdFor, seatIdForIndex } from "./room.js";
+import { buildSeatLoadout, manifestItemsFor, freshRoomCode, heroEntityIdFor, seatIdForIndex } from "./room.js";
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -1729,7 +1729,6 @@ export function reconstructRoomForRun(
   if (!runRow || !runRow.active) return null;
 
   const dimensionId = runRow.dimension_id; // CURRENT dimension (a crash after travel resumes here)
-  const capacity = runRow.capacity;
   const meta = getDimensionMeta(dimensionId);
   if (!meta) throw new Error(`reconstructRoomForRun: dimension ${dimensionId} missing for run ${runId}`);
 
@@ -1751,14 +1750,17 @@ export function reconstructRoomForRun(
   const code = freshRoomCode((c) => rooms.isTaken(c));
   if (!code) return null;
 
-  const seatRows = loadRunSeats(runId);
+  // Rebuild one seat per LIVE row (left_at IS NULL), not a 0..capacity sweep: startGame drops the
+  // never-filled seats, so the survivor set can be smaller than — and non-contiguous within — the
+  // original capacity. Iterating rows rehydrates exactly the started party (humans + any post-start
+  // bot-flips), never a phantom bot in a dropped seat's slot.
+  const seatRows = loadRunSeats(runId).filter((r) => r.left_at === null);
   const seats: Seat[] = [];
-  for (let i = 0; i < capacity; i++) {
+  for (const row of seatRows) {
+    const i = row.seat_index;
     const seatId = seatIdForIndex(i);
-    const row = seatRows.find((r) => r.seat_index === i);
-    const isHuman = row?.controller_kind === "human" && !!row.client_id;
-    // Durable rows rehydrate the bag (R13.3); a seat with no row falls back to a starter loadout.
-    const inventory = row ? loadSeatInventory(runId, i) : buildPresetInventory(DEFAULT_PRESET_ID);
+    const isHuman = row.controller_kind === "human" && !!row.client_id;
+    const inventory = loadSeatInventory(runId, i); // durable rows rehydrate the bag (R13.3)
     const seat: Seat = {
       seatId,
       seatIndex: i,
@@ -1766,15 +1768,15 @@ export function reconstructRoomForRun(
       // Human seats resume disconnected (reclaim-only, R21); they are bot-driven for liveness (R31).
       state: isHuman ? "human-disconnected" : "bot",
       socket: null,
-      clientId: row?.client_id ?? null,
-      tokenSalt: row?.token_salt ?? null,
+      clientId: row.client_id ?? null,
+      tokenSalt: row.token_salt ?? null,
       brain: null, // sovereignFor installed below for liveness
       inventory,
       presetId: null, // rehydrated from durable rows; the original preset choice isn't persisted
       manifestIds: [], // manifests are lobby state; after start they are just bag items (flag #12)
       animSet: getAnimSet(inventory.equipped),
-      displayName: row?.display_name || `Player ${i + 1}`,
-      accountId: isHuman ? (row?.account_id ?? null) : null,
+      displayName: row.display_name || `Player ${i + 1}`,
+      accountId: isHuman ? (row.account_id ?? null) : null,
       cardProfile: null,
       chatTimestamps: [],
       ready: false,
@@ -1810,7 +1812,7 @@ export function reconstructRoomForRun(
     runClearedCount: countRunCombatCleared(runId),
     pendingHex: null,
     rested: false, // ephemeral; a crash-recovered run re-arms rest on the next rest-node arrival (flag #3)
-    capacity,
+    capacity: seats.length, // the started party (dropped seats never rehydrate); == runRow.capacity for pre-drop runs
     seats,
     listed: true,
     rematchCode: null,

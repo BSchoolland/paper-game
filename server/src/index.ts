@@ -33,6 +33,7 @@ import {
   deactivateStaleRuns,
   setRunPhase,
   setRunStartDimension,
+  setRunCapacity,
   clearRunContract,
   getDimensionMeta,
   applyCanonicalDimensionTiers,
@@ -689,7 +690,8 @@ function isHost(room: Room, seat: Seat): boolean {
   return room.hostSeatId === seat.seatId;
 }
 
-/** Start the game (R27): bot-fill empty seats, persist them, go to overworld. */
+/** Start the game (R27): drop the still-open seats (no bots), shrink capacity to the humans present,
+ *  go to overworld. Party size = seated humans, so enemy budget scales down for a smaller group. */
 function handleStartGame(room: Room, seat: Seat): void {
   if (!isHost(room, seat)) {
     io.send(seat, { type: "error", code: "NOT_HOST", message: "Only the host can start", recoverable: true });
@@ -700,26 +702,15 @@ function handleStartGame(room: Room, seat: Seat): void {
     return;
   }
 
-  // Bot-fill every still-open seat (durable controller_kind='bot', write point 2). A bot seat must
-  // carry no account identity in memory either — a stale accountId here would crash the next
-  // persistSeat (bot + accountId throws) and leak the prior occupant onto the roster.
-  for (const s of room.seats) {
-    if (s.state === "open") {
-      s.state = "bot";
-      s.clientId = null;
-      s.tokenSalt = null;
-      s.accountId = null;
-      s.cardProfile = null;
-      upsertRunSeat(room.runId, s.seatIndex, {
-        clientId: null,
-        displayName: s.displayName,
-        controllerKind: "bot",
-        tokenSalt: null,
-        accountId: null,
-      });
-      saveSeatInventory(room.runId, s.seatIndex, s.inventory);
-    }
-  }
+  // Drop every still-open seat: the party is exactly the humans who joined (solo is allowed). Open
+  // seats are never persisted (createRoom/joinRoom persist only the taker; a lobby leaver left_at-
+  // stamps its row), so there is nothing to delete — just remove them from the in-memory roster and
+  // shrink capacity so partySize (= seats.length) drives a group-sized encounter budget. Surviving
+  // seats keep their seatIndex/seatId; reconstruction rebuilds from the live rows, not a 0..capacity
+  // sweep, so a non-contiguous survivor set (a mid-lobby leaver's hole) rehydrates correctly.
+  room.seats = room.seats.filter((s) => s.state !== "open");
+  room.capacity = room.seats.length;
+  setRunCapacity(room.runId, room.capacity);
 
   // Expedition start recorder: chart this dimension for every attributed human seat.
   emitRunEvent(room, io, { type: "run-started", runId: room.runId, dimensionId: room.dimensionId });

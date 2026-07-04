@@ -10,7 +10,7 @@ export interface EncounterScaling {
   readonly dimensionTier: number | null;
   /** hexDistance(encounter hex, ORIGIN). Every dimension's origin is (0,0). */
   readonly distanceFromOrigin: number;
-  /** Hero count = room capacity (bots included). Valid: 2 | 3 | 4. */
+  /** Hero count = the humans who started (empty seats are dropped, never bot-filled). Valid: 1 | 2 | 3 | 4. */
   readonly partySize: number;
 }
 
@@ -20,6 +20,7 @@ export const DISTANCE_GRACE_RADIUS = 2;       // hexes from origin with no dista
 export const DISTANCE_BUDGET_RATE = 0.07;     // +7% per hex beyond the grace radius
 export const DISTANCE_BUDGET_MULT_CAP = 2.5;  // distance can at most 2.5× a fight
 export const PARTY_SIZE_BUDGET_MULT: Readonly<Record<number, number>> = {
+  1: 0.8,   // solo: one hero below the 2-player anchor, same +0.2/hero slope
   2: 1.0,   // anchor: the dominant live configuration — near-origin dim 0 stays as today
   3: 1.2,
   4: 1.4,

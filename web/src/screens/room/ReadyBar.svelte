@@ -17,7 +17,10 @@
     }
     if (me) parts.push({ text: me.ready ? "you're ready" : "you're not ready", strong: false });
     const open = roomState.seats.filter((s) => s.state === "open").length;
-    if (open > 0) parts.push({ text: `${open} open seat${open === 1 ? "" : "s"} become${open === 1 ? "s" : ""} a bot at start`, strong: false });
+    if (open > 0) {
+      const party = humans.length;
+      parts.push({ text: `${open} open seat${open === 1 ? "" : "s"} dropped at start — ${party === 1 ? "you'll go solo" : `party of ${party}`}, no bots`, strong: false });
+    }
     return parts;
   });
 </script>
