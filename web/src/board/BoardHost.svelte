@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Application } from "pixi.js";
+  import type { GameEvent, GameState, Vec2 } from "shared";
   import { getAnimSet, isAdjacent, hexKey } from "shared";
   import { onMount, untrack } from "svelte";
   import { room } from "../state/room.svelte.js";
@@ -8,8 +9,10 @@
     combat,
     combatIsIdle,
     onCombatEvents,
+    onCoopPhaseChange,
     resetCombatDisplay,
     setAnimatingCheck,
+    setBatchGate,
   } from "../state/combat.svelte.js";
   import { proposeMove, defendResult } from "../state/actions.js";
   import { FrameDriver } from "./render/frame-driver.js";
@@ -45,11 +48,32 @@
   let loadedDimension = -1;
   let activeDefendPromptId: string | null = null;
   let disposed = false;
+  let followSuspended = false;
+
+  /** Where the camera should look for this batch: the first enemy actor's current spot. */
+  function enemyActorFocus(state: GameState, events: readonly GameEvent[]): Vec2 | null {
+    for (const ev of events) {
+      if (ev.type === "attack") {
+        if (state.entities.get(ev.attackerId)?.teamId === "blue") return ev.attackerPosition;
+        continue;
+      }
+      if (ev.type === "move") {
+        if (state.entities.get(ev.entityId)?.teamId === "blue") return ev.from;
+        continue;
+      }
+      if (ev.type === "barrier" || ev.type === "spawn") {
+        const entity = state.entities.get(ev.entityId);
+        if (entity?.teamId === "blue") return entity.position;
+      }
+    }
+    return null;
+  }
 
   onMount(() => {
     void init();
     return () => {
       disposed = true;
+      setBatchGate(null);
       if (onResize) window.removeEventListener("resize", onResize);
       driver?.destroy();
       app?.destroy(true, { children: true });
@@ -103,6 +127,28 @@
     onCombatEvents((events) => gameRenderer.pushEvents(events));
     clientState.subscribe(() => {
       if (combat.display && scene === "combat") gameRenderer.render();
+    });
+
+    // Camera direction during the enemy phase: before each enemy's events play, ease the view
+    // onto the actor and give a short beat so the sweep reads as turns. A manual pan/zoom hands
+    // the camera back to the player for the rest of the phase.
+    onCoopPhaseChange(() => {
+      followSuspended = false;
+    });
+    setBatchGate(async (state, events) => {
+      if (scene !== "combat") return;
+      if (gameRenderer.consumeCameraUserMoved()) followSuspended = true;
+      const focus = enemyActorFocus(state, events);
+      if (!focus || followSuspended) return;
+      // Already looking at the actor (e.g. the defend prompt just panned there): don't burn a
+      // pan + beat — the batch after a defended attack must land immediately.
+      const screen = gameRenderer.worldToScreen(focus);
+      const nearCenter =
+        Math.abs(screen.x - window.innerWidth / 2) < window.innerWidth * 0.22 &&
+        Math.abs(screen.y - window.innerHeight / 2) < window.innerHeight * 0.22;
+      if (nearCenter) return;
+      await gameRenderer.panCameraTo(focus, 300);
+      await new Promise((r) => setTimeout(r, 160));
     });
 
     ready = true;
@@ -230,6 +276,8 @@
     void (async () => {
       // Let the pre-prompt enemy sweep finish animating so the telegraph lands on a settled board.
       await waitForCombatIdle();
+      // A defend always steals the camera — the player must see the attacker to read the timing.
+      await gameRenderer.panCameraTo(prompt.attackerPosition, 260);
       const power = await defendPrompt.run({
         promptId: prompt.promptId,
         attackerId: prompt.attackerId,

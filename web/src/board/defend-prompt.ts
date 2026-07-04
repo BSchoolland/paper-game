@@ -1,27 +1,29 @@
 import type { AimDirection, AttackAbility, Vec2 } from "shared";
-import { defenseTierFromPower } from "shared";
 import type { ClientState } from "./client-state.svelte.js";
 import type { GameRenderer } from "./render/game-renderer.js";
-import { defenseLabel } from "./render/impact-labels.js";
+import { blockInput } from "./block-input.js";
 
 /**
- * Defense prompt timing for a single incoming attack.
+ * Defense prompt for a single incoming attack: HOLD to guard, TAP at contact to parry.
  *
- * Total sequence:
- *   0          → WINDUP_MS:        subtle preview shape grows in (telegraph)
- *   WINDUP_MS  → "impact" moment:  attacker swings, shape flashes — this is when you press
- *   WINDOW_MS centered on impact:  the press is timed against the impact instant
+ * The clock is the attacker's performance (attack-performance.ts): wind-up → tension → strike,
+ * with the plan's `contactMs` as the impact instant — a body lunging or a projectile arriving,
+ * so the beat is readable as motion. The verdict is the input STATE at that instant:
  *
- * Perfect zone is the PERFECT_WINDOW_MS centered on impact. Outside the perfect zone but inside
- * the window is a "decent" block. Missing the window entirely (or never pressing) is no block.
+ *   key pressed within the tap window around contact  → parry  (power 1, negates everything)
+ *   key held down at contact (pressed any time before) → guard  (power 0.5, half damage, no shove)
+ *   key up at contact                                  → hit    (power 0)
+ *
+ * There is no "late block" rule to learn — you either were blocking when it landed or you
+ * weren't. A slightly-early parry attempt degrades to a guard as long as the key stays held,
+ * so the safe play (hold early) and the greedy play (tap at the last instant) form a smooth
+ * skill ramp. Every outcome, including no input at all, is decidable within TAP_AFTER_MS of
+ * the impact frame.
  */
-const WINDUP_MS = 400;
-const WINDOW_MS = 260;
-// Tight Parry window — about 2 frames at 60Hz (≈33ms), 4 at 120Hz, 4–5 at 144Hz. The decent
-// "Guard" zone fills the rest of WINDOW_MS, so casual play still blocks 33% damage; full
-// negation requires hitting near the actual impact frame.
-const PERFECT_WINDOW_MS = 33;
-const RESULT_HOLD_MS = 250;
+const TAP_BEFORE_MS = 50;
+const TAP_AFTER_MS = 33;
+// Only if the performance can't start (combat not mounted) — a plain fixed windup.
+const FALLBACK_WINDUP_MS = 700;
 
 export interface DefendPromptInput {
   promptId: string;
@@ -35,7 +37,6 @@ export interface DefendPromptInput {
 export class DefendPrompt {
   private resolve: ((power: number) => void) | null = null;
   private impactTime = 0;
-  private pressed = false;
   private active = false;
   private animFrame = 0;
 
@@ -44,7 +45,6 @@ export class DefendPrompt {
   run(input: DefendPromptInput): Promise<number> {
     return new Promise((resolve) => {
       this.resolve = resolve;
-      this.pressed = false;
       this.active = true;
 
       const incoming = {
@@ -55,87 +55,77 @@ export class DefendPrompt {
       };
       this.clientState.setDefensePrompt(input.promptId, incoming, "windup", 0);
 
+      // The attacker's motion is the clock: the swing launches a shockwave/projectile, and the
+      // plan's contact beat — the moment it physically reaches MY hero — is the verdict frame.
+      const plan = this.renderer.startIncomingAttackPerformance(
+        input.attackerId,
+        input.attackerPosition,
+        input.aimDirection,
+        input.ability,
+        input.targetIds[0],
+      );
+      const windupMs = plan?.contactMs ?? FALLBACK_WINDUP_MS;
+
       const startTime = performance.now();
-      this.impactTime = startTime + WINDUP_MS;
-      let impactFired = false;
+      this.impactTime = startTime + windupMs;
 
-      const onPress = (e: KeyboardEvent | MouseEvent) => {
-        if (this.pressed || !this.active) return;
-        if (e instanceof KeyboardEvent && e.key !== " " && e.key !== "Enter") return;
-        e.preventDefault();
-        e.stopPropagation();
+      // Pre-guard: the player may ALREADY be holding block from before this prompt opened
+      // (bracing during the enemy's approach). The always-on tracker makes that count — an
+      // old hold is a guard (its keydown is far outside the tap window, so never a parry).
+      let heldSince: number | null = blockInput.heldSince();
+      let lastTapAt: number | null = null; // most recent QUALIFYING tap time (survives release)
+      let prevDownAt = heldSince ?? -Infinity; // any previous keydown, for the anti-mash rule
+      let downAtImpact: boolean | null = null; // sampled once, at the first tick past impact
 
-        this.pressed = true;
+      if (heldSince !== null) {
+        this.renderer.raiseGuard(input.targetIds, input.attackerPosition);
+      }
+      blockInput.setCapturing(true);
 
-        const offset = performance.now() - this.impactTime; // negative = early, positive = late
-        const half = WINDOW_MS / 2;
-        let power: number;
-        if (Math.abs(offset) > half) {
-          power = 0;
-        } else if (Math.abs(offset) <= PERFECT_WINDOW_MS / 2) {
-          power = 1;
-        } else {
-          power = 0.5;
-        }
+      const offDown = blockInput.onBlockDown((at) => {
+        if (!this.active) return;
+        heldSince = at;
+        // Anti-mash: a keydown right after another one still guards (holding is holding),
+        // but doesn't count as a tap — otherwise spamming lucks into parries.
+        lastTapAt = at - prevDownAt < 250 ? null : at;
+        prevDownAt = at;
+        // Guard goes up the instant the input registers — the pose is the acknowledgment;
+        // the verdict (label, flash, damage) waits for the impact frame.
+        this.renderer.raiseGuard(input.targetIds, input.attackerPosition);
+      });
+      const offUp = blockInput.onBlockUp(() => {
+        heldSince = null;
+      });
 
-        const tier = defenseTierFromPower(power);
-        if (tier !== "none") {
-          const label = defenseLabel(tier);
-          for (const id of input.targetIds) {
-            this.renderer.triggerLocalBlock(id, input.attackerPosition, tier);
-            const entity = this.clientState.getState()?.entities.get(id);
-            if (entity) {
-              this.renderer.spawnFloatingText(entity.position.x, entity.position.y - 55, label.text, label.color, {
-                fontSize: label.fontSize,
-                lifetime: label.lifetime,
-                strokeColor: label.strokeColor,
-                strokeWidth: label.strokeWidth,
-                fontWeight: label.fontWeight,
-                fontFamily: label.fontFamily,
-              });
-            }
-          }
-        }
+      const cleanup = () => {
+        blockInput.setCapturing(false);
+        offDown();
+        offUp();
+      };
 
+      const settle = (power: number) => {
+        this.scheduleOutcome(input, power);
         cleanup();
         this.finish(power);
       };
-
-      const cleanup = () => {
-        document.removeEventListener("keydown", onPress);
-        window.removeEventListener("mousedown", onPress, true);
-      };
-
-      document.addEventListener("keydown", onPress);
-      window.addEventListener("mousedown", onPress, true);
 
       const tick = () => {
         if (!this.active) return;
         const now = performance.now();
         const elapsed = now - startTime;
-        if (elapsed < WINDUP_MS) {
-          this.clientState.setDefensePrompt(input.promptId, incoming, "windup", elapsed / WINDUP_MS);
+        if (elapsed < windupMs) {
+          this.clientState.setDefensePrompt(input.promptId, incoming, "windup", elapsed / windupMs);
         } else {
-          this.clientState.setDefensePrompt(input.promptId, incoming, "window", Math.min(1, (elapsed - WINDUP_MS) / WINDOW_MS));
+          this.clientState.setDefensePrompt(input.promptId, incoming, "window", Math.min(1, (elapsed - windupMs) / TAP_AFTER_MS));
         }
 
-        // At the end of the windup, kick off the actual swing + shape-flash visuals so the
-        // press lands on the same beat as the attack itself.
-        if (!impactFired && elapsed >= WINDUP_MS) {
-          impactFired = true;
-          this.renderer.previewIncomingAttack(
-            input.attackerId,
-            input.attackerPosition,
-            input.aimDirection,
-            input.ability,
-          );
-        }
-
-        // Window closes; if no press, finish with 0.
-        if (!this.pressed && elapsed >= WINDUP_MS + WINDOW_MS / 2) {
-          cleanup();
-          this.finish(0);
-          return;
+        if (now >= this.impactTime) {
+          if (downAtImpact === null) downAtImpact = heldSince !== null;
+          const tapped = lastTapAt !== null && lastTapAt >= this.impactTime - TAP_BEFORE_MS && lastTapAt <= this.impactTime + TAP_AFTER_MS;
+          if (tapped) return settle(1);
+          if (downAtImpact) return settle(0.5);
+          // Key was up at contact — allow the tap window's tail before ruling it a miss.
+          if (now > this.impactTime + TAP_AFTER_MS) return settle(0);
         }
 
         this.animFrame = requestAnimationFrame(tick);
@@ -144,13 +134,33 @@ export class DefendPrompt {
     });
   }
 
+  /** Play the predicted outcome exactly on the impact frame: verdicts land at (or a tap-tail
+   *  after) the impact, so this fires immediately. */
+  private scheduleOutcome(input: DefendPromptInput, power: number): void {
+    const untilImpact = Math.max(0, this.impactTime - performance.now());
+    const fire = () => {
+      for (const id of input.targetIds) {
+        this.renderer.predictDefendOutcome(
+          input.attackerId,
+          input.attackerPosition,
+          input.aimDirection,
+          input.ability,
+          id,
+          power,
+        );
+      }
+    };
+    if (untilImpact === 0) fire();
+    else setTimeout(fire, untilImpact);
+  }
+
+  /** Resolve IMMEDIATELY — every ms here delays the authoritative confirmation, and the
+   *  local performance + predicted outcome already cover every visual. */
   private finish(power: number) {
     cancelAnimationFrame(this.animFrame);
-    setTimeout(() => {
-      this.active = false;
-      this.clientState.clearDefensePrompt();
-      this.resolve?.(power);
-      this.resolve = null;
-    }, RESULT_HOLD_MS);
+    this.active = false;
+    this.clientState.clearDefensePrompt();
+    this.resolve?.(power);
+    this.resolve = null;
   }
 }

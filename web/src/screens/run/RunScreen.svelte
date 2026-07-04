@@ -1,5 +1,6 @@
 <script lang="ts">
   import { room, reconnectingSeated } from "../../state/room.svelte.js";
+  import { combat } from "../../state/combat.svelte.js";
   import { overworld } from "../../state/overworld.svelte.js";
   import { leaveRoom, playAgain } from "../../state/actions.js";
   import { ClientState } from "../../board/client-state.svelte.js";
@@ -7,6 +8,7 @@
   import VotePanel from "./VotePanel.svelte";
   import PartyHud from "./PartyHud.svelte";
   import CombatDock from "./CombatDock.svelte";
+  import PhaseSlate from "./PhaseSlate.svelte";
   import ContractHud from "./ContractHud.svelte";
   import LootPanel from "./LootPanel.svelte";
   import PackOverlay from "./PackOverlay.svelte";
@@ -17,6 +19,10 @@
 
   const roomState = $derived(room.state!);
   const phase = $derived(roomState.phase);
+  // Server truth flips the phase the instant an outcome resolves; the PLAYER's outcome is what's
+  // on the board. The board holds its combat display until the final animations settle (BoardHost
+  // nulls it in exitCombat), so this is "combat is still on screen" — outcome overlays wait on it.
+  const combatOnScreen = $derived(phase === "combat" || combat.display !== null);
 
   let packOpen = $state(false);
   let chatOpen = $state(false);
@@ -50,12 +56,13 @@
 
 <VotePanel />
 
-{#if phase === "combat"}
+{#if combatOnScreen}
   <PartyHud />
   <CombatDock {clientState} onOpenPack={() => (packOpen = true)} />
+  <PhaseSlate />
 {/if}
 
-{#if phase === "overworld"}
+{#if phase === "overworld" && !combatOnScreen}
   <ContractHud />
   <LootPanel />
   <button class="btn ghost packbtn" onclick={() => (packOpen = true)}>PACK (I)</button>
@@ -76,7 +83,7 @@
 
 <PackOverlay bind:open={packOpen} />
 
-{#if phase === "gameover"}
+{#if phase === "gameover" && !combatOnScreen}
   <div class="gameoverwrap">
     <div class="plate goplate">
       <div class="gostamp">

@@ -9,7 +9,7 @@ import { social, resetSocial } from "./social.svelte.js";
 import { codex, resetCodex } from "./codex.svelte.js";
 import { home, resetHome } from "./home.svelte.js";
 import { overworld, resetOverworld } from "./overworld.svelte.js";
-import { combat, applyCombatSnapshot, notifyActionRejected, resetCombat } from "./combat.svelte.js";
+import { combat, applyCombatSnapshot, applyCoopStatus, notifyActionRejected, resetCombat } from "./combat.svelte.js";
 import { chrome, pushToast, resetChrome } from "./chrome.svelte.js";
 import { ensureDimensionMeta } from "./dim-meta.svelte.js";
 
@@ -135,7 +135,7 @@ export function dispatch(msg: ServerMessage): void {
       return;
     }
     case "coopStatus": {
-      combat.coop = msg.coop;
+      applyCoopStatus(msg.coop);
       return;
     }
     case "defendPrompt": {

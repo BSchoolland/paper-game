@@ -1,4 +1,4 @@
-import { Container, Graphics, Sprite, Text } from "pixi.js";
+import { ColorMatrixFilter, Container, Graphics, Sprite, Text } from "pixi.js";
 import type { Entity, SpriteSet, StatusEffect } from "shared";
 import type { AnimSet } from "shared";
 import { STATUS_META } from "shared";
@@ -44,30 +44,11 @@ function easeOutQuad(t: number): number {
   return t * (2 - t);
 }
 
-/** Position at arc-length fraction `t` (0..1) along a polyline — used to animate a move along its
- *  routed path rather than straight. Recomputed per frame (one moving unit; negligible cost). */
-function pointAlongPolyline(pts: { x: number; y: number }[], t: number): { x: number; y: number } {
-  if (pts.length === 1) return pts[0]!;
-  let total = 0;
-  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i]!.x - pts[i - 1]!.x, pts[i]!.y - pts[i - 1]!.y);
-  if (total < 1e-6) return pts[pts.length - 1]!;
-  let target = t * total;
-  for (let i = 1; i < pts.length; i++) {
-    const a = pts[i - 1]!, b = pts[i]!;
-    const seg = Math.hypot(b.x - a.x, b.y - a.y);
-    if (target <= seg || i === pts.length - 1) {
-      const f = seg < 1e-6 ? 0 : target / seg;
-      return { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
-    }
-    target -= seg;
-  }
-  return pts[pts.length - 1]!;
-}
-
 const DEATH_DURATION = 0.5;
-const STATUS_DOT_RADIUS = 2.5;
-const STATUS_DOT_SPACING = 7;
-const STATUS_DOT_Y = HP_BAR_Y + HP_BAR_H + 5;
+const STATUS_CHIP_SIZE = 10;
+const STATUS_CHIP_GAP = 3;
+const STATUS_ROW_Y = HP_BAR_Y + HP_BAR_H + 4;
+const CHIP_GLYPH = 0xfaf3e3;
 const COMBAT_STATES: AnimState[] = ["idle", "attack", "hit", "move"];
 
 export class EntityVisual {
@@ -83,29 +64,43 @@ export class EntityVisual {
   readonly entityId: string;
   readonly entitySprites: SpriteSet | undefined;
   readonly heightMeters: number;
-  private lastHp: number;
-  private lastBarrier: number;
+  /**
+   * PRESENTATION state — what is on screen right now, mutated only by sequencer clips (and
+   * settle). The visual never reads the simulation's position/HP per frame: the simulation
+   * commits its facts here at the clip beat where the motion says they happen.
+   */
+  readonly displayPos: { x: number; y: number };
+  private shownHp: number;
+  private shownMaxHp: number;
+  private shownBarrier: number;
   private lastHpRatio: number;
-  private tweenFrom: { x: number; y: number } | null = null;
-  private tweenProgress = 1;
-  /** Full polyline [start, ...waypoints] for path-following move playback; null = straight tween. */
-  private tweenPath: { x: number; y: number }[] | null = null;
   private facingLeft: boolean;
   private wasSelected = false;
   private readonly scale: number;
   private deathTimer = 0;
-  private isDead = false;
-  private isKnockback = false;
+  private dead = false;
   private charSprite: CharacterSprite | null = null;
   private readonly statusDots: Graphics;
-  private lastStatusCount = 0;
+  private lastStatusSig = "";
+  /** Attack-performance pose: a transient offset + squash composed over displayPos each frame
+   *  (wind-up backoff, tension shiver, strike lunge). */
+  private perfOffset = { x: 0, y: 0 };
+  private perfSquash = { x: 1, y: 1 };
+  /** Impact flash: a brief lerp-to-color on the body (red = hurt, grey = guard, white =
+   *  perfect parry). A ColorMatrixFilter because tint can only darken — white needs additive. */
+  private flashFilter: ColorMatrixFilter | null = null;
+  private flashTimer = 0;
+  private flashDuration = 0;
+  private flashColor = { r: 1, g: 0, b: 0 };
 
   constructor(entity: Entity, mySeatId: string | null = null) {
     this.entityId = entity.id;
     this.entitySprites = entity.sprites;
     this.heightMeters = entity.heightMeters ?? 2;
-    this.lastHp = entity.hp;
-    this.lastBarrier = entity.barrier;
+    this.displayPos = { x: entity.position.x, y: entity.position.y };
+    this.shownHp = entity.hp;
+    this.shownMaxHp = entity.maxHp;
+    this.shownBarrier = entity.barrier;
     this.lastHpRatio = entity.hp / entity.maxHp;
     this.facingLeft = entity.teamId === "blue";
 
@@ -187,8 +182,8 @@ export class EntityVisual {
     this.statusDots = new Graphics();
     this.container.addChild(this.statusDots);
 
-    this.drawHpBar(entity);
-    this.drawStatusDots(entity.statusEffects);
+    this.redrawVitals();
+    this.drawStatusChips(entity.statusEffects);
 
     const label = new Text({
       text: entity.name,
@@ -200,7 +195,7 @@ export class EntityVisual {
   }
 
   update(entity: Entity, isSelected: boolean, dt: number): void {
-    if (this.isDead) {
+    if (this.dead) {
       if (this.deathTimer < DEATH_DURATION) {
         this.deathTimer += dt;
         const t = Math.min(1, this.deathTimer / DEATH_DURATION);
@@ -215,27 +210,7 @@ export class EntityVisual {
       return;
     }
 
-    if (this.tweenProgress < 1) {
-      const speed = this.isKnockback ? 2.8 : 1.6;
-      this.tweenProgress = Math.min(1, this.tweenProgress + dt * speed);
-      const t = easeOutQuad(this.tweenProgress);
-      if (this.tweenPath) {
-        const prevX = this.container.position.x;
-        const p = pointAlongPolyline(this.tweenPath, t);
-        this.container.position.set(p.x, p.y);
-        // Face the direction of travel so the unit doesn't moonwalk around bends.
-        if (Math.abs(p.x - prevX) > 0.5) this.setFacing(p.x < prevX);
-      } else {
-        const from = this.tweenFrom!;
-        this.container.position.set(
-          from.x + (entity.position.x - from.x) * t,
-          from.y + (entity.position.y - from.y) * t
-        );
-      }
-      if (this.tweenProgress >= 1) { this.isKnockback = false; this.tweenPath = null; }
-    } else {
-      this.container.position.set(entity.position.x, entity.position.y);
-    }
+    this.container.position.set(this.displayPos.x + this.perfOffset.x, this.displayPos.y + this.perfOffset.y);
 
     if (this.animTimer > 0) {
       this.animTimer -= dt;
@@ -244,25 +219,16 @@ export class EntityVisual {
       }
     }
 
-    if (this.tweenProgress < 1 && !this.isKnockback && this.animState !== "move") {
-      this.setAnimState("move");
-    }
-    // Auto-revert "move" → "idle" when the position tween finishes. Guarded by animTimer so
-    // that a manually-driven `move`-state animation (e.g. a bow's block dodge) plays out.
-    if (this.tweenProgress >= 1 && this.animState === "move" && this.animTimer <= 0) {
-      this.setAnimState("idle");
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt;
+      if (this.flashTimer <= 0) this.detachFlash();
+      else this.applyFlash();
     }
 
-    if (entity.hp !== this.lastHp || entity.barrier !== this.lastBarrier) {
-      this.drawHpBar(entity);
-      this.lastHp = entity.hp;
-      this.lastBarrier = entity.barrier;
-    }
-
-    const statusCount = entity.statusEffects?.length ?? 0;
-    if (statusCount !== this.lastStatusCount) {
-      this.drawStatusDots(entity.statusEffects);
-      this.lastStatusCount = statusCount;
+    const statusSig = entity.statusEffects?.map((s) => `${s.type}:${s.duration}`).join() ?? "";
+    if (statusSig !== this.lastStatusSig) {
+      this.drawStatusChips(entity.statusEffects);
+      this.lastStatusSig = statusSig;
     }
 
     if (isSelected !== this.wasSelected) {
@@ -287,13 +253,20 @@ export class EntityVisual {
   }
 
   get isBusy(): boolean {
-    if (this.isDead) return this.deathTimer < DEATH_DURATION;
-    return this.tweenProgress < 1 || this.animTimer > 0;
+    if (this.dead) return this.deathTimer < DEATH_DURATION;
+    return this.animTimer > 0 || this.flashTimer > 0;
+  }
+
+  get isDead(): boolean {
+    return this.dead;
   }
 
   triggerDeath(): void {
-    this.isDead = true;
+    if (this.dead) return;
+    this.dead = true;
     this.deathTimer = 0;
+    this.flashTimer = 0;
+    this.detachFlash();
     this.setAnimState("hit");
     this.selectionRing.visible = false;
     this.hpBar.visible = false;
@@ -301,45 +274,49 @@ export class EntityVisual {
     this.hpPreview.visible = false;
   }
 
-  triggerMove(
-    fromX: number,
-    fromY: number,
-    toX: number,
-    toY: number,
-    path?: readonly { x: number; y: number }[]
-  ): void {
-    this.tweenFrom = { x: fromX, y: fromY };
-    this.tweenProgress = 0;
-    // `path` is the full smoothed polyline (start → … → destination); null = straight tween.
-    this.tweenPath = path && path.length > 1 ? path.map((p) => ({ x: p.x, y: p.y })) : null;
-
-    const dx = toX - fromX;
-    if (Math.abs(dx) > 1) {
-      this.setFacing(dx < 0);
-    }
+  /** Settle-time death for an entity whose death clip never played (resync/reconnect). */
+  forceDead(): void {
+    if (this.dead) return;
+    this.triggerDeath();
+    this.deathTimer = DEATH_DURATION;
+    this.container.visible = false;
   }
 
-  triggerKnockback(
-    fromX: number,
-    fromY: number,
-    toX: number,
-    toY: number
-  ): void {
-    this.tweenFrom = { x: fromX, y: fromY };
-    this.tweenProgress = 0;
-    this.tweenPath = null; // knockback is a straight shove, never a routed path
-    this.isKnockback = true;
+  /** Move the on-screen body (sequencer clips only). */
+  moveDisplayTo(x: number, y: number): void {
+    if (Math.abs(x - this.displayPos.x) > 0.5) this.setFacing(x < this.displayPos.x);
+    this.displayPos.x = x;
+    this.displayPos.y = y;
+  }
+
+  /** Commit the on-screen HP/barrier (sequencer clips at impact beats, or settle). */
+  commitVitals(hp: number, maxHp: number, barrier: number): void {
+    if (this.dead) return;
+    if (hp === this.shownHp && maxHp === this.shownMaxHp && barrier === this.shownBarrier) return;
+    this.shownHp = hp;
+    this.shownMaxHp = maxHp;
+    this.shownBarrier = barrier;
+    this.redrawVitals();
+  }
+
+  startMovePose(): void {
+    this.setAnimState("move");
+  }
+
+  endMovePose(): void {
+    if (this.animState === "move" && this.animTimer <= 0) this.setAnimState("idle");
+  }
+
+  /** Knockback/pull reaction: face the shove's origin and flinch. */
+  triggerShoved(originX: number): void {
+    const dx = originX - this.displayPos.x;
+    if (Math.abs(dx) > 1) this.setFacing(dx < 0);
     this.setAnimState("hit");
     this.animTimer = 0.6;
-
-    const dx = fromX - toX;
-    if (Math.abs(dx) > 1) {
-      this.setFacing(dx < 0);
-    }
   }
 
   triggerAttack(targetX: number): void {
-    const dx = targetX - this.container.position.x;
+    const dx = targetX - this.displayPos.x;
     if (Math.abs(dx) > 1) {
       this.setFacing(dx < 0);
     }
@@ -347,13 +324,89 @@ export class EntityVisual {
     this.animTimer = 0.7;
   }
 
+  /** Compose an attack-performance pose over the authoritative position/scale. Squash is
+   *  applied to the body sprites only (never the HP bar / rings). */
+  setPerformancePose(offsetX: number, offsetY: number, squashX: number, squashY: number): void {
+    this.perfOffset.x = offsetX;
+    this.perfOffset.y = offsetY;
+    if (squashX !== this.perfSquash.x || squashY !== this.perfSquash.y) {
+      this.perfSquash = { x: squashX, y: squashY };
+      this.applySquash();
+    }
+  }
+
+  clearPerformancePose(): void {
+    this.setPerformancePose(0, 0, 1, 1);
+  }
+
+  private applySquash(): void {
+    const sx = (this.facingLeft ? -this.scale : this.scale) * this.perfSquash.x;
+    const sy = this.scale * this.perfSquash.y;
+    for (const s of Object.values(this.sprites)) {
+      s.scale.set(sx, sy);
+    }
+  }
+
   triggerHit(): void {
     this.setAnimState("hit");
     this.animTimer = 0.6;
   }
 
-  triggerBlock(attackerX: number): void {
-    this.playBlockAnimation(attackerX, 0.55);
+  /** Red flash: a hit landed. Long and saturated enough to survive the bright shockwave
+   *  front passing over the sprite on the same beat. */
+  flashHit(): void {
+    this.startFlash(1, 0.26, 0.2, 0.35);
+  }
+
+  /** Grey flash: a decent guard — absorbed most of it. */
+  flashGuard(): void {
+    this.startFlash(0.62, 0.62, 0.68, 0.3);
+  }
+
+  /** White flash: a perfect parry. */
+  flashPerfect(): void {
+    this.startFlash(1, 1, 1, 0.35);
+  }
+
+  private startFlash(r: number, g: number, b: number, duration: number): void {
+    this.flashColor = { r, g, b };
+    this.flashDuration = duration;
+    this.flashTimer = duration;
+    if (!this.flashFilter) this.flashFilter = new ColorMatrixFilter();
+    // Body + weapon for character sprites; the loose body sprites for enemies.
+    const targets: Container[] = this.charSprite ? [this.charSprite.container] : Object.values(this.sprites);
+    for (const t of targets) t.filters = [this.flashFilter];
+    this.applyFlash();
+  }
+
+  /** out = pixel·(1−a) + color·a, with `a` decaying from a strong peak over the flash. */
+  private applyFlash(): void {
+    if (!this.flashFilter) return;
+    const a = 0.8 * (this.flashTimer / this.flashDuration);
+    const { r, g, b } = this.flashColor;
+    // prettier-ignore
+    this.flashFilter.matrix = [
+      1 - a, 0, 0, 0, r * a,
+      0, 1 - a, 0, 0, g * a,
+      0, 0, 1 - a, 0, b * a,
+      0, 0, 0, 1, 0,
+    ];
+  }
+
+  /** Remove the filter entirely when idle — an attached identity filter still costs a pass. */
+  private detachFlash(): void {
+    const targets: Container[] = this.charSprite ? [this.charSprite.container] : Object.values(this.sprites);
+    for (const t of targets) t.filters = null;
+  }
+
+  /** Turn to face a world x (used at wind-up start so the telegraph reads immediately). */
+  faceToward(targetX: number): void {
+    const dx = targetX - this.displayPos.x;
+    if (Math.abs(dx) > 1) this.setFacing(dx < 0);
+  }
+
+  triggerBlock(attackerX: number, holdSeconds = 0.55): void {
+    this.playBlockAnimation(attackerX, holdSeconds);
   }
 
   triggerPerfectBlock(attackerX: number): void {
@@ -366,7 +419,7 @@ export class EntityVisual {
    *  dodge). Enemies fall through to the attack pose since they don't have a weapon animSet.
    *  Drop a new branch in here if a specific weapon should pose differently. */
   private playBlockAnimation(attackerX: number, holdSeconds: number): void {
-    const dx = attackerX - this.container.position.x;
+    const dx = attackerX - this.displayPos.x;
     if (Math.abs(dx) > 1) this.setFacing(dx < 0);
     const animSet = this.charSprite?.currentAnimSet ?? null;
     const useMoveSprite = animSet === "bow";
@@ -438,7 +491,7 @@ export class EntityVisual {
   clearDamagePreview(): void {
     this.hpPreview.clear();
     this.hpPreview.visible = false;
-    if (this.lastHpRatio >= 1 && this.lastBarrier === 0) {
+    if (this.lastHpRatio >= 1 && this.shownBarrier === 0) {
       this.hpBg.visible = false;
       this.hpBar.visible = false;
     }
@@ -473,6 +526,7 @@ export class EntityVisual {
         s.scale.x = left ? -this.scale : this.scale;
       }
     }
+    if (this.perfSquash.x !== 1 || this.perfSquash.y !== 1) this.applySquash();
   }
 
   private setAnimState(state: AnimState): void {
@@ -486,29 +540,87 @@ export class EntityVisual {
     this.animState = state;
   }
 
-  private drawHpBar(entity: Entity): void {
-    this.lastHpRatio = entity.hp / entity.maxHp;
-    const full = this.lastHpRatio >= 1 && entity.barrier === 0;
+  private redrawVitals(): void {
+    this.lastHpRatio = this.shownHp / this.shownMaxHp;
+    const full = this.lastHpRatio >= 1 && this.shownBarrier === 0;
     this.hpBg.visible = !full;
     this.hpBar.visible = !full;
     if (full) return;
 
-    this.redrawBarBase(barLayout(entity.hp, entity.maxHp, entity.barrier));
+    this.redrawBarBase(barLayout(this.shownHp, this.shownMaxHp, this.shownBarrier));
   }
 
-  private drawStatusDots(statuses: readonly StatusEffect[] | undefined): void {
-    this.statusDots.clear();
+  /** Status chips: a color-filled tag per active status with a small glyph in the sketch
+   *  vocabulary (the slowed chevrons match the "status applied" rain), plus one tick per
+   *  remaining turn beneath it. */
+  private drawStatusChips(statuses: readonly StatusEffect[] | undefined): void {
+    const g = this.statusDots;
+    g.clear();
     if (!statuses || statuses.length === 0) {
-      this.statusDots.visible = false;
+      g.visible = false;
       return;
     }
-    this.statusDots.visible = true;
-    const totalW = statuses.length * STATUS_DOT_SPACING;
-    const startX = -totalW / 2 + STATUS_DOT_SPACING / 2;
-    for (let i = 0; i < statuses.length; i++) {
-      const color = STATUS_META[statuses[i]!.type]?.color ?? 0xffffff;
-      this.statusDots.circle(startX + i * STATUS_DOT_SPACING, STATUS_DOT_Y, STATUS_DOT_RADIUS);
-      this.statusDots.fill({ color });
+    g.visible = true;
+    const n = statuses.length;
+    const totalW = n * STATUS_CHIP_SIZE + (n - 1) * STATUS_CHIP_GAP;
+    for (let i = 0; i < n; i++) {
+      const status = statuses[i]!;
+      const color = STATUS_META[status.type]?.color ?? 0xffffff;
+      const x = -totalW / 2 + i * (STATUS_CHIP_SIZE + STATUS_CHIP_GAP);
+      const y = STATUS_ROW_Y;
+      g.roundRect(x, y, STATUS_CHIP_SIZE, STATUS_CHIP_SIZE, 2.5);
+      g.fill({ color, alpha: 0.92 });
+      g.stroke({ color: 0x3c2f1c, alpha: 0.75, width: 1 });
+      this.drawStatusGlyph(g, status.type, x + STATUS_CHIP_SIZE / 2, y + STATUS_CHIP_SIZE / 2);
+      // Duration ticks — one per remaining turn (capped so the row can't sprawl).
+      const ticks = Math.min(status.duration, 3);
+      for (let t = 0; t < ticks; t++) {
+        g.rect(x + 1.5 + t * 3, y + STATUS_CHIP_SIZE + 1.5, 2, 2);
+        g.fill({ color, alpha: 0.9 });
+      }
+    }
+  }
+
+  private drawStatusGlyph(g: Graphics, type: StatusEffect["type"], cx: number, cy: number): void {
+    switch (type) {
+      case "slowed":
+        // Double down-chevron — same vocabulary as the status-applied rain.
+        g.moveTo(cx - 2.8, cy - 2.8);
+        g.lineTo(cx, cy - 0.8);
+        g.lineTo(cx + 2.8, cy - 2.8);
+        g.moveTo(cx - 2.8, cy + 0.6);
+        g.lineTo(cx, cy + 2.6);
+        g.lineTo(cx + 2.8, cy + 0.6);
+        g.stroke({ color: CHIP_GLYPH, width: 1.3 });
+        break;
+      case "rooted":
+        // A trunk splitting into roots.
+        g.moveTo(cx, cy - 3);
+        g.lineTo(cx, cy + 0.5);
+        g.moveTo(cx, cy + 0.5);
+        g.lineTo(cx - 2.6, cy + 3);
+        g.moveTo(cx, cy + 0.5);
+        g.lineTo(cx + 2.6, cy + 3);
+        g.stroke({ color: CHIP_GLYPH, width: 1.3 });
+        break;
+      case "suppressed":
+        // A crossed-out pip — the attack pool is being drained.
+        g.circle(cx, cy, 2.3);
+        g.stroke({ color: CHIP_GLYPH, width: 1.2 });
+        g.moveTo(cx - 3, cy + 3);
+        g.lineTo(cx + 3, cy - 3);
+        g.stroke({ color: CHIP_GLYPH, width: 1.2 });
+        break;
+      case "winded":
+        // Wind dashes — the move pool is being drained.
+        g.moveTo(cx - 3, cy - 2);
+        g.lineTo(cx + 2, cy - 2);
+        g.moveTo(cx - 2, cy);
+        g.lineTo(cx + 3, cy);
+        g.moveTo(cx - 3, cy + 2);
+        g.lineTo(cx + 1.5, cy + 2);
+        g.stroke({ color: CHIP_GLYPH, width: 1.2 });
+        break;
     }
   }
 }

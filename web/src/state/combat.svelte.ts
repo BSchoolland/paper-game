@@ -32,6 +32,11 @@ let animatingCheck: (() => boolean) | null = null;
 let eventListeners: ((events: readonly GameEvent[]) => void)[] = [];
 let selfActedListeners: (() => void)[] = [];
 let rejectedListeners: (() => void)[] = [];
+let phaseListeners: ((phase: CoopStatusPayload["phase"], prev: CoopStatusPayload["phase"] | null) => void)[] = [];
+/** Display-queue pause: batches never drain before this timestamp (phase slates use it). */
+let holdUntil = 0;
+/** Async pre-batch hook (camera pans to the actor, per-enemy beats). One registrant (BoardHost). */
+let batchGate: ((state: GameState, events: readonly GameEvent[]) => Promise<void>) | null = null;
 
 export function applyCombatSnapshot(serialized: Parameters<typeof deserializeGameState>[0], events: readonly GameEvent[]): void {
   const next = deserializeGameState(serialized);
@@ -75,9 +80,58 @@ function processNext(): void {
     draining = false;
     return;
   }
+  const wait = holdUntil - performance.now();
+  if (wait > 0) {
+    // Still inside a slate hold — keep `draining` true so new batches queue behind us.
+    setTimeout(() => applyBatch(next), wait);
+    return;
+  }
+  applyBatch(next);
+}
+
+function applyBatch(next: QueuedUpdate): void {
+  const gated = batchGate?.(next.state, next.events);
+  if (gated) {
+    void gated.then(() => {
+      combat.display = next.state;
+      for (const l of eventListeners) l(next.events);
+      waitForAnimations(processNext);
+    });
+    return;
+  }
   combat.display = next.state;
   for (const l of eventListeners) l(next.events);
   waitForAnimations(processNext);
+}
+
+/** Pause the display drain (not the wire) until `ms` from now — lets a phase slate land first. */
+export function holdDisplayFor(ms: number): void {
+  holdUntil = Math.max(holdUntil, performance.now() + ms);
+}
+
+/** Register the single pre-batch hook. Returns an unregister. */
+export function setBatchGate(gate: ((state: GameState, events: readonly GameEvent[]) => Promise<void>) | null): void {
+  batchGate = gate;
+}
+
+/**
+ * Apply a coopStatus payload, notifying phase listeners on player/enemy flips. Dispatch calls
+ * this instead of assigning `combat.coop` directly.
+ */
+export function applyCoopStatus(coop: CoopStatusPayload): void {
+  const prev = combat.coop?.phase ?? null;
+  combat.coop = coop;
+  if (coop.phase !== prev) {
+    for (const l of phaseListeners) l(coop.phase, prev);
+  }
+}
+
+/** Fired whenever the coop phase actually changes (including the first status of a combat). */
+export function onCoopPhaseChange(listener: (phase: CoopStatusPayload["phase"], prev: CoopStatusPayload["phase"] | null) => void): () => void {
+  phaseListeners.push(listener);
+  return () => {
+    phaseListeners = phaseListeners.filter((l) => l !== listener);
+  };
 }
 
 function waitForAnimations(cb: () => void): void {

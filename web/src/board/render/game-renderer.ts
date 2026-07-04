@@ -9,7 +9,7 @@ import {
 } from "./grid-renderer.js";
 import { assetUrl, mapAssetUrl } from "../../lib/urls.js";
 import { EntityManager } from "./entity-manager.js";
-import { drawTargetingPreview, drawEffectPreview, drawIncomingAttackPreview } from "./targeting-renderer.js";
+import { drawTargetingPreview, drawEffectPreview } from "./targeting-renderer.js";
 import { drawZones } from "./zone-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
 import { ScreenFlash, type FlashOptions } from "./screen-flash.js";
@@ -77,19 +77,30 @@ export class GameRenderer {
     this.wake();
   }
 
-  /** Locally play the attacker swing + shape flash for an incoming attack — used by the
-   *  defense prompt so the visual lands at the press window, not after the server roundtrip. */
-  previewIncomingAttack(attackerId: string, attackerPosition: Vec2, aimDirection: Vec2, ability: AttackAbility): void {
+  /** Start the wind-up → strike performance for a defended incoming attack and return its plan
+   *  (the defend prompt scores presses against the plan's contact beat). Null if combat isn't
+   *  mounted — the caller falls back to a fixed-window prompt. */
+  startIncomingAttackPerformance(attackerId: string, attackerPosition: Vec2, aimDirection: Vec2, ability: AttackAbility, targetId?: string): import("./attack-performance.js").AttackPlan | null {
     const state = this.clientState.getState();
-    if (!state || !this.entities) return;
-    this.entities.previewIncomingAttack(attackerId, attackerPosition, aimDirection, ability, state);
+    if (!state || !this.entities) return null;
+    const targetPos = targetId ? state.entities.get(targetId)?.position : undefined;
+    const plan = this.entities.startDefendedAttackPerformance(attackerId, attackerPosition, aimDirection, ability, state, targetPos);
+    this.wake();
+    return plan;
+  }
+
+  /** Raise the guard pose the instant the block input registers (verdict comes at impact). */
+  raiseGuard(defenderIds: readonly string[], attackerPosition: Vec2): void {
+    if (!this.entities) return;
+    this.entities.raiseGuardPose(defenderIds, attackerPosition);
     this.wake();
   }
 
-  /** Locally play the defender block animation + perfect-block screen flash. */
-  triggerLocalBlock(defenderId: string, attackerPosition: Vec2, tier: "perfect" | "decent"): void {
-    if (!this.entities) return;
-    this.entities.triggerLocalBlock(defenderId, attackerPosition, tier);
+  /** Predict + play my hero's complete defended outcome on the impact frame (see EntityManager). */
+  predictDefendOutcome(attackerId: string, attackerPosition: Vec2, aimDirection: Vec2, ability: AttackAbility, targetId: string, power: number): void {
+    const state = this.clientState.getState();
+    if (!state || !this.entities) return;
+    this.entities.predictDefendOutcome(attackerId, attackerPosition, aimDirection, ability, targetId, power, state);
     this.wake();
   }
 
@@ -171,7 +182,9 @@ export class GameRenderer {
       this.shakeTimer -= dt;
       const progress = Math.max(0, this.shakeTimer / 0.3);
       const magnitude = this.shakeIntensity * progress * 6;
+      // eslint-disable-next-line no-restricted-syntax -- visual-only shake jitter, determinism not required
       const shakeX = (Math.random() - 0.5) * 2 * magnitude;
+      // eslint-disable-next-line no-restricted-syntax -- visual-only shake jitter, determinism not required
       const shakeY = (Math.random() - 0.5) * 2 * magnitude;
       this.worldContainer.position.set(this.camera.offsetX + shakeX, this.camera.offsetY + shakeY);
       if (this.shakeTimer <= 0) {
@@ -233,6 +246,16 @@ export class GameRenderer {
     return this.camera.consumeSuppressedClick();
   }
 
+  /** Eased camera pan (auto-follow of acting units / defend attackers). */
+  panCameraTo(world: Vec2, ms: number): Promise<void> {
+    return this.camera.panTo(world, ms);
+  }
+
+  /** True if the user has panned/zoomed since the last call — read-and-clear. */
+  consumeCameraUserMoved(): boolean {
+    return this.camera.consumeUserMoved();
+  }
+
   pushEvents(events: readonly GameEvent[]) {
     if (this.entities) this.entities.pushEvents(events);
   }
@@ -269,20 +292,8 @@ export class GameRenderer {
     const state = this.clientState.getState();
     if (!state) return;
 
-    const incoming = this.clientState.incomingAttack;
-    if (incoming) {
-      drawIncomingAttackPreview(
-        this.targetingGfx,
-        incoming.attackerId,
-        incoming.attackerPosition,
-        incoming.aimDirection,
-        incoming.ability,
-        state.entities,
-        state.grid,
-        0.5,
-        0.08,
-      );
-    }
+    // Incoming (defended) attacks draw their own progress-ramped telegraph via the attack
+    // performance — nothing to overlay here.
 
     const selectedId = this.clientState.selectedEntityId;
 

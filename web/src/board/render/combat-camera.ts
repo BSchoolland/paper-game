@@ -33,6 +33,9 @@ export class CombatCamera {
   private suppressNextClick = false;
   private keysDown = new Set<string>();
   private keyPanRAF: number | null = null;
+  private panAnimId = 0;
+  /** Set by any user gesture (drag/wheel/keys); consumers poll it to suspend auto-follow. */
+  private userMoved = false;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -66,9 +69,38 @@ export class CombatCamera {
 
   /** Pan the view centre to a world point (clamped). Used to open on the player's hero. */
   centerOn(world: Vec2) {
+    this.panAnimId++; // cancel any eased pan
     this.centerX = world.x;
     this.centerY = world.y;
     this.apply();
+  }
+
+  /** Eased pan to a world point. Resolves when done; a user drag or a newer pan cancels it. */
+  panTo(world: Vec2, ms: number): Promise<void> {
+    const id = ++this.panAnimId;
+    const fromX = this.centerX;
+    const fromY = this.centerY;
+    const start = performance.now();
+    return new Promise((resolve) => {
+      const tick = () => {
+        if (id !== this.panAnimId || this.draggingPointerId !== null || !this.enabled) return resolve();
+        const t = Math.min(1, (performance.now() - start) / ms);
+        const e = t * t * (3 - 2 * t);
+        this.centerX = fromX + (world.x - fromX) * e;
+        this.centerY = fromY + (world.y - fromY) * e;
+        this.apply();
+        if (t >= 1) return resolve();
+        requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    });
+  }
+
+  /** True if the user has panned/zoomed since the last call — read-and-clear. */
+  consumeUserMoved(): boolean {
+    const moved = this.userMoved;
+    this.userMoved = false;
+    return moved;
   }
 
   /** Smallest zoom at which the map still fills the whole screen. */
@@ -165,6 +197,8 @@ export class CombatCamera {
   }
 
   private panBy(dx: number, dy: number) {
+    this.userMoved = true;
+    this.panAnimId++;
     this.centerX -= dx / this.scale;
     this.centerY -= dy / this.scale;
     this.apply();
@@ -176,6 +210,8 @@ export class CombatCamera {
     const cover = this.coverScale();
     const next = Math.min(Math.max(this.scale * factor, cover), cover * MAX_ZOOM_OVER_COVER);
     if (Math.abs(next - this.scale) < 0.0001) return;
+    this.userMoved = true;
+    this.panAnimId++;
     // Keep the world point under the cursor fixed: shift the centre by the anchor's apparent move.
     const { width, height } = this.screenSize();
     const sx = clientX - rect.left;
