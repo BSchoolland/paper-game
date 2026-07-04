@@ -6,6 +6,7 @@ import { normalize, sub, add, scale, distance } from "../core/vec2.js";
 import { isPositionWalkable, isWithinBounds, findWalkablePosition } from "../map/collision-grid.js";
 import { moveRadiusOf } from "../combat/movement.js";
 import { createReactionBus, on, type ReactionHandler } from "../combat/reaction-bus.js";
+import { consequenceApplies } from "../combat/defense.js";
 
 let activeTemplateRegistry: Record<string, UnitTemplate> | null = null;
 
@@ -45,11 +46,10 @@ const attackReaction: ReactionHandler<"attack"> = (event, state, ctx) => {
 
   const ability = event.ability;
   for (const hit of event.hits) {
-    // A defended hit attenuates displacement-style consequences in equal measure: perfect block
-    // (multiplier 0) eats all knockback and on-hit pull, decent reduces them proportionally,
-    // unblocked hits behave as normal.
+    // Which of the hit's consequences land is the defense policy's call (combat/defense.ts):
+    // one table answers "does a guard stop this, or does it take a parry?" per consequence.
     const defMult = ctx.defenseMap?.get(hit.targetId) ?? 1;
-    const scaledKnockback = ability.knockback * defMult;
+    const scaledKnockback = consequenceApplies("knockback", defMult) ? ability.knockback : 0;
     if (scaledKnockback > 0) {
       const applied = knockbackTarget(hit.targetId, event.attackerPosition, scaledKnockback, current);
       current = applied.state;
@@ -58,12 +58,10 @@ const attackReaction: ReactionHandler<"attack"> = (event, state, ctx) => {
       if (applied.blocked && ability.wallSlamDamage && ability.wallSlamDamage > 0) {
         const target = current.entities.get(hit.targetId);
         if (target && !target.dead) {
-          const slamDamage = Math.round(ability.wallSlamDamage * defMult);
-          if (slamDamage > 0) {
-            const slam = applyDamage(current, [target], slamDamage);
-            current = slam.state;
-            events.push({ type: "collision", entityId: target.id, at: target.position, damage: slamDamage, killed: slam.hits[0]!.killed });
-          }
+          const slamDamage = ability.wallSlamDamage;
+          const slam = applyDamage(current, [target], slamDamage);
+          current = slam.state;
+          events.push({ type: "collision", entityId: target.id, at: target.position, damage: slamDamage, killed: slam.hits[0]!.killed });
         }
       }
     }
@@ -117,12 +115,11 @@ function applyWeaponEffect(
   defenseMult: number = 1
 ): { state: ActionResult["state"]; events: GameEvent[] } {
   switch (effect.type) {
-    case "pull": {
-      const scaled = effect.distance * defenseMult;
-      if (scaled <= 0) return { state, events: [] };
-      return pullTarget(targetId, attackerPos, scaled, state);
-    }
+    case "pull":
+      if (!consequenceApplies("pull", defenseMult)) return { state, events: [] };
+      return pullTarget(targetId, attackerPos, effect.distance, state);
     case "applyStatus":
+      if (!consequenceApplies(effect.status, defenseMult)) return { state, events: [] };
       return applyStatusEffect(targetId, { type: effect.status, duration: effect.duration, value: effect.value }, state);
   }
 }

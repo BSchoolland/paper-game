@@ -24,6 +24,7 @@ export * from "./combat/status-modifiers.js";
 export * from "./combat/zones.js";
 export * from "./combat/turn-resolver.js";
 export * from "./combat/power.js";
+export * from "./combat/defense.js";
 export * from "./combat/movement.js";
 export * from "./combat/phase.js";
 export * from "./overworld/movement-vote.js";

@@ -1,5 +1,6 @@
 import { ShapeKind } from "../core/types.js";
 import type { AttackAbility, CombatShapeDefinition } from "../core/types.js";
+import { DEFENSE_POLICY, type DefenseTier } from "./defense.js";
 
 export function powerToMultiplier(power: number | undefined): number {
   if (power === undefined) return 1;
@@ -20,20 +21,16 @@ function scaleShape(shape: CombatShapeDefinition, mult: number): CombatShapeDefi
   }
 }
 
-export type DefenseTier = "perfect" | "decent" | "none";
-
 export function defenseTierFromPower(power: number): DefenseTier {
   if (power >= 0.99) return "perfect";
   if (power >= 0.4) return "decent";
   return "none";
 }
 
+/** The tier→damage mapping lives in the defense policy (combat/defense.ts) with the rest
+ *  of the block rules. */
 export function defenseTierToMultiplier(tier: DefenseTier): number {
-  switch (tier) {
-    case "perfect": return 0;
-    case "decent": return 0.67;
-    case "none": return 1;
-  }
+  return DEFENSE_POLICY.damageMult[tier];
 }
 
 export function defenseToMultiplier(power: number): number {
