@@ -1,4 +1,4 @@
-import type { CodexEntryPayload, LootPoolEntry, RoomCode, ServerMessage } from "shared";
+import type { CodexEntryPayload, PartyBagEntry, RoomCode, ServerMessage } from "shared";
 
 type XpBanked = Extract<ServerMessage, { type: "xpBanked" }>;
 
@@ -6,7 +6,7 @@ type XpBanked = Extract<ServerMessage, { type: "xpBanked" }>;
 export type Toast =
   | { id: number; kind: "invite"; from: string; code: RoomCode; dimensionId: number }
   | { id: number; kind: "titles"; titleIds: readonly string[] }
-  | { id: number; kind: "loot"; drops: readonly LootPoolEntry[] }
+  | { id: number; kind: "loot"; drops: readonly PartyBagEntry[] }
   | { id: number; kind: "xpBanked"; banked: XpBanked }
   | { id: number; kind: "codexBanked"; entries: readonly CodexEntryPayload[]; firstItemIds: readonly string[] }
   | { id: number; kind: "error"; message: string };

@@ -1,15 +1,16 @@
-import type { LootPoolEntry } from "shared";
+import type { PartyBagEntry } from "shared";
 import { rollDrops } from "shared";
 import type { Room } from "./room.js";
 import type { RoomIO } from "./room-machine.js";
 import type { RunEvent } from "./run-events.js";
-import { loadItems, insertRunLoot } from "./db.js";
+import { loadItems, commitLootDrops } from "./db.js";
 
 /**
  * Loot drop recorder (docs/meta-loop/03-loot-codex.md §4.2): the `encounter-won` subscriber that
- * rolls the current dimension's item pool, persists the drops to the run's ledger, and grows the
- * party box. Pure recorder (02 §4.1 discipline): it persists + broadcasts, never touches
- * phase/vote/session. The roll uses Math.random in prod (tests seed via the pure shared rollDrops).
+ * rolls the current dimension's item pool, records the drops in the run_loot ledger, and lands
+ * them in the shared party bag — one durable tx. Pure recorder (02 §4.1 discipline): it persists +
+ * broadcasts, never touches phase/vote/session. The roll uses Math.random in prod (tests seed via
+ * the pure shared rollDrops).
  */
 export function lootDropRecorder(room: Room, io: RoomIO,
     ev: Extract<RunEvent, { type: "encounter-won" }>): void {
@@ -21,11 +22,12 @@ export function lootDropRecorder(room: Room, io: RoomIO,
   }
   const drops = rollDrops(pool, ev.icon, Math.random);
   if (drops.length === 0) return;
-  const entries: LootPoolEntry[] = drops.map((item) => ({
-    lootId: insertRunLoot(ev.runId, item, ev.hex, ev.icon, "drop"),
+  const bagIds = commitLootDrops(ev.runId, drops, ev.hex, ev.icon);
+  const entries: PartyBagEntry[] = drops.map((item, i) => ({
+    bagId: bagIds[i]!,
     item,
     sourceIcon: ev.icon,
   }));
-  room.lootPool = [...room.lootPool, ...entries];
+  room.partyBag = [...room.partyBag, ...entries];
   io.broadcast(room, { type: "lootFound", drops: entries });
 }

@@ -37,6 +37,8 @@ export const HANDLE_STEM = 28;
 export const HANDLE_RADIUS = 11;
 
 export const SLOT_REGIONS = REGIONS.filter((r) => r.name.startsWith("slot-"));
+/** The painted panel has a fixed slot grid; the shared party bag paginates over it. */
+export const BAG_PAGE_SIZE = SLOT_REGIONS.length;
 export const CLOSE_REGION = REGIONS.find((r) => r.name === "close-button")!;
 export const CHAR_REGION = REGIONS.find((r) => r.name === "character-area")!;
 

@@ -54,12 +54,10 @@ export function codexBankingRecorder(room: Room, io: RoomIO,
     ev: Extract<RunEvent, { type: "run-ended" }>): void {
   if (ev.outcome !== "victory" && ev.outcome !== "retreat") return; // locked #6/#7
 
-  // Designs found this run (flag #1): dedup the ledger by item id, keep the first row per design
-  // (its assigned_account_id feeds first-recovery credit, flag #6). Stash rows are player deposits
-  // into the party box, not finds — they never bank or claim firsts.
+  // Designs found this run (flag #1): dedup the drop ledger by item id, keep the first row per
+  // design. The party bag is storage, not finds — only run_loot rows bank.
   const byDesign = new Map<string, RunLootRow>();
   for (const row of loadRunLoot(ev.runId)) {
-    if (row.origin === "stash") continue;
     if (!byDesign.has(row.item_id)) byDesign.set(row.item_id, row);
   }
   if (byDesign.size === 0) return;
@@ -81,11 +79,10 @@ export function codexBankingRecorder(room: Room, io: RoomIO,
     if (meta.tier === null) { skippedUntiered++; skippedDims.add(row.dimension_id); continue; } // flag #5
     const item = JSON.parse(row.item_json) as ItemDefinition;
 
-    // Global first (flag #6): assignee if banking now, else host if banking, else first banker.
+    // Global first (flag #6): the host if banking, else the first banker (drops are party-shared
+    // in the bag, so there is no per-seat claimant to credit).
     const discoverer =
-      (row.assigned_account_id && bankAccounts.includes(row.assigned_account_id))
-        ? row.assigned_account_id
-        : (hostAccount && bankAccounts.includes(hostAccount)) ? hostAccount : bankAccounts[0]!;
+      (hostAccount && bankAccounts.includes(hostAccount)) ? hostAccount : bankAccounts[0]!;
     const isFirst = recordCodexFirst(item, discoverer);
     if (isFirst) {
       bumpStat(discoverer, "firsts_recovered", 1);

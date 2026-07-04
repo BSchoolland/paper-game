@@ -10,11 +10,11 @@ const DB_TS = resolve(import.meta.dir, "../db.ts");
 /**
  * The migration blocks must be re-runnable against a populated DB. Module cache makes an
  * in-process re-import meaningless, so run db.ts in TWO subprocesses against the same
- * file-backed DB: the first migrates a fresh DB v3->v10, the second must no-op cleanly at
- * user_version 10.
+ * file-backed DB: the first migrates a fresh DB v3->v11, the second must no-op cleanly at
+ * user_version 11.
  */
-describe("db migration idempotency (v10)", () => {
-  it("importing db.ts twice against the same DB exits 0 both times and lands on user_version 10", async () => {
+describe("db migration idempotency (v11)", () => {
+  it("importing db.ts twice against the same DB exits 0 both times and lands on user_version 11", async () => {
     const dir = mkdtempSync(join(tmpdir(), "coop-migration-"));
     const dbPath = join(dir, "migrate.sqlite");
     try {
@@ -35,7 +35,7 @@ describe("db migration idempotency (v10)", () => {
 
       const check = new Database(dbPath);
       const { user_version } = check.query("PRAGMA user_version").get() as { user_version: number };
-      expect(user_version).toBe(10);
+      expect(user_version).toBe(11);
       // Spot-check the v6 surface actually exists.
       const tables = (
         check.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]
@@ -73,6 +73,12 @@ describe("db migration idempotency (v10)", () => {
       for (const col of ["account_id", "item_id", "tier", "item_json", "acquired_at"]) {
         expect(codexCols).toContain(col);
       }
+      // Spot-check the v11 surface (shared party bag).
+      expect(tables).toContain("run_party_bag");
+      const bagCols = (check.query("PRAGMA table_info(run_party_bag)").all() as { name: string }[]).map((c) => c.name);
+      for (const col of ["run_id", "item_id", "item_json", "source_icon", "added_at"]) {
+        expect(bagCols).toContain(col);
+      }
       check.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
@@ -99,6 +105,10 @@ describe("db migration idempotency (v10)", () => {
       seed.exec("INSERT INTO dimensions (id, name) VALUES (2, 'The Gloom Hollows')");
       seed.exec("INSERT INTO runs (id, dimension_id) VALUES (42, 2)");
       seed.exec("INSERT INTO run_cleared_hexes (run_id, q, r) VALUES (42, 0, 0), (42, 1, 0)");
+      // A pre-party-bag per-seat bag row on the ACTIVE run: v11 must move it into run_party_bag.
+      seed.exec("CREATE TABLE items (id TEXT NOT NULL, dimension_id INTEGER NOT NULL, item_json TEXT NOT NULL, PRIMARY KEY (id, dimension_id))");
+      seed.exec(`INSERT INTO items (id, dimension_id, item_json) VALUES ('gloom-blade', 2, '{"id":"gloom-blade","name":"Gloom Blade"}')`);
+      seed.exec("INSERT INTO run_seat_items (run_id, seat_index, location, slot_order, item_id) VALUES (42, 0, 'bag', 0, 'gloom-blade')");
       seed.exec("PRAGMA user_version = 7");
       seed.close();
 
@@ -114,7 +124,7 @@ describe("db migration idempotency (v10)", () => {
       expect(exitCode).toBe(0);
 
       const check = new Database(dbPath);
-      expect((check.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(10);
+      expect((check.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(11);
       const run = check.query("SELECT dimension_id, start_dimension_id FROM runs WHERE id = 42").get() as {
         dimension_id: number;
         start_dimension_id: number;
@@ -127,6 +137,11 @@ describe("db migration idempotency (v10)", () => {
       }[];
       expect(cleared.map((c) => c.dimension_id)).toEqual([2, 2]); // re-keyed via the runs JOIN
       expect((check.query("SELECT tier FROM dimensions WHERE id = 2").get() as { tier: number }).tier).toBe(1);
+      // v11 bag backfill: the active run's per-seat bag row moved into the shared party bag.
+      const bagRows = check.query("SELECT item_id, item_json FROM run_party_bag WHERE run_id = 42").all() as { item_id: string; item_json: string }[];
+      expect(bagRows.map((r) => r.item_id)).toEqual(["gloom-blade"]);
+      expect(JSON.parse(bagRows[0]!.item_json).name).toBe("Gloom Blade");
+      expect((check.query("SELECT COUNT(*) AS n FROM run_seat_items WHERE location = 'bag'").get() as { n: number }).n).toBe(0);
       check.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });

@@ -462,15 +462,53 @@ const SCHEMA_VERSION = 3;
   }
 }
 
-// v10: the party box. stashLoot inserts player-deposited items into run_loot; `origin` separates
-// them from rolled drops so codex banking only mints designs actually FOUND this run (a stashed
-// preset/manifested item must never bank or claim a first-recovery).
+// v10 (vestigial): the short-lived party-box design let players stash items into run_loot;
+// `origin` separated deposits from drops. v11's shared party bag moved deposits to their own
+// table, so run_loot is a pure drop ledger again and `origin` is always 'drop' going forward.
 {
   const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
   if (user_version < 10) {
     const migrate = db.transaction(() => {
       db.exec("ALTER TABLE run_loot ADD COLUMN origin TEXT NOT NULL DEFAULT 'drop'");
       db.exec("PRAGMA user_version = 10");
+    });
+    migrate();
+  }
+}
+
+// v11: the shared party bag. All unequipped items live in one run-scoped pool; seats keep only
+// their equipped loadout in run_seat_items. item_json snapshots the definition at insert time
+// (run_loot precedent) so bag contents survive item-pool rewrites. Active runs' per-seat bag
+// rows backfill into the shared bag (resolved via the items table; ids are globally unique).
+{
+  const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
+  if (user_version < 11) {
+    const migrate = db.transaction(() => {
+      db.exec(`CREATE TABLE IF NOT EXISTS run_party_bag (
+        id          INTEGER PRIMARY KEY,        -- the stable equip handle (PartyBagEntry.bagId)
+        run_id      INTEGER NOT NULL,
+        item_id     TEXT NOT NULL,
+        item_json   TEXT NOT NULL,              -- ItemDefinition snapshot at insert time
+        source_icon TEXT,                       -- drop provenance; NULL for player deposits/staging
+        added_at    INTEGER NOT NULL,           -- ms epoch (run-table convention)
+        FOREIGN KEY (run_id) REFERENCES runs(id)
+      )`);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_run_party_bag_run ON run_party_bag (run_id)");
+      db.exec(`INSERT INTO run_party_bag (run_id, item_id, item_json, source_icon, added_at)
+        SELECT rsi.run_id, rsi.item_id,
+               COALESCE(
+                 (SELECT i.item_json FROM items i WHERE i.id = rsi.item_id LIMIT 1),
+                 (SELECT rl.item_json FROM run_loot rl
+                   WHERE rl.run_id = rsi.run_id AND rl.item_id = rsi.item_id LIMIT 1)),
+               NULL, 0
+        FROM run_seat_items rsi
+        JOIN runs r ON r.id = rsi.run_id AND r.active = 1
+        WHERE rsi.location = 'bag'
+          AND (EXISTS (SELECT 1 FROM items i WHERE i.id = rsi.item_id)
+            OR EXISTS (SELECT 1 FROM run_loot rl
+                 WHERE rl.run_id = rsi.run_id AND rl.item_id = rsi.item_id))`);
+      db.exec("DELETE FROM run_seat_items WHERE location = 'bag'");
+      db.exec("PRAGMA user_version = 11");
     });
     migrate();
   }
@@ -822,6 +860,7 @@ const delSeatsForRunStmt = db.prepare("DELETE FROM run_seats WHERE run_id = ?");
 const delClearedForRunEraseStmt = db.prepare("DELETE FROM run_cleared_hexes WHERE run_id = ?");
 const delPendingXpForRunStmt = db.prepare("DELETE FROM run_pending_xp WHERE run_id = ?");
 const delLootForRunStmt = db.prepare("DELETE FROM run_loot WHERE run_id = ?");
+const delPartyBagForRunStmt = db.prepare("DELETE FROM run_party_bag WHERE run_id = ?");
 const delRunStmt = db.prepare("DELETE FROM runs WHERE id = ?");
 
 /**
@@ -841,6 +880,7 @@ export function eraseClient(clientId: string): number {
       delClearedForRunEraseStmt.run(runId);
       delPendingXpForRunStmt.run(runId);
       delLootForRunStmt.run(runId);
+      delPartyBagForRunStmt.run(runId);
       delRunStmt.run(runId);
     }
   });
@@ -971,9 +1011,6 @@ export function saveSeatInventory(runId: number, seatIndex: number, inv: Invento
   const tx = db.transaction(() => {
     delSeatItemsStmt.run(runId, seatIndex);
     delSeatAttachStmt.run(runId, seatIndex);
-    inv.bag.forEach((item, i) => {
-      if (item) insSeatItemStmt.run(runId, seatIndex, "bag", i, item.id);
-    });
     inv.equipped.forEach((item, i) => insSeatItemStmt.run(runId, seatIndex, "equipped", i, item.id));
     for (const [itemId, att] of Object.entries(inv.attachments)) {
       insSeatAttachStmt.run(runId, seatIndex, itemId, JSON.stringify(att));
@@ -984,96 +1021,120 @@ export function saveSeatInventory(runId: number, seatIndex: number, inv: Invento
 
 export function loadSeatInventory(runId: number, seatIndex: number): InventoryState {
   const itemRows = seatItemsStmt.all(runId, seatIndex) as { location: string; slot_order: number; item_id: string }[];
-  const bag: (ItemDefinition | null)[] = new Array(16).fill(null);
   const equippedPairs: { order: number; item: ItemDefinition }[] = [];
   for (const row of itemRows) {
+    if (row.location !== "equipped") continue;
     const item = resolveItemForRun(runId, row.item_id); // live pool -> this run's drops -> codex snapshot (flag #8)
     if (!item) {
       console.warn(`[db] seat inventory: unknown item_id "${row.item_id}" (run ${runId} seat ${seatIndex}) — skipped`);
       continue;
     }
-    if (row.location === "bag") {
-      if (row.slot_order >= 0 && row.slot_order < 16) bag[row.slot_order] = item;
-    } else {
-      equippedPairs.push({ order: row.slot_order, item });
-    }
+    equippedPairs.push({ order: row.slot_order, item });
   }
   equippedPairs.sort((a, b) => a.order - b.order);
   const equipped = equippedPairs.map((p) => p.item);
   const attachments: Record<string, AttachmentData> = {};
   const attRows = seatAttachStmt.all(runId, seatIndex) as { item_id: string; attachment_json: string }[];
   for (const row of attRows) {
-    const owned = equipped.some((e) => e.id === row.item_id) || bag.some((b) => b?.id === row.item_id);
-    if (owned) attachments[row.item_id] = JSON.parse(row.attachment_json) as AttachmentData;
+    if (equipped.some((e) => e.id === row.item_id)) {
+      attachments[row.item_id] = JSON.parse(row.attachment_json) as AttachmentData;
+    }
   }
-  return { bag, equipped, attachments };
+  return { equipped, attachments };
 }
 
-// --- Loot ledger + party pool (run-scoped; docs/meta-loop/03-loot-codex.md §1.3) ---
+// --- Loot ledger (run-scoped; docs/meta-loop/03-loot-codex.md §1.3) ---
+// Pure drop record: codex banking reads it at run end; it is NOT storage (the party bag is).
 export interface RunLootRow {
   id: number; run_id: number; item_id: string; dimension_id: number; item_json: string;
   source_q: number; source_r: number; source_icon: string | null; dropped_at: number;
-  origin: "drop" | "stash";
-  assigned_seat_index: number | null; assigned_account_id: string | null; assigned_at: number | null;
 }
 
 const insertRunLootStmt = db.prepare(
-  `INSERT INTO run_loot (run_id, item_id, dimension_id, item_json, source_q, source_r, source_icon, dropped_at, origin)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-const unassignedLootStmt = db.prepare(
-  "SELECT * FROM run_loot WHERE run_id = ? AND assigned_seat_index IS NULL ORDER BY id");
+  `INSERT INTO run_loot (run_id, item_id, dimension_id, item_json, source_q, source_r, source_icon, dropped_at)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
 const allLootForRunStmt = db.prepare("SELECT * FROM run_loot WHERE run_id = ? ORDER BY id");
-// First-writer-wins claim (mirrors finalizeRun's AND active = 1 discipline).
-const assignLootStmt = db.prepare(
-  `UPDATE run_loot SET assigned_seat_index = ?, assigned_account_id = ?, assigned_at = ?
-   WHERE id = ? AND run_id = ? AND assigned_seat_index IS NULL`);
 const lootSnapshotForRunStmt = db.prepare(
   "SELECT item_json FROM run_loot WHERE run_id = ? AND item_id = ? LIMIT 1");
 
-/** Insert one party-box row; returns its lootId (rowid). */
-export function insertRunLoot(runId: number, item: ItemDefinition, source: HexCoord,
-    icon: HexIconType | null, origin: "drop" | "stash"): number {
-  const info = insertRunLootStmt.run(runId, item.id, item.dimensionId, JSON.stringify(item),
-    source.q, source.r, icon, Date.now(), origin);
-  return Number(info.lastInsertRowid);
-}
-export function loadUnassignedLoot(runId: number): RunLootRow[] {
-  return unassignedLootStmt.all(runId) as RunLootRow[];
-}
 export function loadRunLoot(runId: number): RunLootRow[] {
   return allLootForRunStmt.all(runId) as RunLootRow[];
 }
 
-/**
- * Claim commit (write-point discipline of commitExplore): mark the drop assigned AND persist the
- * claimant's new bag in ONE transaction — a crash can never assign an item without the bag row
- * (or vice versa). Returns false when another path already assigned it (stale vote resolve).
- */
-export function commitLootAssignment(runId: number, lootId: number, seatIndex: number,
-    accountId: string | null, inv: InventoryState): boolean {
-  let claimed = false;
+// --- Shared party bag (run-scoped storage for every unequipped item, v11) ---
+export interface PartyBagRow {
+  id: number; run_id: number; item_id: string; item_json: string;
+  source_icon: string | null; added_at: number;
+}
+
+const insPartyBagStmt = db.prepare(
+  "INSERT INTO run_party_bag (run_id, item_id, item_json, source_icon, added_at) VALUES (?, ?, ?, ?, ?)");
+const delPartyBagStmt = db.prepare("DELETE FROM run_party_bag WHERE id = ? AND run_id = ?");
+const partyBagForRunStmt = db.prepare("SELECT * FROM run_party_bag WHERE run_id = ? ORDER BY id");
+
+export function loadPartyBag(runId: number): PartyBagRow[] {
+  return partyBagForRunStmt.all(runId) as PartyBagRow[];
+}
+
+function insertPartyBagRow(runId: number, item: ItemDefinition, sourceIcon: HexIconType | null): number {
+  const info = insPartyBagStmt.run(runId, item.id, JSON.stringify(item), sourceIcon, Date.now());
+  return Number(info.lastInsertRowid);
+}
+
+/** Batch-insert bag items (run-start staging of preset extras + manifests). Returns the bagIds. */
+export function insertPartyBagItems(runId: number, items: readonly ItemDefinition[]): number[] {
+  const ids: number[] = [];
   const tx = db.transaction(() => {
-    claimed = assignLootStmt.run(seatIndex, accountId, Date.now(), lootId, runId).changes > 0;
-    if (claimed) saveSeatInventory(runId, seatIndex, inv); // nested tx = savepoint (bun:sqlite)
+    for (const item of items) ids.push(insertPartyBagRow(runId, item, null));
   });
   tx();
-  return claimed;
+  return ids;
 }
 
 /**
- * Stash commit (commitLootAssignment's inverse): insert the deposited item as an unassigned
- * run_loot row AND persist the depositor's shrunken bag in ONE transaction. source_icon is NULL —
- * stashed items carry no richness provenance. Returns the new row's lootId.
+ * Drop commit: record each drop in the run_loot ledger (codex banking truth) AND land it in the
+ * party bag (storage) in ONE transaction. Returns the new bagIds, drop-ordered.
  */
-export function commitLootStash(runId: number, item: ItemDefinition, source: HexCoord,
-    seatIndex: number, inv: InventoryState): number {
-  let lootId = 0;
+export function commitLootDrops(runId: number, drops: readonly ItemDefinition[],
+    source: HexCoord, icon: HexIconType | null): number[] {
+  const bagIds: number[] = [];
   const tx = db.transaction(() => {
-    lootId = insertRunLoot(runId, item, source, null, "stash");
+    for (const item of drops) {
+      insertRunLootStmt.run(runId, item.id, item.dimensionId, JSON.stringify(item),
+        source.q, source.r, icon, Date.now());
+      bagIds.push(insertPartyBagRow(runId, item, icon));
+    }
+  });
+  tx();
+  return bagIds;
+}
+
+/**
+ * Equip commit (write-point discipline of commitExplore): remove the bag row AND persist the
+ * equipper's loadout in ONE transaction — a crash can never equip an item without draining the
+ * bag row (or vice versa). Returns false when a racing seat already took the row.
+ */
+export function commitBagEquip(runId: number, bagId: number, seatIndex: number,
+    inv: InventoryState): boolean {
+  let taken = false;
+  const tx = db.transaction(() => {
+    taken = delPartyBagStmt.run(bagId, runId).changes > 0;
+    if (taken) saveSeatInventory(runId, seatIndex, inv); // nested tx = savepoint (bun:sqlite)
+  });
+  tx();
+  return taken;
+}
+
+/** Deposit commit (unequip): insert the bag row AND persist the shrunken loadout in ONE tx. */
+export function commitBagDeposit(runId: number, item: ItemDefinition, seatIndex: number,
+    inv: InventoryState): number {
+  let bagId = 0;
+  const tx = db.transaction(() => {
+    bagId = insertPartyBagRow(runId, item, null);
     saveSeatInventory(runId, seatIndex, inv); // nested tx = savepoint (bun:sqlite)
   });
   tx();
-  return lootId;
+  return bagId;
 }
 
 // --- Codex (account-scoped, permanent; NOT touched by eraseClient) ---

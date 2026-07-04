@@ -19,9 +19,9 @@ import type {
   ContractState,
   RunOutcome,
   GatewayInfo,
-  LootPoolEntry,
+  PartyBagEntry,
 } from "shared";
-import { BAG_SIZE, getAnimSet, getPreset, DEFAULT_PRESET_ID } from "shared";
+import { getAnimSet, getPreset, DEFAULT_PRESET_ID } from "shared";
 import type { CombatRuntime } from "./combat-runtime.js";
 import type { EncounterSession } from "./encounter-session.js";
 import type { HeroController } from "../../hero-arena/src/types.js";
@@ -154,8 +154,8 @@ export interface Room {
   defendRound: DefendRound | null;
   vote: RoomVote | null;
 
-  /** The party box: drops + stashed items (mirrors run_loot WHERE assigned_seat_index IS NULL). */
-  lootPool: LootPoolEntry[];
+  /** The shared party bag: every unequipped item this run (mirrors run_party_bag). */
+  partyBag: PartyBagEntry[];
 
   /** The run's contract; null only for legacy pre-v7 runs and not-yet-assigned lobbies. */
   contract: ContractState | null;
@@ -216,18 +216,12 @@ export function freshRoomCode(taken: (code: RoomCode) => boolean, maxTries = 50)
   return null; // exhausted -> ROOM_CREATE_FAILED
 }
 
-/** Build a seat's inventory from a starter preset: bag + auto-equipped kit + baked attachments. The
- *  single source of truth for a fresh seat's loadout (co-op path). Item ids resolve globally (flag #9:
- *  ids are unique across dimensions). An unknown preset id falls back to the default so a seat is
- *  never left unarmed. */
+/** Build a seat's loadout from a starter preset: the auto-equipped kit + baked attachments. The
+ *  preset's bag extras are NOT here — they stage into the shared party bag at run start
+ *  (seatContribution). Item ids resolve globally (flag #9: ids are unique across dimensions). An
+ *  unknown preset id falls back to the default so a seat is never left unarmed. */
 export function buildPresetInventory(presetId: string): InventoryState {
   const preset = getPreset(presetId) ?? getPreset(DEFAULT_PRESET_ID)!;
-
-  const bag: (ItemDefinition | null)[] = new Array(BAG_SIZE).fill(null);
-  preset.bagIds.forEach((id, i) => {
-    const item = getItemById(id);
-    if (item && i < BAG_SIZE) bag[i] = item;
-  });
 
   const equipped: ItemDefinition[] = [];
   for (const id of preset.equippedIds) {
@@ -241,7 +235,7 @@ export function buildPresetInventory(presetId: string): InventoryState {
     if (equipped.some((e) => e.id === itemId)) attachments[itemId] = att;
   }
 
-  return { bag, equipped, attachments };
+  return { equipped, attachments };
 }
 
 export function buildDefaultInventory(): InventoryState {
@@ -260,17 +254,16 @@ export function manifestItemsFor(seat: Seat): ItemDefinition[] {
   });
 }
 
-/** Starter preset + materialized codex designs into the first free bag slots (flag #11). Capacity is
- *  safe by construction (preset bag ≤ 2 + K ≤ 10 < BAG_SIZE); the throw is an invariant, not a check. */
-export function buildSeatLoadout(presetId: string, manifest: readonly ItemDefinition[]): InventoryState {
-  const inv = buildPresetInventory(presetId);
-  const bag = [...inv.bag];
-  for (const item of manifest) {
-    const free = bag.indexOf(null);
-    if (free === -1) throw new Error("buildSeatLoadout: bag overflow");
-    bag[free] = item;
+/** What this seat adds to the shared party bag at run start: the preset's bag extras plus its
+ *  manifested codex designs (materialize-at-start keeps lobby re-picking idempotent). */
+export function seatContribution(seat: Seat): ItemDefinition[] {
+  const preset = getPreset(seat.presetId ?? DEFAULT_PRESET_ID) ?? getPreset(DEFAULT_PRESET_ID)!;
+  const extras: ItemDefinition[] = [];
+  for (const id of preset.bagIds) {
+    const item = getItemById(id);
+    if (item) extras.push(item);
   }
-  return { ...inv, bag };
+  return [...extras, ...manifestItemsFor(seat)];
 }
 
 /** AI brain for a bot or disconnected seat — fixed `crafty` preset (the v1 difficulty). */

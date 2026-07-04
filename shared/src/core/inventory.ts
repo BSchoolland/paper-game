@@ -1,6 +1,12 @@
 import type { AnimSet, ItemDefinition, SlotType, SlotCost } from "./items.js";
 
-export const BAG_SIZE = 16;
+/** The shared party bag holds 16 slots per started seat (hard cap on player deposits;
+ *  loot drops always land even at the cap so loot is never lost). */
+export const PARTY_BAG_SLOTS_PER_PLAYER = 16;
+
+export function partyBagCapacity(seatCount: number): number {
+  return PARTY_BAG_SLOTS_PER_PLAYER * seatCount;
+}
 
 export const PLAYER_SLOTS: Record<SlotType, number> = {
   hand: 2,
@@ -19,18 +25,11 @@ export interface AttachmentData {
   readonly referenceFrame: string;
 }
 
+/** A seat's personal loadout: what the hero WEARS. Unequipped items live in the shared
+ *  party bag (RoomStatePayload.partyBag), not here. */
 export interface InventoryState {
-  readonly bag: readonly (ItemDefinition | null)[];
   readonly equipped: readonly ItemDefinition[];
   readonly attachments: Record<string, AttachmentData>;
-}
-
-export function createInventory(startingItems: ItemDefinition[]): InventoryState {
-  const bag: (ItemDefinition | null)[] = new Array(BAG_SIZE).fill(null);
-  for (let i = 0; i < startingItems.length && i < BAG_SIZE; i++) {
-    bag[i] = startingItems[i]!;
-  }
-  return { bag, equipped: [], attachments: {} };
 }
 
 function usedSlots(equipped: readonly ItemDefinition[]): Record<SlotType, number> {
@@ -51,29 +50,16 @@ export function canEquip(equipped: readonly ItemDefinition[], item: ItemDefiniti
   return true;
 }
 
-export function equipFromBag(inv: InventoryState, bagIndex: number): InventoryState {
-  const item = inv.bag[bagIndex];
-  if (!item) return inv;
-  if (!canEquip(inv.equipped, item)) return inv;
-
-  const newBag = [...inv.bag];
-  newBag[bagIndex] = null;
-  return { bag: newBag, equipped: [...inv.equipped, item], attachments: { ...inv.attachments } };
+export function equipItem(inv: InventoryState, item: ItemDefinition): InventoryState {
+  return { equipped: [...inv.equipped, item], attachments: { ...inv.attachments } };
 }
 
 export function unequipItem(inv: InventoryState, equippedIndex: number): InventoryState {
-  if (equippedIndex < 0 || equippedIndex >= inv.equipped.length) return inv;
-
-  const emptySlot = inv.bag.indexOf(null);
-  if (emptySlot === -1) return inv;
-
   const removedItem = inv.equipped[equippedIndex]!;
-  const newBag = [...inv.bag];
-  newBag[emptySlot] = removedItem;
   const newEquipped = inv.equipped.filter((_, i) => i !== equippedIndex);
   const newAttachments = { ...inv.attachments };
   delete newAttachments[removedItem.id];
-  return { bag: newBag, equipped: newEquipped, attachments: newAttachments };
+  return { equipped: newEquipped, attachments: newAttachments };
 }
 
 export function getEquippedWeapon(inv: InventoryState): ItemDefinition | null {

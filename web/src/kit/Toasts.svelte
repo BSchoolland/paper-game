@@ -22,13 +22,13 @@
         {/each}
       {:else if toast.kind === "loot"}
         <div class="t-title" style="color:var(--moss)">LOOT FOUND</div>
-        {#each toast.drops as drop (drop.lootId)}
+        {#each toast.drops as drop (drop.bagId)}
           <div class="lootrow">
             <ItemChip item={drop.item} small />
             <span class="lname r-{drop.item.rarity}">{drop.item.name}</span>
           </div>
         {/each}
-        <div class="sub">sent to the party box</div>
+        <div class="sub">added to the party bag</div>
       {:else if toast.kind === "xpBanked"}
         <div class="t-title">EXPEDITION BANKED</div>
         <div class="tname sc">+{toast.banked.banked} XP</div>

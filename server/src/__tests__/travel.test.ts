@@ -113,7 +113,7 @@ function buildRoom(opts: { sourceDim: number; sourceTier: number | null; humans?
     session: null,
     defendRound: null,
     vote: null,
-    lootPool: [],
+    partyBag: [],
     contract: null,
     outcome: null,
     chatLog: [],

@@ -1407,7 +1407,7 @@ async function enterCombatLive(host: MockClient, code: string): Promise<import("
 }
 
 describe("loot & codex integration", () => {
-  it("a treasure-hex win drops loot into the party box; a take assigns it instantly", async () => {
+  it("a treasure-hex win drops loot straight into the shared party bag", async () => {
     const host = await connectClient(server);
     await hello(host);
     const { code } = await createRoom(host, 2);
@@ -1421,20 +1421,15 @@ describe("loot & codex integration", () => {
     host.send({ type: "debugWin" });
     const found = await host.nextOf("lootFound", { fromNow: true, timeoutMs: 8000 });
     expect(found.drops.length).toBeGreaterThanOrEqual(1);
-    const rs = await host.waitFor(isOverworldRoomState, { consumeBuffered: false, timeoutMs: 8000 });
-    expect(rs.room.lootPool.length).toBeGreaterThanOrEqual(1);
-    const { lootId, item } = rs.room.lootPool[0]!;
-
-    host.mark();
-    host.send({ type: "takeLoot", lootId });
-    const inv = await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
-    expect(inv.inventory.bag.some((b) => b?.id === item.id)).toBe(true);
-    const drained = await host.waitFor(
+    const dropIds = found.drops.map((d) => d.bagId);
+    // The post-combat roomState carries every drop in the shared bag (same bagIds as the toast).
+    const rs = await host.waitFor(
       (m): m is Extract<ServerMessage, { type: "roomState" }> =>
-        m.type === "roomState" && !m.room.lootPool.some((e) => e.lootId === lootId),
+        m.type === "roomState" && m.room.phase === "overworld" &&
+        dropIds.every((id) => m.room.partyBag.some((e) => e.bagId === id)),
       { consumeBuffered: false, timeoutMs: 8000 },
     );
-    expect(drained.room.lootPool.some((e) => e.lootId === lootId)).toBe(false);
+    expect(rs.room.partyBag.length).toBeGreaterThanOrEqual(found.drops.length);
     host.close();
   }, 30000);
 
@@ -1488,7 +1483,7 @@ describe("loot & codex integration", () => {
     fresh.close();
   }, 30000);
 
-  it("chooseManifest materializes a banked design into the seat loadout; a tier-gated design is rejected", async () => {
+  it("chooseManifest stages a banked design; it lands in the party bag at start; a tier-gated design is rejected", async () => {
     const dbmod = await import("../db.js");
     const acctMod = await import("../accounts.js");
     const host = await connectClient(server);
@@ -1510,25 +1505,32 @@ describe("loot & codex integration", () => {
 
     host.mark();
     host.send({ type: "chooseManifest", itemIds: [design.id] });
-    // applyInventoryChange emits inventory THEN roomState; wait for the manifestIds roomState, then
-    // read the latest inventory (the just-materialized bag) — avoids racing the createRoom inventory.
+    // Manifests are lobby staging only now: the roster's manifestIds update, the loadout doesn't.
     const rs = await host.waitFor(
       (m): m is Extract<ServerMessage, { type: "roomState" }> =>
         m.type === "roomState" && (m.room.seats.find((s) => s.seatId === mySeat)?.manifestIds ?? []).includes(design.id),
       { consumeBuffered: false, timeoutMs: 8000 },
     );
     expect(rs.room.seats.find((s) => s.seatId === mySeat)!.manifestIds).toContain(design.id);
-    const inv = host.latest("inventory")!;
-    expect(inv.inventory.bag.some((b) => b?.id === design.id)).toBe(true);
 
     host.mark();
     host.send({ type: "chooseManifest", itemIds: [highDesign.id] });
     const err = await host.nextOf("error", { fromNow: true, timeoutMs: 8000 });
     expect(err.message).toBe("That design's tier exceeds this expedition");
+
+    // Re-stage the eligible design, then start: it materializes into the shared party bag.
+    host.send({ type: "chooseManifest", itemIds: [design.id] });
+    host.send({ type: "startGame" });
+    const over = await host.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+        m.type === "roomState" && m.room.phase === "overworld",
+      { consumeBuffered: false, timeoutMs: 8000 },
+    );
+    expect(over.room.partyBag.some((e) => e.item.id === design.id)).toBe(true);
     host.close();
   }, 30000);
 
-  it("two humans: a drop is takeable instantly (no vote), and a stash puts it back for the other seat", async () => {
+  it("two humans: an unequipped item lands in the shared bag and the other seat can equip it", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
     await hello(host);
@@ -1538,45 +1540,40 @@ describe("loot & codex integration", () => {
     await guest.nextOf("welcome");
     await guest.waitFor(isRoomState);
     await startAndReachOverworld(host);
+    void code;
 
-    // Two humans: entering combat needs the guest's yes on the move vote.
-    guest.mark();
-    host.send({ type: "proposeMove", target: { q: 1, r: 0 } });
-    const mv = await guest.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
-    guest.send({ type: "castVote", proposalId: mv.vote!.proposalId, vote: "yes" });
-    await host.nextOf("combatStart", { fromNow: true, timeoutMs: 8000 });
-    const room = rooms.get(code as never)!;
-    const ph = room.pendingHex!;
-    room.hexMap = { ...room.hexMap, icons: { ...room.hexMap.icons, [hexKey(ph)]: "treasure" } };
-
-    host.mark();
-    host.send({ type: "debugWin" });
-    const found = await host.nextOf("lootFound", { fromNow: true, timeoutMs: 8000 });
-    const entry = found.drops[0]!;
-
-    // With two connected humans the take is still instant — no voteState opens.
-    host.mark();
-    host.send({ type: "takeLoot", lootId: entry.lootId });
-    const inv = await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
-    const bagIndex = inv.inventory.bag.findIndex((b) => b?.id === entry.item.id);
-    expect(bagIndex).toBeGreaterThanOrEqual(0);
-    expect(room.vote).toBeNull();
-
-    // Stash it back: a new unassigned box entry appears for everyone, and the guest takes it.
-    // Stashed entries carry sourceIcon null, which distinguishes this roomState from the buffered
-    // pre-take one (those drops came from the treasure hex).
-    host.send({ type: "stashLoot", bagIndex });
-    const rs = await guest.waitFor(
+    // Guest returns its sword to the shared bag; the deposit is visible to the host too.
+    const ginv = guest.latest("inventory")!;
+    const swordIdx = ginv.inventory.equipped.findIndex((i) => i.id === "short-sword");
+    expect(swordIdx).toBeGreaterThanOrEqual(0);
+    guest.send({ type: "unequip", equippedIndex: swordIdx });
+    const withDeposit = await host.waitFor(
       (m): m is Extract<ServerMessage, { type: "roomState" }> =>
-        m.type === "roomState" && m.room.lootPool.some((e) => e.item.id === entry.item.id && e.sourceIcon === null),
+        m.type === "roomState" && m.room.partyBag.some((e) => e.item.id === "short-sword"),
       { timeoutMs: 8000 },
     );
-    const stashed = rs.room.lootPool.find((e) => e.item.id === entry.item.id && e.sourceIcon === null)!;
+    const deposited = withDeposit.room.partyBag.find((e) => e.item.id === "short-sword")!;
 
-    guest.mark();
-    guest.send({ type: "takeLoot", lootId: stashed.lootId });
-    const ginv = await guest.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
-    expect(ginv.inventory.bag.some((b) => b?.id === entry.item.id)).toBe(true);
+    // Host frees a hand (its own sword goes to the bag), then wields the guest's sword.
+    const hinv = host.latest("inventory")!;
+    const hostSwordIdx = hinv.inventory.equipped.findIndex((i) => i.id === "short-sword");
+    host.mark();
+    host.send({ type: "unequip", equippedIndex: hostSwordIdx });
+    await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
+    host.mark();
+    host.send({ type: "equip", bagId: deposited.bagId });
+    const after = await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
+    expect(after.inventory.equipped.some((i) => i.id === "short-sword")).toBe(true);
+    // The guest's specific deposit is gone from the bag; the host's own deposit remains.
+    // (Positive match on the host's deposit so buffered empty-bag lobby states can't satisfy it.)
+    const drained = await guest.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+        m.type === "roomState" &&
+        m.room.partyBag.some((e) => e.item.id === "short-sword") &&
+        !m.room.partyBag.some((e) => e.bagId === deposited.bagId),
+      { timeoutMs: 8000 },
+    );
+    expect(drained.room.partyBag.some((e) => e.item.id === "short-sword")).toBe(true);
     host.close();
     guest.close();
   }, 30000);

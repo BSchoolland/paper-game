@@ -1,4 +1,4 @@
-import type { InventoryState, ItemDefinition } from "shared";
+import type { InventoryState, ItemDefinition, PartyBagEntry } from "shared";
 import { PLAYER_SLOTS } from "shared";
 import { itemSpriteUrl } from "../render/item-sprites.js";
 import type { SlotType } from "shared";
@@ -24,6 +24,8 @@ import {
 
 export interface RenderState {
   inventory: InventoryState | null;
+  /** The current page of the shared party bag (≤ BAG_PAGE_SIZE entries). */
+  bagPage: readonly PartyBagEntry[];
   positions: Map<string, ItemPosition>;
   selectedItemId: string | null;
   mode: InteractionMode;
@@ -228,8 +230,7 @@ export class InventoryRenderer {
 
     for (let i = 0; i < SLOT_REGIONS.length; i++) {
       const r = SLOT_REGIONS[i]!;
-      if (i >= state.inventory.bag.length) break;
-      const item = state.inventory.bag[i];
+      const item = state.bagPage[i]?.item;
       if (!item) continue;
 
       const equipable = canEquip(state.inventory.equipped, item);

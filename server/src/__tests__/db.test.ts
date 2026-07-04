@@ -95,9 +95,8 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
 
   it("round-trips a per-seat inventory (empty) and tolerates no seeded items", () => {
     const runId = db.startNewRun(1, "inv", 2);
-    db.saveSeatInventory(runId, 0, { bag: new Array(16).fill(null), equipped: [], attachments: {} });
+    db.saveSeatInventory(runId, 0, { equipped: [], attachments: {} });
     const inv = db.loadSeatInventory(runId, 0);
-    expect(inv.bag.length).toBe(16);
     expect(inv.equipped.length).toBe(0);
   });
 
@@ -146,7 +145,7 @@ describe("durable DB: global discovery + per-run cleared (Phase 3 / v3)", () => 
   it("eraseClient hard-deletes per-run rows but leaves the GLOBAL community map intact (R33)", () => {
     const runId = db.startNewRun(12, "gdpr", 2);
     db.upsertRunSeat(runId, 0, { clientId: "gdpr", displayName: "X", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: null });
-    db.saveSeatInventory(runId, 0, { bag: new Array(16).fill(null), equipped: [], attachments: {} });
+    db.saveSeatInventory(runId, 0, { equipped: [], attachments: {} });
     db.commitExplore(12, runId, { q: 1, r: 0 }, "wilderness"); // global discovery + this-run cleared
 
     const erased = db.eraseClient("gdpr");

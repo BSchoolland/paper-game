@@ -17,7 +17,7 @@ import type {
   Entity,
   TeamId,
   GatewayInfo,
-  LootPoolEntry,
+  PartyBagEntry,
   ItemDefinition,
 } from "shared";
 import {
@@ -42,7 +42,7 @@ import {
 } from "shared";
 import type { ContractState } from "shared";
 import type { Room, Seat, DefendRound, DefendTarget, RoomVote } from "./room.js";
-import { seatBuildSpec, sovereignFor } from "./room.js";
+import { seatBuildSpec, sovereignFor, seatContribution, buildPresetInventory } from "./room.js";
 import {
   coopPhaseOf,
   isPlayerInputOpen,
@@ -76,12 +76,11 @@ import {
   loadSeatInventory,
   accruePendingXp,
   getDimensionMeta,
-  loadUnassignedLoot,
-  commitLootAssignment,
-  commitLootStash,
+  loadPartyBag,
+  insertPartyBagItems,
   loadCodexEntry,
 } from "./db.js";
-import type { RunLootRow } from "./db.js";
+import type { PartyBagRow } from "./db.js";
 import { setSeatAccountIfNull } from "./db.js";
 import { loadGatewaysForDimension, ensureGatewayAttuned } from "./gateways.js";
 import { loadCardProfile } from "./accounts.js";
@@ -89,7 +88,7 @@ import { emitRunEvent } from "./run-events.js";
 import { eligibleSeats } from "./run-recorders.js";
 import { assignContract } from "./contract-engine.js";
 import { rooms } from "./room-registry.js";
-import { buildSeatLoadout, manifestItemsFor, freshRoomCode, heroEntityIdFor, seatIdForIndex } from "./room.js";
+import { freshRoomCode, heroEntityIdFor, seatIdForIndex } from "./room.js";
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -167,7 +166,7 @@ export function roomStatePayload(room: Room, forSeat: Seat | null): RoomStatePay
     dimensionTier: room.dimensionTier,
     contract: room.contract,
     outcome: room.outcome,
-    lootPool: room.lootPool,
+    partyBag: room.partyBag,
     rested: room.rested,
   };
 }
@@ -260,13 +259,24 @@ function seatById(room: Room, seatId: SeatId): Seat | null {
   return room.seats.find((s) => s.seatId === seatId) ?? null;
 }
 
-/** Parse a persisted drop row into a wire pool entry (snapshot resolution — no items-table read). */
-export function rowToPoolEntry(row: RunLootRow): LootPoolEntry {
+/** Parse a persisted bag row into a wire entry (snapshot resolution — no items-table read). */
+export function bagRowToEntry(row: PartyBagRow): PartyBagEntry {
   return {
-    lootId: row.id,
+    bagId: row.id,
     item: JSON.parse(row.item_json) as ItemDefinition,
     sourceIcon: row.source_icon as HexIconType | null,
   };
+}
+
+/** Stage every started seat's contribution (preset extras + manifests) into the shared party bag —
+ *  the materialize-at-start half of the lobby's presetId/manifestIds staging (run start + run swap). */
+export function stagePartyBagContributions(room: Room): void {
+  const items = room.seats.flatMap((seat) => seatContribution(seat));
+  const bagIds = insertPartyBagItems(room.runId, items);
+  room.partyBag = [
+    ...room.partyBag,
+    ...items.map((item, i) => ({ bagId: bagIds[i]!, item, sourceIcon: null })),
+  ];
 }
 
 function heroEntity(room: Room, seat: Seat): Entity | undefined {
@@ -1039,66 +1049,6 @@ export function proposeTravel(room: Room, io: RoomIO, seat: Seat): void {
   });
 }
 
-/**
- * Take a party-box item into YOUR bag (03-loot-codex §4.3) — instant, no vote. First-writer-wins
- * on the run_loot row keeps racing takes safe.
- */
-export function takeLoot(room: Room, io: RoomIO, seat: Seat, lootId: number): void {
-  const err = (code: import("shared").ErrorCode, message: string) =>
-    io.send(seat, { type: "error", code, message, recoverable: true });
-
-  if (room.phase !== "overworld") return err("BAD_PHASE", "Not in overworld");
-  if (seat.state !== "human-connected") return err("NOT_YOUR_SEAT", "Spectators cannot take items");
-  const entry = room.lootPool.find((e) => e.lootId === lootId);
-  if (!entry) return err("INVALID_INPUT", "That item is no longer available");
-  assignLoot(room, io, seat, entry);
-}
-
-/** Put one of YOUR bag items into the party box — anyone may take it back later. */
-export function stashLoot(room: Room, io: RoomIO, seat: Seat, bagIndex: number): void {
-  const err = (code: import("shared").ErrorCode, message: string) =>
-    io.send(seat, { type: "error", code, message, recoverable: true });
-
-  if (room.phase !== "overworld") return err("BAD_PHASE", "Not in overworld");
-  if (seat.state !== "human-connected") return err("NOT_YOUR_SEAT", "Spectators cannot stash items");
-  const item = seat.inventory.bag[bagIndex];
-  if (!item) return err("INVALID_INPUT", "No item in that bag slot");
-
-  const bag = [...seat.inventory.bag];
-  bag[bagIndex] = null;
-  const nextInv = { ...seat.inventory, bag };
-  const newLootId = commitLootStash(room.runId, item, room.hexMap.playerPos,
-    seat.seatIndex, nextInv); // one durable tx (§1.3)
-  seat.inventory = nextInv;
-  room.lootPool = [...room.lootPool, { lootId: newLootId, item, sourceIcon: null }];
-  sendInventory(room, io, seat);
-  broadcastRoomState(room, io); // box grew
-}
-
-/**
- * The single take-commit path: check the taker's bag, mark the drop assigned + persist the new
- * bag in one durable tx, drain the box, and re-broadcast. A racing path that already assigned
- * the row makes this a no-op.
- */
-function assignLoot(room: Room, io: RoomIO, seat: Seat, entry: LootPoolEntry): void {
-  const free = seat.inventory.bag.indexOf(null);
-  if (free === -1 || seat.state === "open" || seat.state === "bot") {
-    io.send(seat, { type: "error", code: "INVALID_INPUT",
-      message: "Take failed — no free bag slot", recoverable: true });
-    return; // item stays in the box
-  }
-  const bag = [...seat.inventory.bag];
-  bag[free] = entry.item;
-  const nextInv = { ...seat.inventory, bag };
-  const claimed = commitLootAssignment(room.runId, entry.lootId, seat.seatIndex,
-    seat.accountId, nextInv); // one durable tx (§1.3)
-  if (!claimed) return; // already assigned by a racing path — no-op
-  seat.inventory = nextInv;
-  room.lootPool = room.lootPool.filter((e) => e.lootId !== entry.lootId);
-  sendInventory(room, io, seat);
-  broadcastRoomState(room, io); // box shrank + loadoutSummary changed
-}
-
 /** Install + broadcast an open vote and arm its deadline timer (one open vote per room). */
 function openVote(room: Room, io: RoomIO, vote: RoomVote): void {
   room.vote = vote;
@@ -1453,7 +1403,7 @@ export function resetToOrigin(room: Room, io: RoomIO, outcome: "defeat" | "aband
   room.visitedThisRun = new Set([originKey]);
   room.gateways = loadGatewaysForDimension(startDim);
   room.runClearedCount = 0;
-  room.lootPool = []; // fresh run: unclaimed drops from the old run are gone (flag #12)
+  room.partyBag = []; // fresh run: the old run's bag is gone (flag #12); staged again below
   room.rested = false; // fresh run starts un-rested (rest is granted on arrival, never at start; flag #8)
   room.phase = "overworld";
   room.pendingHex = null;
@@ -1461,7 +1411,7 @@ export function resetToOrigin(room: Room, io: RoomIO, outcome: "defeat" | "aband
   // This path skips the lobby entirely, so the fresh run gets the default contract (flag #2).
   assignContract(room, DEFAULT_CONTRACT_TYPE);
 
-  // Persist seats + fresh starter inventory for the new run. Manifests are permanent knowledge, so
+  // Persist seats + fresh starter loadouts for the new run. Manifests are permanent knowledge, so
   // re-apply each seat's still-eligible picks against the start dimension's tier (flag #12).
   const startingTier = effectiveStartingTier(room.dimensionTier);
   for (const seat of room.seats) {
@@ -1470,11 +1420,12 @@ export function resetToOrigin(room: Room, io: RoomIO, outcome: "defeat" | "aband
       const e = loadCodexEntry(seat.accountId, id);
       return e ? isManifestable(JSON.parse(e.item_json) as ItemDefinition, e.tier, startingTier) : false;
     });
-    seat.inventory = buildSeatLoadout(DEFAULT_PRESET_ID, manifestItemsFor(seat));
+    seat.inventory = buildPresetInventory(DEFAULT_PRESET_ID);
     seat.presetId = DEFAULT_PRESET_ID;
     seat.animSet = getAnimSet(seat.inventory.equipped);
     persistSeat(room, seat);
   }
+  stagePartyBagContributions(room); // preset extras + surviving manifests land in the fresh bag
 
   broadcastRoomState(room, io);
   broadcastHexMapState(room, io);
@@ -1811,8 +1762,8 @@ export function reconstructRoomForRun(
     session: null,
     defendRound: null,
     vote: null,
-    // Rehydrated from run_loot snapshots (no items-table dependency, flag #8); manifestIds empty above.
-    lootPool: loadUnassignedLoot(runId).map(rowToPoolEntry),
+    // Rehydrated from run_party_bag snapshots (no items-table dependency, flag #8); manifestIds empty above.
+    partyBag: loadPartyBag(runId).map(bagRowToEntry),
     // Rehydrated verbatim (§4.6); NULL stays null (legacy pre-contract runs, flag #11). Only
     // active runs are reconstructed, so there is no outcome yet.
     contract: runRow.contract_json ? (JSON.parse(runRow.contract_json) as ContractState) : null,

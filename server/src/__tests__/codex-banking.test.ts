@@ -73,18 +73,14 @@ function buildRoom(opts: { dim: number; tier: number | null; humans?: number; sa
     hexMap: { playerPos: ORIGIN, hexes: { [ORIGIN_KEY]: "explored" }, icons: { [ORIGIN_KEY]: "town" as HexIconType } },
     visitedThisRun: new Set([ORIGIN_KEY]), runClearedCount: 0, pendingHex: null, rested: false,
     capacity, seats, listed: false, rematchCode: null,
-    session: null, defendRound: null, vote: null, lootPool: [],
+    session: null, defendRound: null, vote: null, partyBag: [],
     contract: null, outcome: null, chatLog: [], reapTimer: null, lastActivityMs: Date.now(),
   };
   return { room, runId, accountIds };
 }
 
-function dropRow(runId: number, item: ItemDefinition, assignSeat?: { index: number; accountId: string }): void {
-  const lootId = db.insertRunLoot(runId, item, ORIGIN, "treasure", "drop");
-  if (assignSeat) {
-    db.db.prepare("UPDATE run_loot SET assigned_seat_index = ?, assigned_account_id = ?, assigned_at = ? WHERE id = ?")
-      .run(assignSeat.index, assignSeat.accountId, Date.now(), lootId);
-  }
+function dropRow(runId: number, item: ItemDefinition): void {
+  db.commitLootDrops(runId, [item], ORIGIN, "treasure");
 }
 
 function ev(runId: number, outcome: "victory" | "defeat" | "retreat" | "abandoned"): Extract<RunEvent, { type: "run-ended" }> {
@@ -96,23 +92,23 @@ function codexBankedFor(sends: SentRecord[], seatId: SeatId): Extract<ServerMess
 }
 
 describe("codexBankingRecorder — victory", () => {
-  it("banks assigned + unclaimed designs to every eligible account with correct first-recovery credit", () => {
+  it("banks every found design to every eligible account; first-recovery credit goes to the host", () => {
     mkDim(8300, 1);
     const { room, runId, accountIds } = buildRoom({ dim: 8300, tier: 1, humans: 2 });
     const [accA, accB] = accountIds as [string, string];
-    dropRow(runId, mkWeapon("cbank-d1", 8300), { index: 1, accountId: accB }); // assigned to seat B
-    dropRow(runId, mkWeapon("cbank-d2", 8300)); // unclaimed -> host (seat A)
+    dropRow(runId, mkWeapon("cbank-d1", 8300));
+    dropRow(runId, mkWeapon("cbank-d2", 8300));
 
     const { io, sends } = recordingIO();
     codex.codexBankingRecorder(room, io, ev(runId, "victory"));
 
-    // Both accounts gained BOTH designs (unclaimed banks too, flag #2).
+    // Both accounts gained BOTH designs (party-shared bag: everyone banks every find, flag #2).
     for (const acc of [accA, accB]) {
       expect(db.loadCodexEntry(acc, "cbank-d1")).not.toBeNull();
       expect(db.loadCodexEntry(acc, "cbank-d2")).not.toBeNull();
     }
-    // First-recovery: assigned design -> seat B; unclaimed -> host (seat A).
-    expect(db.loadCodexFirst("cbank-d1")!.account_id).toBe(accB);
+    // First-recovery: drops have no per-seat claimant, so the host (seat A) is the discoverer.
+    expect(db.loadCodexFirst("cbank-d1")!.account_id).toBe(accA);
     expect(db.loadCodexFirst("cbank-d2")!.account_id).toBe(accA);
 
     // Per-seat pushes carry the right entries + firstItemIds.
@@ -120,12 +116,12 @@ describe("codexBankingRecorder — victory", () => {
     const pushB = codexBankedFor(sends, room.seats[1]!.seatId)!;
     expect(pushA.entries.map((e) => e.item.id).sort()).toEqual(["cbank-d1", "cbank-d2"]);
     expect(pushB.entries.map((e) => e.item.id).sort()).toEqual(["cbank-d1", "cbank-d2"]);
-    expect(pushA.firstItemIds).toEqual(["cbank-d2"]);
-    expect(pushB.firstItemIds).toEqual(["cbank-d1"]);
+    expect([...pushA.firstItemIds].sort()).toEqual(["cbank-d1", "cbank-d2"]);
+    expect(pushB.firstItemIds).toEqual([]);
 
     // Stats bumped; trailblazer earned (firsts_recovered >= 1).
     expect(accounts.getStats(accA)["designs_recovered"]).toBe(2);
-    expect(accounts.getStats(accA)["firsts_recovered"]).toBe(1);
+    expect(accounts.getStats(accA)["firsts_recovered"]).toBe(2);
     const titlesA = sends.filter((s) => s.seatId === room.seats[0]!.seatId && s.msg.type === "titlesEarned")
       .flatMap((s) => (s.msg as Extract<ServerMessage, { type: "titlesEarned" }>).titleIds);
     expect(titlesA).toContain("trailblazer");
@@ -226,14 +222,14 @@ describe("codexBankingRecorder — dedup + idempotency", () => {
   });
 });
 
-describe("codexBankingRecorder — stash rows never bank", () => {
-  it("a stashed (player-deposited) item banks nothing; a dropped design still banks", () => {
+describe("codexBankingRecorder — bag deposits never bank", () => {
+  it("an unequipped (player-deposited) item banks nothing; a dropped design still banks", () => {
     mkDim(8308, 1);
     const { room, runId, accountIds } = buildRoom({ dim: 8308, tier: 1, humans: 1 });
     const [accA] = accountIds as [string];
     dropRow(runId, mkWeapon("cbank-found", 8308));
-    // A preset item stashed into the party box: origin "stash", never a find.
-    db.insertRunLoot(runId, mkWeapon("cbank-preset", 8308), ORIGIN, null, "stash");
+    // A preset item unequipped into the party bag: storage only, never a find.
+    db.commitBagDeposit(runId, mkWeapon("cbank-preset", 8308), 0, { equipped: [], attachments: {} });
 
     const { io } = recordingIO();
     codex.codexBankingRecorder(room, io, ev(runId, "victory"));

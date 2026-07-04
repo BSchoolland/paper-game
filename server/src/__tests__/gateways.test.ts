@@ -178,19 +178,18 @@ describe("commitTravel + per-dimension cleared state (flag #8/#9)", () => {
     expect(meta.name).toBe("Regenerated"); // every generator-owned column still updates
   });
 
-  it("getItemById resolves globally; loadSeatInventory rehydrates a bag item from any dimension (flag #9)", () => {
+  it("getItemById resolves globally; loadSeatInventory rehydrates an equipped item from any dimension (flag #9)", () => {
     // An item that lives in a dimension well outside the old 0-3 merge window.
     db.saveItems(730, { "d730-relic": { id: "d730-relic", name: "Relic", sprite: "relic", dimensionId: 730 } as never });
     expect(db.getItemById("d730-relic")!.name).toBe("Relic");
     expect(db.getItemById("nope")).toBeNull();
 
-    const runId = db.startNewRun(0, "bagger", 2); // run in dim 0, carrying a dim-730 item
+    const runId = db.startNewRun(0, "bagger", 2); // run in dim 0, wearing a dim-730 item
     db.saveSeatInventory(runId, 0, {
-      bag: [db.getItemById("d730-relic")!, ...new Array(15).fill(null)],
-      equipped: [],
+      equipped: [db.getItemById("d730-relic")!],
       attachments: {},
     });
     const inv = db.loadSeatInventory(runId, 0);
-    expect(inv.bag[0]?.id).toBe("d730-relic"); // rehydrated despite being a non-current-dimension item
+    expect(inv.equipped[0]?.id).toBe("d730-relic"); // rehydrated despite being a non-current-dimension item
   });
 });

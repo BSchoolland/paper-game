@@ -1,4 +1,4 @@
-import type { AttachmentData, InventoryState, ItemDefinition, WeaponItem, ShieldItem, ConsumableItem, AccessoryItem } from "shared";
+import type { AttachmentData, InventoryState, ItemDefinition, PartyBagEntry, WeaponItem, ShieldItem, ConsumableItem, AccessoryItem } from "shared";
 import { ShapeKind, describeWeaponEffect } from "shared";
 import {
   type ItemPosition,
@@ -10,6 +10,7 @@ import {
   RARITY_COLORS,
   TARGET_SIZE,
   TYPE_BASE_SCALE,
+  BAG_PAGE_SIZE,
 } from "./inventory-layout.js";
 import { InventoryRenderer } from "./inventory-renderer.js";
 import { InventoryInput } from "./inventory-input.js";
@@ -19,7 +20,8 @@ import { assetUrl } from "../../lib/urls.js";
 
 export interface PackEditorHooks {
   canEdit(): boolean;
-  sendEquip(bagIndex: number): void;
+  canUnequip(): boolean;
+  sendEquip(bagId: number): void;
   sendUnequip(equippedIndex: number): void;
   sendAttachment(itemId: string, attachment: AttachmentData): void;
   onClose(): void;
@@ -35,6 +37,8 @@ export interface PackEditorHooks {
  */
 export class PackEditor {
   private inventory: InventoryState | null = null;
+  private partyBag: readonly PartyBagEntry[] = [];
+  private page = 0;
 
   private canvas!: HTMLCanvasElement;
   private ctx!: CanvasRenderingContext2D;
@@ -75,6 +79,30 @@ export class PackEditor {
   setInventory(inv: InventoryState | null): void {
     this.inventory = inv;
     this.draw();
+  }
+
+  /** The shared party bag (full list); the grid shows the current BAG_PAGE_SIZE page. */
+  setPartyBag(entries: readonly PartyBagEntry[]): void {
+    this.partyBag = entries;
+    this.page = Math.min(this.page, Math.max(0, this.pageCount() - 1));
+    this.draw();
+  }
+
+  setPage(page: number): void {
+    this.page = Math.max(0, Math.min(page, this.pageCount() - 1));
+    this.draw();
+  }
+
+  getPage(): number {
+    return this.page;
+  }
+
+  pageCount(): number {
+    return Math.max(1, Math.ceil(this.partyBag.length / BAG_PAGE_SIZE));
+  }
+
+  private bagPage(): readonly PartyBagEntry[] {
+    return this.partyBag.slice(this.page * BAG_PAGE_SIZE, (this.page + 1) * BAG_PAGE_SIZE);
   }
 
   private getPosition(item: ItemDefinition, index: number): ItemPosition {
@@ -133,6 +161,7 @@ export class PackEditor {
     this.renderer = new InventoryRenderer(() => this.draw());
     this.input = new InventoryInput(this.canvas, {
       getInventory: () => this.inventory,
+      getBagPage: () => this.bagPage(),
       getPosition: (item, idx) => this.getPosition(item, idx),
       getSelectedItemId: () => this.selectedItemId,
       setSelectedItemId: (id) => {
@@ -141,12 +170,13 @@ export class PackEditor {
       getPositionById: (id) => this.positions.get(id),
       setPosition: (id, pos) => this.positions.set(id, pos),
       loadSprite: (id, dimId) => this.renderer.loadSprite(id, dimId),
-      sendEquip: (bagIndex) => {
-        if (this.hooks.canEdit()) this.hooks.sendEquip(bagIndex);
+      sendEquip: (bagId) => {
+        if (this.hooks.canEdit()) this.hooks.sendEquip(bagId);
       },
       sendUnequip: (idx) => {
         if (this.hooks.canEdit()) this.hooks.sendUnequip(idx);
       },
+      canUnequip: () => this.hooks.canUnequip(),
       deletePosition: (id) => this.positions.delete(id),
       updateAttachment: (id, pos, item) => this.updateAttachment(id, pos, item),
       close: () => this.hooks.onClose(),
@@ -206,7 +236,7 @@ export class PackEditor {
 
     let item: ItemDefinition | null = null;
     if (target.source === "bag") {
-      item = this.inventory.bag[target.index] ?? null;
+      item = this.bagPage()[target.index]?.item ?? null;
     } else {
       item = this.inventory.equipped.find((it) => it.id === target.id) ?? null;
     }
@@ -302,6 +332,7 @@ export class PackEditor {
     this.updateStatsPanel(this.input.getInfoTarget());
     this.renderer.draw(this.ctx, this.canvas, {
       inventory: this.inventory,
+      bagPage: this.bagPage(),
       positions: this.positions,
       selectedItemId: this.selectedItemId,
       mode: this.input.getMode(),

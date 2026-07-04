@@ -1,4 +1,4 @@
-import type { InventoryState, ItemDefinition } from "shared";
+import type { InventoryState, ItemDefinition, PartyBagEntry } from "shared";
 import { canEquip } from "shared";
 import {
   type ItemPosition,
@@ -18,14 +18,18 @@ import {
 
 export interface InputCallbacks {
   getInventory(): InventoryState | null;
+  /** The visible party-bag page (≤ BAG_PAGE_SIZE entries; slot region i shows entry i). */
+  getBagPage(): readonly PartyBagEntry[];
   getPosition(item: ItemDefinition, index: number): ItemPosition;
   getSelectedItemId(): string | null;
   setSelectedItemId(id: string | null): void;
   getPositionById(id: string): ItemPosition | undefined;
   setPosition(id: string, pos: ItemPosition): void;
   loadSprite(spriteId: string, dimensionId: number): HTMLImageElement | null;
-  sendEquip(bagIndex: number): void;
+  sendEquip(bagId: number): void;
   sendUnequip(equippedIndex: number): void;
+  /** False when the shared bag is at capacity — drag-off unequips are blocked client-side. */
+  canUnequip(): boolean;
   deletePosition(id: string): void;
   updateAttachment(id: string, pos: ItemPosition, item: ItemDefinition): void;
   close(): void;
@@ -147,11 +151,10 @@ export class InventoryInput {
       }
     }
 
+    const bagPage = this.cb.getBagPage();
     for (let i = 0; i < SLOT_REGIONS.length; i++) {
       if (!hitRegion(pos.x, pos.y, SLOT_REGIONS[i]!)) continue;
-      if (i >= inventory.bag.length) break;
-      const item = inventory.bag[i];
-      if (item) {
+      if (bagPage[i]) {
         this.mode = { type: "bag-pending", bagIndex: i, startX: pos.x, startY: pos.y };
         return;
       }
@@ -186,17 +189,15 @@ export class InventoryInput {
       const dy = pos.y - this.mode.startY;
       if (dx * dx + dy * dy > InventoryInput.DRAG_THRESHOLD ** 2) {
         const inventory = this.cb.getInventory();
-        if (inventory) {
-          const item = inventory.bag[this.mode.bagIndex];
-          if (item && canEquip(inventory.equipped, item)) {
-            this.cb.setPosition(item.id, { x: pos.x, y: pos.y, scale: 1, rotation: 0 });
-            this.cb.sendEquip(this.mode.bagIndex);
-            this.cb.setSelectedItemId(item.id);
-            this._infoTarget = { source: "equipped", id: item.id };
-            this.mode = { type: "dragging", offsetX: 0, offsetY: 0 };
-            this.cb.draw();
-            return;
-          }
+        const entry = this.cb.getBagPage()[this.mode.bagIndex];
+        if (inventory && entry && canEquip(inventory.equipped, entry.item)) {
+          this.cb.setPosition(entry.item.id, { x: pos.x, y: pos.y, scale: 1, rotation: 0 });
+          this.cb.sendEquip(entry.bagId);
+          this.cb.setSelectedItemId(entry.item.id);
+          this._infoTarget = { source: "equipped", id: entry.item.id };
+          this.mode = { type: "dragging", offsetX: 0, offsetY: 0 };
+          this.cb.draw();
+          return;
         }
         this.mode = { type: "idle" };
       }
@@ -228,13 +229,9 @@ export class InventoryInput {
 
   private onMouseUp() {
     if (this.mode.type === "bag-pending") {
-      const inventory = this.cb.getInventory();
-      if (inventory) {
-        const item = inventory.bag[this.mode.bagIndex];
-        if (item) {
-          this.cb.setSelectedItemId(null);
-          this._infoTarget = { source: "bag", index: this.mode.bagIndex };
-        }
+      if (this.cb.getBagPage()[this.mode.bagIndex]) {
+        this.cb.setSelectedItemId(null);
+        this._infoTarget = { source: "bag", index: this.mode.bagIndex };
       }
       this.mode = { type: "idle" };
       this.cb.draw();
@@ -249,7 +246,9 @@ export class InventoryInput {
         if (idx >= 0) {
           const itemPos = this.cb.getPosition(inventory.equipped[idx]!, idx);
           if (!hitRegion(itemPos.x, itemPos.y, CHAR_REGION)) {
-            this.cb.sendUnequip(idx);
+            // Dropped off the character = unequip into the party bag. When the bag is at
+            // capacity, skip the send and let the item snap back to a default placement.
+            if (this.cb.canUnequip()) this.cb.sendUnequip(idx);
             this.cb.deletePosition(selectedId);
             this.cb.setSelectedItemId(null);
             this._infoTarget = null;
@@ -302,9 +301,9 @@ export class InventoryInput {
     if (this.hoveredClose) cursor = "pointer";
     else if (newHovered >= 0) {
       const inventory = this.cb.getInventory();
-      if (inventory && newHovered < inventory.bag.length) {
-        const item = inventory.bag[newHovered];
-        if (item) cursor = canEquip(inventory.equipped, item) ? "grab" : "pointer";
+      const entry = this.cb.getBagPage()[newHovered];
+      if (inventory && entry) {
+        cursor = canEquip(inventory.equipped, entry.item) ? "grab" : "pointer";
       }
     }
 

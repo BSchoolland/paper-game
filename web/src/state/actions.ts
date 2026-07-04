@@ -160,13 +160,6 @@ export function proposeTravel(): void {
   socket().send({ type: "proposeTravel" });
 }
 
-export function takeLoot(lootId: number): void {
-  socket().send({ type: "takeLoot", lootId });
-}
-
-export function stashLoot(bagIndex: number): void {
-  socket().send({ type: "stashLoot", bagIndex });
-}
 
 export function sendAction(seatId: SeatId, action: WireAction): void {
   socket().send({ type: "action", seatId, action });
@@ -185,8 +178,8 @@ export function defendResult(seatId: SeatId, promptId: string, power: number): v
   socket().send({ type: "defendResult", seatId, promptId, power });
 }
 
-export function equip(bagIndex: number): void {
-  socket().send({ type: "equip", bagIndex });
+export function equip(bagId: number): void {
+  socket().send({ type: "equip", bagId });
 }
 
 export function unequip(equippedIndex: number): void {

@@ -16,58 +16,68 @@ function mkWeapon(id: string, dimensionId: number, rarity: ItemRarity = "common"
   };
 }
 
-function emptyInv(): { bag: (ItemDefinition | null)[]; equipped: ItemDefinition[]; attachments: Record<string, never> } {
-  return { bag: new Array(16).fill(null), equipped: [], attachments: {} };
+function emptyInv(): { equipped: ItemDefinition[]; attachments: Record<string, never> } {
+  return { equipped: [], attachments: {} };
 }
 
 const ORIGIN = { q: 0, r: 0 };
 
-describe("run_loot ledger (v9)", () => {
-  it("insertRunLoot / loadUnassignedLoot / loadRunLoot roundtrip incl. snapshot JSON", () => {
+describe("run_loot ledger + party bag (v11)", () => {
+  it("commitLootDrops writes the ledger row AND the bag row incl. snapshot JSON", () => {
     const runId = db.startNewRun(8100, "cdxdb-c1", 2);
     const sword = mkWeapon("cdxdb-sword", 8100, "uncommon");
-    const lootId = db.insertRunLoot(runId, sword, { q: 2, r: -1 }, "treasure", "drop");
-    expect(lootId).toBeGreaterThan(0);
+    const [bagId] = db.commitLootDrops(runId, [sword], { q: 2, r: -1 }, "treasure");
+    expect(bagId).toBeGreaterThan(0);
 
-    const unassigned = db.loadUnassignedLoot(runId);
-    expect(unassigned.length).toBe(1);
-    const row = unassigned[0]!;
-    expect(row.item_id).toBe("cdxdb-sword");
-    expect(row.dimension_id).toBe(8100);
-    expect(row.source_q).toBe(2);
-    expect(row.source_r).toBe(-1);
-    expect(row.source_icon).toBe("treasure");
-    expect(row.assigned_seat_index).toBeNull();
-    const snap = JSON.parse(row.item_json) as ItemDefinition;
+    const ledger = db.loadRunLoot(runId);
+    expect(ledger.length).toBe(1);
+    expect(ledger[0]!.item_id).toBe("cdxdb-sword");
+    expect(ledger[0]!.dimension_id).toBe(8100);
+    expect(ledger[0]!.source_q).toBe(2);
+    expect(ledger[0]!.source_r).toBe(-1);
+    expect(ledger[0]!.source_icon).toBe("treasure");
+
+    const bag = db.loadPartyBag(runId);
+    expect(bag.length).toBe(1);
+    expect(bag[0]!.id).toBe(bagId!);
+    expect(bag[0]!.source_icon).toBe("treasure");
+    const snap = JSON.parse(bag[0]!.item_json) as ItemDefinition;
     expect(snap.rarity).toBe("uncommon");
     expect(snap.dimensionId).toBe(8100);
-
-    expect(db.loadRunLoot(runId).length).toBe(1);
   });
 
-  it("commitLootAssignment assigns + persists the bag atomically; second call is first-writer-wins", () => {
+  it("commitBagEquip drains the row + persists the loadout atomically; second call is first-writer-wins", () => {
     const runId = db.startNewRun(8101, "cdxdb-c2", 2);
     const item = mkWeapon("cdxdb-axe", 8101);
-    const lootId = db.insertRunLoot(runId, item, ORIGIN, "boss", "drop");
+    const [bagId] = db.commitLootDrops(runId, [item], ORIGIN, "boss");
 
     const inv = emptyInv();
-    inv.bag[0] = item;
-    expect(db.commitLootAssignment(runId, lootId, 1, "acct-A", inv)).toBe(true);
+    inv.equipped.push(item);
+    expect(db.commitBagEquip(runId, bagId!, 1, inv)).toBe(true);
 
-    // Assigned: no longer in the unassigned pool; the bag row persisted.
-    expect(db.loadUnassignedLoot(runId).length).toBe(0);
-    const rehydrated = db.loadSeatInventory(runId, 1);
-    expect(rehydrated.bag[0]?.id).toBe("cdxdb-axe");
+    // Equipped: the bag row is gone; the loadout persisted.
+    expect(db.loadPartyBag(runId).length).toBe(0);
+    expect(db.loadSeatInventory(runId, 1).equipped[0]?.id).toBe("cdxdb-axe");
 
-    // A racing second claim (different seat/inv) must lose — row already assigned.
+    // A racing second equip (different seat/inv) must lose — the row is already gone.
     const inv2 = emptyInv();
-    inv2.bag[3] = item;
-    expect(db.commitLootAssignment(runId, lootId, 0, "acct-B", inv2)).toBe(false);
-    // The first claimant's rows are intact; the loser wrote nothing.
-    const row = db.loadRunLoot(runId)[0]!;
-    expect(row.assigned_seat_index).toBe(1);
-    expect(row.assigned_account_id).toBe("acct-A");
-    expect(db.loadSeatInventory(runId, 0).bag.every((b) => b === null)).toBe(true);
+    inv2.equipped.push(item);
+    expect(db.commitBagEquip(runId, bagId!, 0, inv2)).toBe(false);
+    // The winner's rows are intact; the loser wrote nothing.
+    expect(db.loadSeatInventory(runId, 0).equipped.length).toBe(0);
+  });
+
+  it("commitBagDeposit inserts the bag row + persists the shrunken loadout; ledger untouched", () => {
+    const runId = db.startNewRun(8108, "cdxdb-c3", 2);
+    const item = mkWeapon("cdxdb-mace", 8108);
+    const bagId = db.commitBagDeposit(runId, item, 0, emptyInv());
+    expect(bagId).toBeGreaterThan(0);
+
+    const bag = db.loadPartyBag(runId);
+    expect(bag.length).toBe(1);
+    expect(bag[0]!.source_icon).toBeNull(); // deposits carry no drop provenance
+    expect(db.loadRunLoot(runId).length).toBe(0); // storage only — never a ledger row
+    expect(db.loadSeatInventory(runId, 0).equipped.length).toBe(0);
   });
 });
 
@@ -107,7 +117,7 @@ describe("resolveItemForRun (flag #8 fixed-order resolution)", () => {
 
     // Dropped-then-deleted from the pool: resolves via the run_loot snapshot.
     const dropped = mkWeapon("cdxdb-dropped", 8104, "uncommon");
-    db.insertRunLoot(runId, dropped, ORIGIN, "ruins", "drop");
+    db.commitLootDrops(runId, [dropped], ORIGIN, "ruins");
     expect(db.getItemById("cdxdb-dropped")).toBeNull(); // never in the items table
     expect(db.resolveItemForRun(runId, "cdxdb-dropped")?.rarity).toBe("uncommon");
 
@@ -120,33 +130,35 @@ describe("resolveItemForRun (flag #8 fixed-order resolution)", () => {
     expect(db.resolveItemForRun(runId, "cdxdb-nope")).toBeNull();
   });
 
-  it("loadSeatInventory rehydrates a bag holding a pool-deleted dropped item", () => {
+  it("loadSeatInventory rehydrates an equipped pool-deleted dropped item", () => {
     const runId = db.startNewRun(8106, "cdxdb-rehydrate", 2);
     const dropped = mkWeapon("cdxdb-bagitem", 8106);
-    db.insertRunLoot(runId, dropped, ORIGIN, "treasure", "drop");
+    db.commitLootDrops(runId, [dropped], ORIGIN, "treasure");
     const inv = emptyInv();
-    inv.bag[2] = dropped;
+    inv.equipped.push(dropped);
     db.saveSeatInventory(runId, 0, inv);
     // getItemById would find nothing (never saved to items), but the run_loot snapshot resolves it.
     const rehydrated = db.loadSeatInventory(runId, 0);
-    expect(rehydrated.bag[2]?.id).toBe("cdxdb-bagitem");
+    expect(rehydrated.equipped[0]?.id).toBe("cdxdb-bagitem");
   });
 });
 
-describe("eraseClient scope (loot deleted, codex permanent)", () => {
-  it("removes run_loot rows for the client's runs but never touches codex tables", () => {
+describe("eraseClient scope (loot + bag deleted, codex permanent)", () => {
+  it("removes run_loot + run_party_bag rows for the client's runs but never touches codex tables", () => {
     const clientId = "cdxdb-erase";
     const acct = accounts.resolveGuestAccount(clientId).id;
     const runId = db.startNewRun(8107, clientId, 2);
     db.upsertRunSeat(runId, 0, { clientId, displayName: "E", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: acct });
     const item = mkWeapon("cdxdb-erasable", 8107);
-    db.insertRunLoot(runId, item, ORIGIN, "boss", "drop");
+    db.commitLootDrops(runId, [item], ORIGIN, "boss");
     db.bankCodexEntry(acct, item, 0);
     db.recordCodexFirst(item, acct);
 
     expect(db.loadRunLoot(runId).length).toBe(1);
+    expect(db.loadPartyBag(runId).length).toBe(1);
     db.eraseClient(clientId);
     expect(db.loadRunLoot(runId).length).toBe(0); // run_loot gone with the run
+    expect(db.loadPartyBag(runId).length).toBe(0); // party bag gone with the run
     // Codex survives erasure (permanent design provenance, §1.1).
     expect(db.loadCodexEntry(acct, "cdxdb-erasable")).not.toBeNull();
     expect(db.loadCodexFirst("cdxdb-erasable")).not.toBeNull();

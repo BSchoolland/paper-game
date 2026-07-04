@@ -70,7 +70,7 @@
         {#if entry}<div class="wname r-{entry.item.rarity}">{entry.item.name.toUpperCase()}</div>{/if}
       </div>
     {/each}
-    <span class="cap">Manifested designs land in your bag at start — you keep the design either way.</span>
+    <span class="cap">Manifested designs land in the party bag at start — you keep the design either way.</span>
   </div>
   <div class="pickgrid">
     {#each entries as entry (entry.item.id)}

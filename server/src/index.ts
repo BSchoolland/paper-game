@@ -24,6 +24,8 @@ import {
   loadDiscoveredHexIcons,
   markRunCleared,
   saveSeatInventory,
+  commitBagEquip,
+  commitBagDeposit,
   upsertRunSeat,
   loadRunSeats,
   findActiveSeatForClient,
@@ -46,8 +48,6 @@ import { rooms } from "./room-registry.js";
 import {
   createOpenSeats,
   buildPresetInventory,
-  buildSeatLoadout,
-  manifestItemsFor,
   freshRoomCode,
   seatIdForIndex,
 } from "./room.js";
@@ -68,8 +68,7 @@ import {
   submitDefend,
   proposeMove,
   proposeRetreat,
-  takeLoot,
-  stashLoot,
+  stagePartyBagContributions,
   voteStatePayload,
   castVote,
   beginCombatEntry,
@@ -92,7 +91,7 @@ import { seedDimension1 } from "./seed-dimension-1.js";
 import { seedDimension2 } from "./seed-dimension-2.js";
 import { seedDimension3 } from "./seed-dimension-3.js";
 import { seedDimension501 } from "./seed-dimension-501.js";
-import { equipFromBag, unequipItem, getPreset } from "shared";
+import { equipItem, unequipItem, canEquip, partyBagCapacity, getPreset } from "shared";
 import { join } from "path";
 import { existsSync } from "fs";
 import { eventLog } from "./event-log.js";
@@ -491,7 +490,7 @@ function createRoomFor(
     session: null,
     defendRound: null,
     vote: null,
-    lootPool: [],
+    partyBag: [],
     contract: null,
     outcome: null,
     chatLog: [],
@@ -719,6 +718,11 @@ function handleStartGame(room: Room, seat: Seat): void {
   // Exactly-one-contract invariant (locked #3 / flag #2): no host pick -> the default contract.
   if (!room.contract) assignContract(room, DEFAULT_CONTRACT_TYPE);
 
+  // Materialize-at-start: every started seat's preset extras + manifested designs land in the
+  // shared party bag now (lobby re-picks only touched presetId/manifestIds, so this is the one
+  // write point for staged items).
+  stagePartyBagContributions(room);
+
   room.phase = "overworld";
   setRunPhase(room.runId, "overworld"); // persist the lifecycle SSOT (crash recovery resumes overworld runs)
   broadcastRoomState(room, io);
@@ -852,20 +856,15 @@ function handleChooseDimension(
   }
 
   // Manifest re-validation (flag #12 applied to manifests): drop now-ineligible picks against the
-  // new destination's tier and rematerialize; the broadcast below carries the shrunk manifestIds.
+  // new destination's tier; the broadcast below carries the shrunk manifestIds. No inventory
+  // change — manifests only materialize (into the party bag) at Start.
   const newTier = effectiveStartingTier(room.dimensionTier);
   for (const s of room.seats) {
     if (s.manifestIds.length === 0 || !s.accountId) continue;
-    const kept = s.manifestIds.filter((id) => {
+    s.manifestIds = s.manifestIds.filter((id) => {
       const e = loadCodexEntry(s.accountId!, id)!;
       return isManifestable(JSON.parse(e.item_json) as ItemDefinition, e.tier, newTier);
     });
-    if (kept.length !== s.manifestIds.length) {
-      s.manifestIds = kept;
-      s.inventory = buildSeatLoadout(s.presetId ?? DEFAULT_PRESET_ID, manifestItemsFor(s));
-      saveSeatInventory(room.runId, s.seatIndex, s.inventory);
-      if (s.socket) sendInventory(room, io, s);
-    }
   }
 
   broadcastRoomState(room, io);
@@ -908,27 +907,33 @@ function handleDebugLose(room: Room, seat: Seat): void {
 // Seat-scoped inventory handlers (only off-combat, R26) — durable write point 3 (R34).
 // =====================================================================================
 
-function applyInventoryChange(room: Room, seat: Seat): void {
-  // R34 write-before-ack: commit the durable rows BEFORE the inventory ack.
+/** Post-change broadcast tail shared by every loadout mutation (durable rows already written). */
+function broadcastLoadoutChange(room: Room, seat: Seat): void {
   seat.animSet = getAnimSet(seat.inventory.equipped);
-  saveSeatInventory(room.runId, seat.seatIndex, seat.inventory);
   sendInventory(room, io, seat);
-  broadcastRoomState(room, io); // loadoutSummary in the roster changed
+  broadcastRoomState(room, io); // loadoutSummary in the roster (and possibly the party bag) changed
 }
 
-/** Re-seed a seat's whole loadout from a starter preset (lobby only, before Start). Auto-equips the
- *  preset kit + baked attachments; the player may then hand-edit it in the loadout editor. */
+function applyInventoryChange(room: Room, seat: Seat): void {
+  // R34 write-before-ack: commit the durable rows BEFORE the inventory ack.
+  saveSeatInventory(room.runId, seat.seatIndex, seat.inventory);
+  broadcastLoadoutChange(room, seat);
+}
+
+/** Re-seed a seat's loadout from a starter preset (lobby only, before Start). Auto-equips the
+ *  preset kit + baked attachments; the player may then hand-edit it in the loadout editor. The
+ *  preset's bag extras + manifests stage into the party bag at Start, so re-picking is idempotent. */
 function handleChoosePreset(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, presetId: string): void {
   if (room.phase !== "lobby") return sendError(ws, "BAD_PHASE", "Presets can only be chosen in the lobby");
   if (!getPreset(presetId)) return sendError(ws, "BAD_PHASE", `Unknown preset "${presetId}"`);
-  // Re-pick keeps the seat's manifested designs (they materialize into the fresh preset bag, §4.6).
-  seat.inventory = buildSeatLoadout(presetId, manifestItemsFor(seat));
+  seat.inventory = buildPresetInventory(presetId);
   seat.presetId = presetId;
   applyInventoryChange(room, seat);
 }
 
 /** Set this seat's manifest picks (full replacement). Validates count (K = expeditionSlots(level)),
- *  dedup, codex membership, non-consumable, and the tier gate; then materializes into the bag (§4.6). */
+ *  dedup, codex membership, non-consumable, and the tier gate. The designs materialize into the
+ *  shared party bag at Start (§4.6 materialize-at-start). */
 function handleChooseManifest(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, itemIds: readonly string[]): void {
   if (room.phase !== "lobby") return sendError(ws, "BAD_PHASE", "Manifests are chosen in the lobby");
   if (!seat.accountId) return sendError(ws, "INVALID_INPUT", "No account bound to this seat");
@@ -939,7 +944,6 @@ function handleChooseManifest(room: Room, seat: Seat, ws: ServerWebSocket<Socket
   if (itemIds.length > slots)
     return sendError(ws, "INVALID_INPUT", `Too many designs (max ${slots})`);
   const startingTier = effectiveStartingTier(room.dimensionTier); // lobby: current ≡ start (04 §10)
-  const manifest: ItemDefinition[] = [];
   for (const id of itemIds) {
     const entry = loadCodexEntry(seat.accountId, id);
     if (!entry) return sendError(ws, "INVALID_INPUT", "Not in your codex");
@@ -948,25 +952,44 @@ function handleChooseManifest(room: Room, seat: Seat, ws: ServerWebSocket<Socket
       return sendError(ws, "INVALID_INPUT", "Consumable designs cannot be manifested"); // locked #5
     if (!isManifestable(item, entry.tier, startingTier))
       return sendError(ws, "INVALID_INPUT", "That design's tier exceeds this expedition");
-    manifest.push(item);
   }
   seat.manifestIds = [...itemIds];
-  seat.inventory = buildSeatLoadout(seat.presetId ?? DEFAULT_PRESET_ID, manifest);
-  applyInventoryChange(room, seat);
+  broadcastRoomState(room, io); // the roster's manifestIds chips changed
 }
 
-function handleEquip(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, bagIndex: number): void {
+/** Equip a party-bag item onto this seat's hero. The in-memory find serializes concurrent equips
+ *  within a tick; commitBagEquip's first-writer-wins guards the durable row across crashes. */
+function handleEquip(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, bagId: number): void {
   if (room.phase === "combat") return sendError(ws, "BAD_PHASE", "Cannot change loadout in combat");
-  seat.inventory = equipFromBag(seat.inventory, bagIndex);
+  const entry = room.partyBag.find((e) => e.bagId === bagId);
+  if (!entry) return sendError(ws, "INVALID_INPUT", "That item is no longer in the party bag");
+  if (!canEquip(seat.inventory.equipped, entry.item)) {
+    return sendError(ws, "INVALID_INPUT", "No free equipment slot for that item");
+  }
+  const nextInv = equipItem(seat.inventory, entry.item);
+  if (!commitBagEquip(room.runId, bagId, seat.seatIndex, nextInv)) {
+    return sendError(ws, "INVALID_INPUT", "That item is no longer in the party bag");
+  }
+  seat.inventory = nextInv;
+  room.partyBag = room.partyBag.filter((e) => e.bagId !== bagId);
   seat.presetId = null; // hand-edited: no longer a pristine preset
-  applyInventoryChange(room, seat);
+  broadcastLoadoutChange(room, seat);
 }
 
+/** Unequip onto the shared party bag (capped at 16 slots per started seat; drops ignore the cap). */
 function handleUnequip(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, equippedIndex: number): void {
   if (room.phase === "combat") return sendError(ws, "BAD_PHASE", "Cannot change loadout in combat");
-  seat.inventory = unequipItem(seat.inventory, equippedIndex);
+  const item = seat.inventory.equipped[equippedIndex];
+  if (!item) return sendError(ws, "INVALID_INPUT", "Nothing equipped in that slot");
+  if (room.partyBag.length >= partyBagCapacity(room.seats.length)) {
+    return sendError(ws, "INVALID_INPUT", "The party bag is full");
+  }
+  const nextInv = unequipItem(seat.inventory, equippedIndex);
+  const bagId = commitBagDeposit(room.runId, item, seat.seatIndex, nextInv);
+  seat.inventory = nextInv;
+  room.partyBag = [...room.partyBag, { bagId, item, sourceIcon: null }];
   seat.presetId = null; // hand-edited: no longer a pristine preset
-  applyInventoryChange(room, seat);
+  broadcastLoadoutChange(room, seat);
 }
 
 function handleUpdateAttachment(
@@ -1105,7 +1128,7 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
     case "chooseManifest":
       return handleChooseManifest(room, seat, ws, msg.itemIds);
     case "equip":
-      return handleEquip(room, seat, ws, msg.bagIndex);
+      return handleEquip(room, seat, ws, msg.bagId);
     case "unequip":
       return handleUnequip(room, seat, ws, msg.equippedIndex);
     case "updateAttachment":
@@ -1118,10 +1141,6 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
       return proposeRetreat(room, io, seat);
     case "proposeTravel":
       return proposeTravel(room, io, seat);
-    case "takeLoot":
-      return takeLoot(room, io, seat, msg.lootId);
-    case "stashLoot":
-      return stashLoot(room, io, seat, msg.bagIndex);
     case "castVote":
       return castVote(room, io, seat, msg.proposalId, msg.vote);
     case "playAgain":

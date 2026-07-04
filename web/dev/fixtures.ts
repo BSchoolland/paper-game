@@ -62,7 +62,7 @@ function hostRoomState(): RoomStatePayload {
     dimensionTier: 1,
     contract: null,
     outcome: null,
-    lootPool: [],
+    partyBag: [],
     rested: false,
     seats: [
       seat({ seatId: "s0", state: "human-connected", displayName: "Fen", isHost: true, accountId: "acc-fen", level: 15, presetId: "vanguard", equippedTitleId: "pathfinder" }),
@@ -87,7 +87,7 @@ function playerRoomState(): RoomStatePayload {
     dimensionTier: 0,
     contract: { type: "activate-gateway", targetHex: { q: -5, r: 0 }, targetDimensionId: 1, progress: 0, required: 1, completed: false },
     outcome: null,
-    lootPool: [],
+    partyBag: [],
     rested: false,
     seats: [
       seat({ seatId: "s0", state: "human-connected", displayName: "Fen", accountId: "acc-fen", level: 7, presetId: "mystic", manifestIds: ["coral-blade", "nautilus-shield"] }),

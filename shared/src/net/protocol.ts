@@ -14,7 +14,7 @@ import type { HexCoord, HexMapState, HexIconType } from "../map/hex-map.js";
 import type { ContractState, ContractOffer, ContractType } from "../overworld/contracts.js";
 import type { ArchetypeId } from "../encounter/archetypes.js";
 
-export const PROTOCOL_VERSION = 8;
+export const PROTOCOL_VERSION = 9;
 
 /** Durable run outcome — the value set of runs.outcome (db.ts re-imports this). */
 export type RunOutcome = "victory" | "defeat" | "retreat" | "abandoned";
@@ -76,8 +76,8 @@ export interface RoomStatePayload {
   readonly contract: ContractState | null;
   /** Set iff phase === "gameover" — drives the outcome-variant end screen on reconnect too. */
   readonly outcome: RunOutcome | null;
-  /** The party box, oldest first (03-loot-codex flag #13). Always [] outside a started run. */
-  readonly lootPool: readonly LootPoolEntry[];
+  /** The shared party bag, oldest first (03-loot-codex flag #13). Always [] outside a started run. */
+  readonly partyBag: readonly PartyBagEntry[];
   /** True while the party carries an unconsumed rest (reconnect-safe truth; flag #2/#8). */
   readonly rested: boolean;
 }
@@ -141,13 +141,14 @@ export interface DimensionOption {
 // --- Loot & codex DTOs (docs/meta-loop/03-loot-codex.md §3.1) ---
 
 /**
- * One item in the party box. Full ItemDefinition (the `inventory` message precedent)
- * so the client renders name/sprite/rarity with zero lookups.
+ * One item in the shared party bag. Full ItemDefinition (the `inventory` message precedent)
+ * so the client renders name/sprite/rarity with zero lookups. The bagId is the stable equip
+ * handle — racing equips of the same entry resolve first-writer-wins on it.
  */
-export interface LootPoolEntry {
-  readonly lootId: number; // run_loot.id — the take handle
+export interface PartyBagEntry {
+  readonly bagId: number; // run_party_bag.id
   readonly item: ItemDefinition;
-  readonly sourceIcon: HexIconType | null; // richness provenance for the tooltip; null for stashed items
+  readonly sourceIcon: HexIconType | null; // drop provenance for the tooltip; null for player deposits
 }
 
 /** One banked design, with provenance resolved server-side (dimension + discoverer names). */
@@ -299,17 +300,15 @@ export type ClientMessage =
   | { type: "proposeRetreat" }
   // Seat-scoped, overworld-only, party on a cleared gateway hex: open a travel-deeper vote.
   | { type: "proposeTravel" }
-  // Seat-scoped, overworld-only: take a party-box item into YOUR bag (instant, no vote).
-  | { type: "takeLoot"; lootId: number }
-  // Seat-scoped, overworld-only: put one of YOUR bag items into the party box.
-  | { type: "stashLoot"; bagIndex: number }
   // Seat-scoped, lobby-only: set this seat's manifest picks (full replacement, may be []).
   | { type: "chooseManifest"; itemIds: readonly string[] }
   | { type: "action"; seatId: SeatId; action: WireAction }
   | { type: "pass" }
   | { type: "unpass" }
   | { type: "defendResult"; seatId: SeatId; promptId: string; power: number }
-  | { type: "equip"; bagIndex: number }
+  // Seat-scoped, off-combat: equip a party-bag item onto YOUR hero (first-writer-wins on bagId).
+  | { type: "equip"; bagId: number }
+  // Seat-scoped, off-combat: unequip onto the party bag (rejected when the bag is at capacity).
   | { type: "unequip"; equippedIndex: number }
   | { type: "updateAttachment"; itemId: string; attachment: AttachmentData }
   | { type: "reset" }
@@ -401,8 +400,8 @@ export type ServerMessage =
       leveledUp: boolean;
     }
   | { type: "titlesEarned"; titleIds: readonly string[] }
-  // Broadcast at drop time — toast/celebration only; party-box truth rides roomState (flag #13).
-  | { type: "lootFound"; drops: readonly LootPoolEntry[] }
+  // Broadcast at drop time — toast/celebration only; party-bag truth rides roomState (flag #13).
+  | { type: "lootFound"; drops: readonly PartyBagEntry[] }
   // getCodex response (PRIVATE): the requesting account's full codex, acquired_at DESC.
   | { type: "codex"; entries: readonly CodexEntryPayload[] }
   // Run-end settlement push (PRIVATE per-seat, next to xpBanked): what JUST entered your codex.

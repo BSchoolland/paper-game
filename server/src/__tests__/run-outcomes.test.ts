@@ -97,7 +97,7 @@ function buildRoom(opts?: { humans?: number; capacity?: number; icons?: Record<s
     session: null,
     defendRound: null,
     vote: null,
-    lootPool: [],
+    partyBag: [],
     contract: null,
     outcome: null,
     chatLog: [],

@@ -113,9 +113,10 @@ export class EncounterSession {
       logDeniedMove(this.state, action, "illegal (out of turn, dead, or game over)");
       return { changed: false, events: [] };
     }
-    // Player moves are path-based (cost = the route around obstacles); the AI keeps the cheap
-    // straight-line check via its own resolve call sites (ai-turn-runner). Server-trusted: the flag
-    // isn't part of the action, so a client can't ask for the cheaper rule.
+    // Player moves are path-based: validated and priced by the shared move-rules flood — the same
+    // one the client plans clicks against, so a client-approved move is never denied here. The AI
+    // keeps the cheap straight-line check via its own resolve call sites (ai-turn-runner).
+    // Server-trusted: the flag isn't part of the action, so a client can't ask for the cheaper rule.
     const result = resolveAction(this.state, action, { pathBased: true });
     if (result.state !== this.state) {
       this.state = result.state;
