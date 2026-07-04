@@ -462,6 +462,20 @@ const SCHEMA_VERSION = 3;
   }
 }
 
+// v10: the party box. stashLoot inserts player-deposited items into run_loot; `origin` separates
+// them from rolled drops so codex banking only mints designs actually FOUND this run (a stashed
+// preset/manifested item must never bank or claim a first-recovery).
+{
+  const { user_version } = db.query("PRAGMA user_version").get() as { user_version: number };
+  if (user_version < 10) {
+    const migrate = db.transaction(() => {
+      db.exec("ALTER TABLE run_loot ADD COLUMN origin TEXT NOT NULL DEFAULT 'drop'");
+      db.exec("PRAGMA user_version = 10");
+    });
+    migrate();
+  }
+}
+
 
 // --- Wire event log persistence ---
 
@@ -999,12 +1013,13 @@ export function loadSeatInventory(runId: number, seatIndex: number): InventorySt
 export interface RunLootRow {
   id: number; run_id: number; item_id: string; dimension_id: number; item_json: string;
   source_q: number; source_r: number; source_icon: string | null; dropped_at: number;
+  origin: "drop" | "stash";
   assigned_seat_index: number | null; assigned_account_id: string | null; assigned_at: number | null;
 }
 
 const insertRunLootStmt = db.prepare(
-  `INSERT INTO run_loot (run_id, item_id, dimension_id, item_json, source_q, source_r, source_icon, dropped_at)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+  `INSERT INTO run_loot (run_id, item_id, dimension_id, item_json, source_q, source_r, source_icon, dropped_at, origin)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`);
 const unassignedLootStmt = db.prepare(
   "SELECT * FROM run_loot WHERE run_id = ? AND assigned_seat_index IS NULL ORDER BY id");
 const allLootForRunStmt = db.prepare("SELECT * FROM run_loot WHERE run_id = ? ORDER BY id");
@@ -1015,11 +1030,11 @@ const assignLootStmt = db.prepare(
 const lootSnapshotForRunStmt = db.prepare(
   "SELECT item_json FROM run_loot WHERE run_id = ? AND item_id = ? LIMIT 1");
 
-/** Insert one drop; returns its lootId (rowid). */
+/** Insert one party-box row; returns its lootId (rowid). */
 export function insertRunLoot(runId: number, item: ItemDefinition, source: HexCoord,
-    icon: HexIconType | null): number {
+    icon: HexIconType | null, origin: "drop" | "stash"): number {
   const info = insertRunLootStmt.run(runId, item.id, item.dimensionId, JSON.stringify(item),
-    source.q, source.r, icon, Date.now());
+    source.q, source.r, icon, Date.now(), origin);
   return Number(info.lastInsertRowid);
 }
 export function loadUnassignedLoot(runId: number): RunLootRow[] {
@@ -1043,6 +1058,22 @@ export function commitLootAssignment(runId: number, lootId: number, seatIndex: n
   });
   tx();
   return claimed;
+}
+
+/**
+ * Stash commit (commitLootAssignment's inverse): insert the deposited item as an unassigned
+ * run_loot row AND persist the depositor's shrunken bag in ONE transaction. source_icon is NULL —
+ * stashed items carry no richness provenance. Returns the new row's lootId.
+ */
+export function commitLootStash(runId: number, item: ItemDefinition, source: HexCoord,
+    seatIndex: number, inv: InventoryState): number {
+  let lootId = 0;
+  const tx = db.transaction(() => {
+    lootId = insertRunLoot(runId, item, source, null, "stash");
+    saveSeatInventory(runId, seatIndex, inv); // nested tx = savepoint (bun:sqlite)
+  });
+  tx();
+  return lootId;
 }
 
 // --- Codex (account-scoped, permanent; NOT touched by eraseClient) ---

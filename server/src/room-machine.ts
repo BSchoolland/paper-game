@@ -78,6 +78,7 @@ import {
   getDimensionMeta,
   loadUnassignedLoot,
   commitLootAssignment,
+  commitLootStash,
   loadCodexEntry,
 } from "./db.js";
 import type { RunLootRow } from "./db.js";
@@ -902,7 +903,6 @@ export function voteStatePayload(vote: RoomVote): VoteStatePayload {
     proposerSeatId: vote.proposerSeatId,
     target: vote.kind === "move" ? vote.target : null,
     travel: vote.kind === "travel" ? vote.gateway : null,
-    loot: vote.kind === "loot" ? vote.entry : null,
     votes,
     electorate: vote.electorate,
     deadlineMs: vote.deadline,
@@ -1040,55 +1040,52 @@ export function proposeTravel(room: Room, io: RoomIO, seat: Seat): void {
 }
 
 /**
- * Propose claiming a pool item for YOUR seat (03-loot-codex §4.3). Same vote machinery as
- * proposeMove/Retreat/Travel; a single connected human assigns instantly, otherwise a vote opens
- * ("<name> claims <item>", proposer auto-yes). A rejected claim leaves the item in the pool.
+ * Take a party-box item into YOUR bag (03-loot-codex §4.3) — instant, no vote. First-writer-wins
+ * on the run_loot row keeps racing takes safe.
  */
-export function proposeLootClaim(room: Room, io: RoomIO, seat: Seat, lootId: number): void {
+export function takeLoot(room: Room, io: RoomIO, seat: Seat, lootId: number): void {
   const err = (code: import("shared").ErrorCode, message: string) =>
     io.send(seat, { type: "error", code, message, recoverable: true });
 
   if (room.phase !== "overworld") return err("BAD_PHASE", "Not in overworld");
-  if (room.vote) return err("BAD_PHASE", "A vote is already open");
-  if (seat.state !== "human-connected") return err("NOT_YOUR_SEAT", "Spectators cannot propose");
+  if (seat.state !== "human-connected") return err("NOT_YOUR_SEAT", "Spectators cannot take items");
   const entry = room.lootPool.find((e) => e.lootId === lootId);
   if (!entry) return err("INVALID_INPUT", "That item is no longer available");
-  if (seat.inventory.bag.indexOf(null) === -1) return err("INVALID_INPUT", "Your bag is full");
+  assignLoot(room, io, seat, entry);
+}
 
-  const electorate = connectedHumanSeatIds(room);
-  const proposalId = `v${++voteSeq}`;
-  const ballots = new Map<SeatId, VoteChoice>([[seat.seatId, "yes"]]);
+/** Put one of YOUR bag items into the party box — anyone may take it back later. */
+export function stashLoot(room: Room, io: RoomIO, seat: Seat, bagIndex: number): void {
+  const err = (code: import("shared").ErrorCode, message: string) =>
+    io.send(seat, { type: "error", code, message, recoverable: true });
 
-  if (electorate.length <= 1) {
-    // Single human -> instant assign (movement/retreat/travel precedent: voteState null first).
-    io.broadcast(room, { type: "voteState", vote: null });
-    assignLoot(room, io, seat, entry);
-    return;
-  }
+  if (room.phase !== "overworld") return err("BAD_PHASE", "Not in overworld");
+  if (seat.state !== "human-connected") return err("NOT_YOUR_SEAT", "Spectators cannot stash items");
+  const item = seat.inventory.bag[bagIndex];
+  if (!item) return err("INVALID_INPUT", "No item in that bag slot");
 
-  openVote(room, io, {
-    kind: "loot",
-    entry,
-    proposalId,
-    proposerSeatId: seat.seatId,
-    electorate,
-    ballots,
-    deadline: Date.now() + VOTE_TIMEOUT_MS,
-    timer: null,
-  });
+  const bag = [...seat.inventory.bag];
+  bag[bagIndex] = null;
+  const nextInv = { ...seat.inventory, bag };
+  const newLootId = commitLootStash(room.runId, item, room.hexMap.playerPos,
+    seat.seatIndex, nextInv); // one durable tx (§1.3)
+  seat.inventory = nextInv;
+  room.lootPool = [...room.lootPool, { lootId: newLootId, item, sourceIcon: null }];
+  sendInventory(room, io, seat);
+  broadcastRoomState(room, io); // box grew
 }
 
 /**
- * The single claim-commit path: re-check the claimant's bag at resolve time (it may have changed
- * mid-vote via the loadout editor), mark the drop assigned + persist the new bag in one durable tx,
- * drain the pool, and re-broadcast. A racing path that already assigned the row makes this a no-op.
+ * The single take-commit path: check the taker's bag, mark the drop assigned + persist the new
+ * bag in one durable tx, drain the box, and re-broadcast. A racing path that already assigned
+ * the row makes this a no-op.
  */
 function assignLoot(room: Room, io: RoomIO, seat: Seat, entry: LootPoolEntry): void {
   const free = seat.inventory.bag.indexOf(null);
   if (free === -1 || seat.state === "open" || seat.state === "bot") {
     io.send(seat, { type: "error", code: "INVALID_INPUT",
-      message: "Claim failed — no free bag slot", recoverable: true });
-    return; // item stays in the pool
+      message: "Take failed — no free bag slot", recoverable: true });
+    return; // item stays in the box
   }
   const bag = [...seat.inventory.bag];
   bag[free] = entry.item;
@@ -1099,7 +1096,7 @@ function assignLoot(room: Room, io: RoomIO, seat: Seat, entry: LootPoolEntry): v
   seat.inventory = nextInv;
   room.lootPool = room.lootPool.filter((e) => e.lootId !== entry.lootId);
   sendInventory(room, io, seat);
-  broadcastRoomState(room, io); // pool shrank + loadoutSummary changed
+  broadcastRoomState(room, io); // box shrank + loadoutSummary changed
 }
 
 /** Install + broadcast an open vote and arm its deadline timer (one open vote per room). */
@@ -1165,11 +1162,6 @@ export function resolveOpenVote(room: Room, io: RoomIO, deadlinePassed: boolean)
     }
   } else if (vote.kind === "travel") {
     if (resolution.accepted) travelToDimension(room, io, vote.gateway);
-  } else if (vote.kind === "loot") {
-    if (resolution.accepted) {
-      const claimant = seatById(room, vote.proposerSeatId);
-      if (claimant) assignLoot(room, io, claimant, vote.entry);
-    } // rejected: voteState null already broadcast; the item stays in the pool
   } else {
     if (resolution.accepted) settleRun(room, io, "retreat");
   }

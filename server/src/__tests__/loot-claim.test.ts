@@ -96,9 +96,9 @@ function buildRoom(opts: { dim: number; humans?: number; capacity?: number }) {
   return { room, runId, accountIds };
 }
 
-/** Insert a real run_loot row + mirror it into the in-memory pool (what lootDropRecorder does). */
+/** Insert a real run_loot row + mirror it into the in-memory box (what lootDropRecorder does). */
 function dropInto(room: Room, item: ItemDefinition, icon: HexIconType | null = "treasure"): LootPoolEntry {
-  const lootId = db.insertRunLoot(room.runId, item, ORIGIN, icon);
+  const lootId = db.insertRunLoot(room.runId, item, ORIGIN, icon, "drop");
   const entry: LootPoolEntry = { lootId, item, sourceIcon: icon };
   room.lootPool = [...room.lootPool, entry];
   return entry;
@@ -156,47 +156,42 @@ describe("lootDropRecorder (§4.2)", () => {
   });
 });
 
-describe("proposeLootClaim guards", () => {
-  it("rejects wrong-phase, open-vote, spectator, unknown/claimed loot, and full bag", () => {
+describe("takeLoot guards", () => {
+  it("rejects wrong-phase, spectator, unknown/taken loot, and full bag", () => {
     const { room } = buildRoom({ dim: 8203, humans: 2 });
     const entry = dropInto(room, mkWeapon("guard-item", 8203));
     const { io, sends } = recordingIO();
 
     room.phase = "combat";
-    machine.proposeLootClaim(room, io, room.seats[0]!, entry.lootId);
+    machine.takeLoot(room, io, room.seats[0]!, entry.lootId);
     expect(errorCodes(sends)).toEqual(["BAD_PHASE"]);
     room.phase = "overworld";
 
-    // Open vote -> BAD_PHASE.
-    room.vote = { kind: "retreat", proposalId: "x", proposerSeatId: room.seats[0]!.seatId, electorate: [], ballots: new Map(), deadline: Date.now() + 1000, timer: null };
-    machine.proposeLootClaim(room, io, room.seats[0]!, entry.lootId);
-    expect(errorCodes(sends)).toEqual(["BAD_PHASE", "BAD_PHASE"]);
-    room.vote = null;
-
     // Spectator (disconnected human).
     room.seats[1]!.state = "human-disconnected";
-    machine.proposeLootClaim(room, io, room.seats[1]!, entry.lootId);
-    expect(errorCodes(sends)).toEqual(["BAD_PHASE", "BAD_PHASE", "NOT_YOUR_SEAT"]);
+    machine.takeLoot(room, io, room.seats[1]!, entry.lootId);
+    expect(errorCodes(sends)).toEqual(["BAD_PHASE", "NOT_YOUR_SEAT"]);
     room.seats[1]!.state = "human-connected";
 
     // Unknown lootId.
-    machine.proposeLootClaim(room, io, room.seats[0]!, 999999);
+    machine.takeLoot(room, io, room.seats[0]!, 999999);
     expect(errorCodes(sends).at(-1)).toBe("INVALID_INPUT");
 
     // Full bag.
     room.seats[0]!.inventory = { ...room.seats[0]!.inventory, bag: new Array(16).fill(mkWeapon("filler", 8203)) };
-    machine.proposeLootClaim(room, io, room.seats[0]!, entry.lootId);
+    machine.takeLoot(room, io, room.seats[0]!, entry.lootId);
     expect(errorCodes(sends).at(-1)).toBe("INVALID_INPUT");
+    expect(room.lootPool.some((e) => e.lootId === entry.lootId)).toBe(true); // stays in the box
   });
 });
 
-describe("claim assignment", () => {
-  it("single human -> instant assign: bag gains item, pool shrinks, row assigned, inventory + roomState sent", () => {
+describe("take assignment", () => {
+  it("take is instant: bag gains item, box shrinks, row assigned, inventory + roomState sent, no vote", () => {
     const { room, runId } = buildRoom({ dim: 8204, humans: 1 });
     const entry = dropInto(room, mkWeapon("solo-item", 8204));
-    const { io, sends, broadcasts } = recordingIO();
+    const { io, sends } = recordingIO();
 
-    machine.proposeLootClaim(room, io, room.seats[0]!, entry.lootId);
+    machine.takeLoot(room, io, room.seats[0]!, entry.lootId);
 
     const seat = room.seats[0]!;
     expect(seat.inventory.bag.some((b) => b?.id === "solo-item")).toBe(true);
@@ -205,66 +200,102 @@ describe("claim assignment", () => {
     expect(db.loadRunLoot(runId)[0]!.assigned_seat_index).toBe(0);
     expect(sends.some((s) => s.msg.type === "inventory")).toBe(true);
     expect(sends.some((s) => s.msg.type === "roomState")).toBe(true); // per-seat send, not broadcast
-    // No vote should have opened.
     expect(room.vote).toBeNull();
   });
 
-  it("two humans -> loot vote; yes assigns; a no-majority leaves the item claimable", () => {
+  it("multi-human take is instant too — no vote opens, first taker wins", () => {
     const { room, runId } = buildRoom({ dim: 8205, humans: 2, capacity: 2 });
     const entry = dropInto(room, mkWeapon("contested", 8205));
-    const { io, broadcasts } = recordingIO();
-
-    machine.proposeLootClaim(room, io, room.seats[0]!, entry.lootId);
-    expect(room.vote?.kind).toBe("loot");
-    const vs = broadcasts.filter((b) => b.type === "voteState").at(-1) as Extract<ServerMessage, { type: "voteState" }>;
-    expect(vs.vote?.kind).toBe("loot");
-    expect(vs.vote?.loot?.item.id).toBe("contested");
-
-    machine.castVote(room, io, room.seats[1]!, room.vote!.proposalId, "yes");
-    expect(room.vote).toBeNull();
-    expect(room.seats[0]!.inventory.bag.some((b) => b?.id === "contested")).toBe(true);
-    expect(room.lootPool.length).toBe(0);
-    expect(db.loadRunLoot(runId)[0]!.assigned_seat_index).toBe(0);
-  });
-
-  it("no-majority: item stays in the pool and is claimable again", () => {
-    const { room } = buildRoom({ dim: 8206, humans: 3, capacity: 3 });
-    const entry = dropInto(room, mkWeapon("stay", 8206));
-    const { io } = recordingIO();
-
-    machine.proposeLootClaim(room, io, room.seats[0]!, entry.lootId);
-    machine.castVote(room, io, room.seats[1]!, room.vote!.proposalId, "no");
-    machine.castVote(room, io, room.seats[2]!, room.vote!.proposalId, "no");
-    expect(room.vote).toBeNull();
-    expect(room.lootPool.some((e) => e.lootId === entry.lootId)).toBe(true);
-    expect(room.seats[0]!.inventory.bag.some((b) => b?.id === "stay")).toBe(false);
-  });
-
-  it("bag fills mid-vote -> resolve-time re-check fails the claim, item stays in pool", () => {
-    const { room } = buildRoom({ dim: 8207, humans: 2, capacity: 2 });
-    const entry = dropInto(room, mkWeapon("midvote", 8207));
     const { io, sends } = recordingIO();
 
-    machine.proposeLootClaim(room, io, room.seats[0]!, entry.lootId);
-    // Claimant's bag fills before the vote resolves.
-    room.seats[0]!.inventory = { ...room.seats[0]!.inventory, bag: new Array(16).fill(mkWeapon("filler", 8207)) };
-    machine.castVote(room, io, room.seats[1]!, room.vote!.proposalId, "yes");
+    machine.takeLoot(room, io, room.seats[1]!, entry.lootId);
+    expect(room.vote).toBeNull();
+    expect(room.seats[1]!.inventory.bag.some((b) => b?.id === "contested")).toBe(true);
+    expect(db.loadRunLoot(runId)[0]!.assigned_seat_index).toBe(1);
 
+    // A second take of the same lootId fails: the box no longer holds it.
+    machine.takeLoot(room, io, room.seats[0]!, entry.lootId);
     expect(errorCodes(sends).at(-1)).toBe("INVALID_INPUT");
-    expect(room.lootPool.some((e) => e.lootId === entry.lootId)).toBe(true);
+    expect(room.seats[0]!.inventory.bag.some((b) => b?.id === "contested")).toBe(false);
   });
 
-  it("one vote per room: a claim during an open retreat vote is rejected", () => {
+  it("taking during an open retreat vote works (takes don't touch the vote machinery)", () => {
     const { room } = buildRoom({ dim: 8208, humans: 2, capacity: 2 });
     const entry = dropInto(room, mkWeapon("coexist", 8208));
     // Stand on a gateway so proposeRetreat is valid; open a retreat vote first.
     room.hexMap = { ...room.hexMap, icons: { [ORIGIN_KEY]: "gateway" as HexIconType } };
-    const { io, sends } = recordingIO();
+    const { io } = recordingIO();
     machine.proposeRetreat(room, io, room.seats[0]!);
     expect(room.vote?.kind).toBe("retreat");
 
-    machine.proposeLootClaim(room, io, room.seats[1]!, entry.lootId);
-    expect(errorCodes(sends).at(-1)).toBe("BAD_PHASE");
+    machine.takeLoot(room, io, room.seats[1]!, entry.lootId);
+    expect(room.seats[1]!.inventory.bag.some((b) => b?.id === "coexist")).toBe(true);
+    expect(room.vote?.kind).toBe("retreat"); // vote untouched
+  });
+});
+
+describe("stashLoot", () => {
+  it("moves a bag item into the box: unassigned row inserted, bag slot cleared, roomState broadcast", () => {
+    const { room, runId } = buildRoom({ dim: 8206, humans: 1 });
+    const seat = room.seats[0]!;
+    const bag = [...seat.inventory.bag];
+    bag[3] = mkWeapon("stashed", 8206);
+    seat.inventory = { ...seat.inventory, bag };
+    const { io, sends } = recordingIO();
+
+    machine.stashLoot(room, io, seat, 3);
+
+    expect(seat.inventory.bag[3]).toBeNull();
+    expect(room.lootPool.length).toBe(1);
+    expect(room.lootPool[0]!.item.id).toBe("stashed");
+    expect(room.lootPool[0]!.sourceIcon).toBeNull();
+    const rows = db.loadUnassignedLoot(runId);
+    expect(rows.length).toBe(1);
+    expect(rows[0]!.id).toBe(room.lootPool[0]!.lootId);
+    expect(rows[0]!.origin).toBe("stash"); // codex banking must skip this row
+    expect(sends.some((s) => s.msg.type === "inventory")).toBe(true);
+    expect(sends.some((s) => s.msg.type === "roomState")).toBe(true);
+  });
+
+  it("rejects wrong-phase, spectator, and empty bag slot", () => {
+    const { room } = buildRoom({ dim: 8207, humans: 2 });
+    const { io, sends } = recordingIO();
+
+    room.phase = "combat";
+    machine.stashLoot(room, io, room.seats[0]!, 0);
+    expect(errorCodes(sends)).toEqual(["BAD_PHASE"]);
+    room.phase = "overworld";
+
+    room.seats[1]!.state = "human-disconnected";
+    machine.stashLoot(room, io, room.seats[1]!, 0);
+    expect(errorCodes(sends).at(-1)).toBe("NOT_YOUR_SEAT");
+    room.seats[1]!.state = "human-connected";
+
+    // Seats spawn with the default preset, so pick a genuinely empty slot.
+    const emptySlot = room.seats[0]!.inventory.bag.indexOf(null);
+    machine.stashLoot(room, io, room.seats[0]!, emptySlot);
+    expect(errorCodes(sends).at(-1)).toBe("INVALID_INPUT");
+    machine.stashLoot(room, io, room.seats[0]!, 99); // out of range
+    expect(errorCodes(sends).at(-1)).toBe("INVALID_INPUT");
+    expect(room.lootPool.length).toBe(0);
+  });
+
+  it("round-trip: one seat stashes, another takes the same item", () => {
+    const { room, runId } = buildRoom({ dim: 8210, humans: 2, capacity: 2 });
+    const giver = room.seats[0]!;
+    const bag = [...giver.inventory.bag];
+    bag[0] = mkWeapon("handoff", 8210);
+    giver.inventory = { ...giver.inventory, bag };
+    const { io } = recordingIO();
+
+    machine.stashLoot(room, io, giver, 0);
+    const entry = room.lootPool[0]!;
+    machine.takeLoot(room, io, room.seats[1]!, entry.lootId);
+
+    expect(giver.inventory.bag.some((b) => b?.id === "handoff")).toBe(false);
+    expect(room.seats[1]!.inventory.bag.some((b) => b?.id === "handoff")).toBe(true);
+    expect(room.lootPool.length).toBe(0);
+    expect(db.loadRunLoot(runId).find((r) => r.item_id === "handoff")!.assigned_seat_index).toBe(1);
   });
 });
 

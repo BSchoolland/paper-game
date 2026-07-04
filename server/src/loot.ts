@@ -8,7 +8,7 @@ import { loadItems, insertRunLoot } from "./db.js";
 /**
  * Loot drop recorder (docs/meta-loop/03-loot-codex.md §4.2): the `encounter-won` subscriber that
  * rolls the current dimension's item pool, persists the drops to the run's ledger, and grows the
- * shared party pool. Pure recorder (02 §4.1 discipline): it persists + broadcasts, never touches
+ * party box. Pure recorder (02 §4.1 discipline): it persists + broadcasts, never touches
  * phase/vote/session. The roll uses Math.random in prod (tests seed via the pure shared rollDrops).
  */
 export function lootDropRecorder(room: Room, io: RoomIO,
@@ -22,7 +22,7 @@ export function lootDropRecorder(room: Room, io: RoomIO,
   const drops = rollDrops(pool, ev.icon, Math.random);
   if (drops.length === 0) return;
   const entries: LootPoolEntry[] = drops.map((item) => ({
-    lootId: insertRunLoot(ev.runId, item, ev.hex, ev.icon),
+    lootId: insertRunLoot(ev.runId, item, ev.hex, ev.icon, "drop"),
     item,
     sourceIcon: ev.icon,
   }));

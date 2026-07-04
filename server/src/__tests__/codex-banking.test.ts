@@ -80,7 +80,7 @@ function buildRoom(opts: { dim: number; tier: number | null; humans?: number; sa
 }
 
 function dropRow(runId: number, item: ItemDefinition, assignSeat?: { index: number; accountId: string }): void {
-  const lootId = db.insertRunLoot(runId, item, ORIGIN, "treasure");
+  const lootId = db.insertRunLoot(runId, item, ORIGIN, "treasure", "drop");
   if (assignSeat) {
     db.db.prepare("UPDATE run_loot SET assigned_seat_index = ?, assigned_account_id = ?, assigned_at = ? WHERE id = ?")
       .run(assignSeat.index, assignSeat.accountId, Date.now(), lootId);
@@ -223,6 +223,24 @@ describe("codexBankingRecorder — dedup + idempotency", () => {
     expect(accounts.getStats(accX)["designs_recovered"]).toBe(1); // dedup at PK
     const pushes = sends.filter((s) => s.msg.type === "codexBanked");
     expect(pushes.length).toBe(2); // one per seat
+  });
+});
+
+describe("codexBankingRecorder — stash rows never bank", () => {
+  it("a stashed (player-deposited) item banks nothing; a dropped design still banks", () => {
+    mkDim(8308, 1);
+    const { room, runId, accountIds } = buildRoom({ dim: 8308, tier: 1, humans: 1 });
+    const [accA] = accountIds as [string];
+    dropRow(runId, mkWeapon("cbank-found", 8308));
+    // A preset item stashed into the party box: origin "stash", never a find.
+    db.insertRunLoot(runId, mkWeapon("cbank-preset", 8308), ORIGIN, null, "stash");
+
+    const { io } = recordingIO();
+    codex.codexBankingRecorder(room, io, ev(runId, "victory"));
+
+    expect(db.loadCodexEntry(accA, "cbank-found")).not.toBeNull();
+    expect(db.loadCodexEntry(accA, "cbank-preset")).toBeNull();
+    expect(db.loadCodexFirst("cbank-preset")).toBeNull(); // no false first-recovery
   });
 });
 

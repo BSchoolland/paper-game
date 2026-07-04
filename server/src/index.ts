@@ -68,7 +68,8 @@ import {
   submitDefend,
   proposeMove,
   proposeRetreat,
-  proposeLootClaim,
+  takeLoot,
+  stashLoot,
   voteStatePayload,
   castVote,
   beginCombatEntry,
@@ -295,8 +296,8 @@ function sendSeatSnapshots(room: Room, seat: Seat): void {
     // Send the visibility-expanded map (same payload as the broadcast), NOT raw room.hexMap, so the
     // resuming player gets the clickable frontier the server's proposeMove check expects (no desync).
     io.send(seat, { type: "hexMapState", hexMap: hexMapStatePayload(room), gateways: room.gateways });
-    // An open vote (move/retreat/travel/loot) must survive a reconnect (03-loot-codex §4.7): without
-    // this the returning player sees no ballot and the LootPanel wrongly re-enables its Claim buttons.
+    // An open vote (move/retreat/travel) must survive a reconnect (03-loot-codex §4.7): without
+    // this the returning player sees no ballot.
     if (room.vote) io.send(seat, { type: "voteState", vote: voteStatePayload(room.vote) });
   }
   sendInventory(room, io, seat);
@@ -1117,8 +1118,10 @@ function routeMessage(ws: ServerWebSocket<SocketData>, msg: ClientMessage): void
       return proposeRetreat(room, io, seat);
     case "proposeTravel":
       return proposeTravel(room, io, seat);
-    case "claimLoot":
-      return proposeLootClaim(room, io, seat, msg.lootId);
+    case "takeLoot":
+      return takeLoot(room, io, seat, msg.lootId);
+    case "stashLoot":
+      return stashLoot(room, io, seat, msg.bagIndex);
     case "castVote":
       return castVote(room, io, seat, msg.proposalId, msg.vote);
     case "playAgain":

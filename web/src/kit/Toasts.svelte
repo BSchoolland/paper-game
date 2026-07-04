@@ -28,7 +28,7 @@
             <span class="lname r-{drop.item.rarity}">{drop.item.name}</span>
           </div>
         {/each}
-        <div class="sub">claim it from the party pool</div>
+        <div class="sub">sent to the party box</div>
       {:else if toast.kind === "xpBanked"}
         <div class="t-title">EXPEDITION BANKED</div>
         <div class="tname sc">+{toast.banked.banked} XP</div>

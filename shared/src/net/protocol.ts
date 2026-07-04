@@ -14,12 +14,12 @@ import type { HexCoord, HexMapState, HexIconType } from "../map/hex-map.js";
 import type { ContractState, ContractOffer, ContractType } from "../overworld/contracts.js";
 import type { ArchetypeId } from "../encounter/archetypes.js";
 
-export const PROTOCOL_VERSION = 7;
+export const PROTOCOL_VERSION = 8;
 
 /** Durable run outcome — the value set of runs.outcome (db.ts re-imports this). */
 export type RunOutcome = "victory" | "defeat" | "retreat" | "abandoned";
 
-export type VoteKind = "move" | "retreat" | "travel" | "loot";
+export type VoteKind = "move" | "retreat" | "travel";
 
 // --- Identity / seats ---
 export type SeatId = "s0" | "s1" | "s2" | "s3"; // "s{index}", index-stable for the room's life
@@ -76,7 +76,7 @@ export interface RoomStatePayload {
   readonly contract: ContractState | null;
   /** Set iff phase === "gameover" — drives the outcome-variant end screen on reconnect too. */
   readonly outcome: RunOutcome | null;
-  /** Unclaimed party drops, oldest first (03-loot-codex flag #13). Always [] outside a started run. */
+  /** The party box, oldest first (03-loot-codex flag #13). Always [] outside a started run. */
   readonly lootPool: readonly LootPoolEntry[];
   /** True while the party carries an unconsumed rest (reconnect-safe truth; flag #2/#8). */
   readonly rested: boolean;
@@ -141,13 +141,13 @@ export interface DimensionOption {
 // --- Loot & codex DTOs (docs/meta-loop/03-loot-codex.md §3.1) ---
 
 /**
- * One drop in the shared party pool. Full ItemDefinition (the `inventory` message precedent)
+ * One item in the party box. Full ItemDefinition (the `inventory` message precedent)
  * so the client renders name/sprite/rarity with zero lookups.
  */
 export interface LootPoolEntry {
-  readonly lootId: number; // run_loot.id — the claim handle
+  readonly lootId: number; // run_loot.id — the take handle
   readonly item: ItemDefinition;
-  readonly sourceIcon: HexIconType | null; // richness provenance for the tooltip
+  readonly sourceIcon: HexIconType | null; // richness provenance for the tooltip; null for stashed items
 }
 
 /** One banked design, with provenance resolved server-side (dimension + discoverer names). */
@@ -235,14 +235,11 @@ export type VoteChoice = "yes" | "no";
 export interface VoteStatePayload {
   readonly proposalId: string;
   readonly kind: VoteKind;
-  /** For kind "loot" the proposer IS the claimant. */
   readonly proposerSeatId: SeatId;
-  /** Was required; null for retreat, travel, and loot votes. */
+  /** Move target; null for retreat and travel votes. */
   readonly target: HexCoord | null;
   /** Travel destination; null unless kind === "travel" — drives the VotePanel destination line. */
   readonly travel: GatewayInfo | null;
-  /** Claimed drop; null unless kind === "loot" — drives the VotePanel claim line. */
-  readonly loot: LootPoolEntry | null;
   /** Cast human ballots only. */
   readonly votes: Partial<Record<SeatId, VoteChoice>>;
   /** Frozen connected-human seat set at propose time; resolution math is over this (ruling R15). */
@@ -302,8 +299,10 @@ export type ClientMessage =
   | { type: "proposeRetreat" }
   // Seat-scoped, overworld-only, party on a cleared gateway hex: open a travel-deeper vote.
   | { type: "proposeTravel" }
-  // Seat-scoped, overworld-only: propose claiming a pool item for YOUR seat (opens a loot vote).
-  | { type: "claimLoot"; lootId: number }
+  // Seat-scoped, overworld-only: take a party-box item into YOUR bag (instant, no vote).
+  | { type: "takeLoot"; lootId: number }
+  // Seat-scoped, overworld-only: put one of YOUR bag items into the party box.
+  | { type: "stashLoot"; bagIndex: number }
   // Seat-scoped, lobby-only: set this seat's manifest picks (full replacement, may be []).
   | { type: "chooseManifest"; itemIds: readonly string[] }
   | { type: "action"; seatId: SeatId; action: WireAction }
@@ -402,7 +401,7 @@ export type ServerMessage =
       leveledUp: boolean;
     }
   | { type: "titlesEarned"; titleIds: readonly string[] }
-  // Broadcast at drop time — toast/celebration only; pool truth rides roomState (flag #13).
+  // Broadcast at drop time — toast/celebration only; party-box truth rides roomState (flag #13).
   | { type: "lootFound"; drops: readonly LootPoolEntry[] }
   // getCodex response (PRIVATE): the requesting account's full codex, acquired_at DESC.
   | { type: "codex"; entries: readonly CodexEntryPayload[] }

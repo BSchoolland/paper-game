@@ -1407,7 +1407,7 @@ async function enterCombatLive(host: MockClient, code: string): Promise<import("
 }
 
 describe("loot & codex integration", () => {
-  it("a treasure-hex win drops loot into the shared pool; a solo claim assigns it instantly", async () => {
+  it("a treasure-hex win drops loot into the party box; a take assigns it instantly", async () => {
     const host = await connectClient(server);
     await hello(host);
     const { code } = await createRoom(host, 2);
@@ -1426,7 +1426,7 @@ describe("loot & codex integration", () => {
     const { lootId, item } = rs.room.lootPool[0]!;
 
     host.mark();
-    host.send({ type: "claimLoot", lootId });
+    host.send({ type: "takeLoot", lootId });
     const inv = await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
     expect(inv.inventory.bag.some((b) => b?.id === item.id)).toBe(true);
     const drained = await host.waitFor(
@@ -1528,7 +1528,7 @@ describe("loot & codex integration", () => {
     host.close();
   }, 30000);
 
-  it("an open loot claim vote survives a reconnect: the snapshot carries voteState and the reclaimed seat can finish the ballot (03 §4.7)", async () => {
+  it("two humans: a drop is takeable instantly (no vote), and a stash puts it back for the other seat", async () => {
     const host = await connectClient(server);
     const guest = await connectClient(server);
     await hello(host);
@@ -1554,30 +1554,31 @@ describe("loot & codex integration", () => {
     const found = await host.nextOf("lootFound", { fromNow: true, timeoutMs: 8000 });
     const entry = found.drops[0]!;
 
-    // Host proposes the claim (electorate of 2 -> a real ballot), then the guest drops mid-vote.
-    guest.mark();
-    host.send({ type: "claimLoot", lootId: entry.lootId });
-    const lv = await guest.nextOf("voteState", { fromNow: true, timeoutMs: 4000 });
-    expect(lv.vote!.kind).toBe("loot");
-    guest.close();
-    await guest.closed;
-
-    // Hello with the same clientId auto-reclaims the dead seat; its snapshot must carry the vote.
-    const guest2 = await connectClient(server, guest.clientId);
-    const w2 = await hello(guest2);
-    expect(w2.reconnected).toEqual({ code, seatId: "s1" });
-    const snap = await guest2.nextOf("voteState", { timeoutMs: 4000 });
-    expect(snap.vote).not.toBeNull();
-    expect(snap.vote!.kind).toBe("loot");
-    expect(snap.vote!.loot!.lootId).toBe(entry.lootId);
-
-    // The reclaimed seat is still in the frozen electorate: its yes resolves the claim to the host.
+    // With two connected humans the take is still instant — no voteState opens.
     host.mark();
-    guest2.send({ type: "castVote", proposalId: snap.vote!.proposalId, vote: "yes" });
+    host.send({ type: "takeLoot", lootId: entry.lootId });
     const inv = await host.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
-    expect(inv.inventory.bag.some((b) => b?.id === entry.item.id)).toBe(true);
+    const bagIndex = inv.inventory.bag.findIndex((b) => b?.id === entry.item.id);
+    expect(bagIndex).toBeGreaterThanOrEqual(0);
+    expect(room.vote).toBeNull();
+
+    // Stash it back: a new unassigned box entry appears for everyone, and the guest takes it.
+    // Stashed entries carry sourceIcon null, which distinguishes this roomState from the buffered
+    // pre-take one (those drops came from the treasure hex).
+    host.send({ type: "stashLoot", bagIndex });
+    const rs = await guest.waitFor(
+      (m): m is Extract<ServerMessage, { type: "roomState" }> =>
+        m.type === "roomState" && m.room.lootPool.some((e) => e.item.id === entry.item.id && e.sourceIcon === null),
+      { timeoutMs: 8000 },
+    );
+    const stashed = rs.room.lootPool.find((e) => e.item.id === entry.item.id && e.sourceIcon === null)!;
+
+    guest.mark();
+    guest.send({ type: "takeLoot", lootId: stashed.lootId });
+    const ginv = await guest.nextOf("inventory", { fromNow: true, timeoutMs: 8000 });
+    expect(ginv.inventory.bag.some((b) => b?.id === entry.item.id)).toBe(true);
     host.close();
-    guest2.close();
+    guest.close();
   }, 30000);
 });
 

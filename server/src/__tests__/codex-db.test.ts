@@ -26,7 +26,7 @@ describe("run_loot ledger (v9)", () => {
   it("insertRunLoot / loadUnassignedLoot / loadRunLoot roundtrip incl. snapshot JSON", () => {
     const runId = db.startNewRun(8100, "cdxdb-c1", 2);
     const sword = mkWeapon("cdxdb-sword", 8100, "uncommon");
-    const lootId = db.insertRunLoot(runId, sword, { q: 2, r: -1 }, "treasure");
+    const lootId = db.insertRunLoot(runId, sword, { q: 2, r: -1 }, "treasure", "drop");
     expect(lootId).toBeGreaterThan(0);
 
     const unassigned = db.loadUnassignedLoot(runId);
@@ -48,7 +48,7 @@ describe("run_loot ledger (v9)", () => {
   it("commitLootAssignment assigns + persists the bag atomically; second call is first-writer-wins", () => {
     const runId = db.startNewRun(8101, "cdxdb-c2", 2);
     const item = mkWeapon("cdxdb-axe", 8101);
-    const lootId = db.insertRunLoot(runId, item, ORIGIN, "boss");
+    const lootId = db.insertRunLoot(runId, item, ORIGIN, "boss", "drop");
 
     const inv = emptyInv();
     inv.bag[0] = item;
@@ -107,7 +107,7 @@ describe("resolveItemForRun (flag #8 fixed-order resolution)", () => {
 
     // Dropped-then-deleted from the pool: resolves via the run_loot snapshot.
     const dropped = mkWeapon("cdxdb-dropped", 8104, "uncommon");
-    db.insertRunLoot(runId, dropped, ORIGIN, "ruins");
+    db.insertRunLoot(runId, dropped, ORIGIN, "ruins", "drop");
     expect(db.getItemById("cdxdb-dropped")).toBeNull(); // never in the items table
     expect(db.resolveItemForRun(runId, "cdxdb-dropped")?.rarity).toBe("uncommon");
 
@@ -123,7 +123,7 @@ describe("resolveItemForRun (flag #8 fixed-order resolution)", () => {
   it("loadSeatInventory rehydrates a bag holding a pool-deleted dropped item", () => {
     const runId = db.startNewRun(8106, "cdxdb-rehydrate", 2);
     const dropped = mkWeapon("cdxdb-bagitem", 8106);
-    db.insertRunLoot(runId, dropped, ORIGIN, "treasure");
+    db.insertRunLoot(runId, dropped, ORIGIN, "treasure", "drop");
     const inv = emptyInv();
     inv.bag[2] = dropped;
     db.saveSeatInventory(runId, 0, inv);
@@ -140,7 +140,7 @@ describe("eraseClient scope (loot deleted, codex permanent)", () => {
     const runId = db.startNewRun(8107, clientId, 2);
     db.upsertRunSeat(runId, 0, { clientId, displayName: "E", controllerKind: "human", tokenSalt: db.newTokenSalt(), accountId: acct });
     const item = mkWeapon("cdxdb-erasable", 8107);
-    db.insertRunLoot(runId, item, ORIGIN, "boss");
+    db.insertRunLoot(runId, item, ORIGIN, "boss", "drop");
     db.bankCodexEntry(acct, item, 0);
     db.recordCodexFirst(item, acct);
 

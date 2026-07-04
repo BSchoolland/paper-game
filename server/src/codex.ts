@@ -55,9 +55,11 @@ export function codexBankingRecorder(room: Room, io: RoomIO,
   if (ev.outcome !== "victory" && ev.outcome !== "retreat") return; // locked #6/#7
 
   // Designs found this run (flag #1): dedup the ledger by item id, keep the first row per design
-  // (its assigned_account_id feeds first-recovery credit, flag #6).
+  // (its assigned_account_id feeds first-recovery credit, flag #6). Stash rows are player deposits
+  // into the party box, not finds — they never bank or claim firsts.
   const byDesign = new Map<string, RunLootRow>();
   for (const row of loadRunLoot(ev.runId)) {
+    if (row.origin === "stash") continue;
     if (!byDesign.has(row.item_id)) byDesign.set(row.item_id, row);
   }
   if (byDesign.size === 0) return;

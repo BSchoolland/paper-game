@@ -10,11 +10,11 @@ const DB_TS = resolve(import.meta.dir, "../db.ts");
 /**
  * The migration blocks must be re-runnable against a populated DB. Module cache makes an
  * in-process re-import meaningless, so run db.ts in TWO subprocesses against the same
- * file-backed DB: the first migrates a fresh DB v3->v9, the second must no-op cleanly at
- * user_version 9.
+ * file-backed DB: the first migrates a fresh DB v3->v10, the second must no-op cleanly at
+ * user_version 10.
  */
-describe("db migration idempotency (v9)", () => {
-  it("importing db.ts twice against the same DB exits 0 both times and lands on user_version 9", async () => {
+describe("db migration idempotency (v10)", () => {
+  it("importing db.ts twice against the same DB exits 0 both times and lands on user_version 10", async () => {
     const dir = mkdtempSync(join(tmpdir(), "coop-migration-"));
     const dbPath = join(dir, "migrate.sqlite");
     try {
@@ -35,7 +35,7 @@ describe("db migration idempotency (v9)", () => {
 
       const check = new Database(dbPath);
       const { user_version } = check.query("PRAGMA user_version").get() as { user_version: number };
-      expect(user_version).toBe(9);
+      expect(user_version).toBe(10);
       // Spot-check the v6 surface actually exists.
       const tables = (
         check.query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]
@@ -66,7 +66,7 @@ describe("db migration idempotency (v9)", () => {
         expect(tables).toContain(required);
       }
       const lootCols = (check.query("PRAGMA table_info(run_loot)").all() as { name: string }[]).map((c) => c.name);
-      for (const col of ["item_json", "assigned_seat_index", "assigned_account_id", "source_icon"]) {
+      for (const col of ["item_json", "assigned_seat_index", "assigned_account_id", "source_icon", "origin"]) {
         expect(lootCols).toContain(col);
       }
       const codexCols = (check.query("PRAGMA table_info(codex_entries)").all() as { name: string }[]).map((c) => c.name);
@@ -114,7 +114,7 @@ describe("db migration idempotency (v9)", () => {
       expect(exitCode).toBe(0);
 
       const check = new Database(dbPath);
-      expect((check.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(9);
+      expect((check.query("PRAGMA user_version").get() as { user_version: number }).user_version).toBe(10);
       const run = check.query("SELECT dimension_id, start_dimension_id FROM runs WHERE id = 42").get() as {
         dimension_id: number;
         start_dimension_id: number;

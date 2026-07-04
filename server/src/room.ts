@@ -115,8 +115,7 @@ interface RoomVoteBase {
 export type RoomVote =
   | (RoomVoteBase & { readonly kind: "move"; readonly target: HexCoord })
   | (RoomVoteBase & { readonly kind: "retreat" })
-  | (RoomVoteBase & { readonly kind: "travel"; readonly gateway: GatewayInfo })
-  | (RoomVoteBase & { readonly kind: "loot"; readonly entry: LootPoolEntry });
+  | (RoomVoteBase & { readonly kind: "travel"; readonly gateway: GatewayInfo });
 
 export interface Room {
   readonly code: RoomCode;
@@ -155,7 +154,7 @@ export interface Room {
   defendRound: DefendRound | null;
   vote: RoomVote | null;
 
-  /** Unclaimed party drops this run (mirrors run_loot WHERE assigned_seat_index IS NULL). */
+  /** The party box: drops + stashed items (mirrors run_loot WHERE assigned_seat_index IS NULL). */
   lootPool: LootPoolEntry[];
 
   /** The run's contract; null only for legacy pre-v7 runs and not-yet-assigned lobbies. */

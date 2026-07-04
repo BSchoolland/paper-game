@@ -160,8 +160,12 @@ export function proposeTravel(): void {
   socket().send({ type: "proposeTravel" });
 }
 
-export function claimLoot(lootId: number): void {
-  socket().send({ type: "claimLoot", lootId });
+export function takeLoot(lootId: number): void {
+  socket().send({ type: "takeLoot", lootId });
+}
+
+export function stashLoot(bagIndex: number): void {
+  socket().send({ type: "stashLoot", bagIndex });
 }
 
 export function sendAction(seatId: SeatId, action: WireAction): void {

@@ -2,13 +2,11 @@
   import type { VoteKind } from "shared";
   import { room } from "../../state/room.svelte.js";
   import { castVote } from "../../state/actions.js";
-  import ItemChip from "../../kit/ItemChip.svelte";
 
   const TITLE_BY_KIND: Record<VoteKind, string> = {
     move: "MOVE PROPOSED",
     retreat: "RETREAT PROPOSED",
     travel: "DESCENT PROPOSED",
-    loot: "CLAIM PROPOSED",
   };
 
   const vote = $derived(room.vote);
@@ -28,10 +26,6 @@
 
   const canVote = $derived(!!vote && !!mySeatId && vote.electorate.includes(mySeatId));
   const myChoice = $derived(vote && mySeatId ? vote.votes[mySeatId] : undefined);
-  const proposerName = $derived.by(() => {
-    if (!vote) return "";
-    return room.state?.seats.find((s) => s.seatId === vote.proposerSeatId)?.displayName ?? vote.proposerSeatId;
-  });
 
   // Countdown re-render tick.
   let now = $state(Date.now());
@@ -50,11 +44,6 @@
       <div class="vsub">End the run at this gateway — bank 50% of pending XP</div>
     {:else if vote.kind === "travel" && vote.travel}
       <div class="vsub">Travel the gateway to <b>{vote.travel.toName}</b> (Tier {vote.travel.toTier})</div>
-    {:else if vote.kind === "loot" && vote.loot}
-      <div class="vsub lootline">
-        <ItemChip item={vote.loot.item} small />
-        <span>{proposerName} claims <b class="r-{vote.loot.item.rarity}">{vote.loot.item.name}</b></span>
-      </div>
     {/if}
     <div class="vtally">Yes {tally.yes} · No {tally.no} · Pending {tally.pending} <span class="dim">(of {tally.of})</span></div>
     <div class="vclock dim">{secondsLeft}s</div>
@@ -93,11 +82,6 @@
     font-size: 14px;
     color: var(--ink-70);
     line-height: 1.4;
-  }
-  .lootline {
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
   .vtally {
     font-size: 14px;

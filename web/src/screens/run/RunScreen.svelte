@@ -10,7 +10,7 @@
   import CombatDock from "./CombatDock.svelte";
   import PhaseSlate from "./PhaseSlate.svelte";
   import ContractHud from "./ContractHud.svelte";
-  import LootPanel from "./LootPanel.svelte";
+  import PartyBoxPanel from "./PartyBoxPanel.svelte";
   import PackOverlay from "./PackOverlay.svelte";
   import ItemChip from "../../kit/ItemChip.svelte";
   import ChatBox from "../room/ChatBox.svelte";
@@ -64,7 +64,7 @@
 
 {#if phase === "overworld" && !combatOnScreen}
   <ContractHud />
-  <LootPanel />
+  <PartyBoxPanel />
   <button class="btn ghost packbtn" onclick={() => (packOpen = true)}>PACK (I)</button>
 {/if}
 
