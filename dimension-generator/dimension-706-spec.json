@@ -1,0 +1,218 @@
+{
+  "id": 706,
+  "name": "Verdant Colossus",
+  "description": "A jungle world swallowing the ruins of a stone-and-sorcery empire. Mile-high ziggurats and canopy rail-lines rot under vine and moss while only the tallest spires still catch the sun. The construction golems that toppled the empire still walk their old patrol routes, purging anything with a pulse.",
+  "palette": {
+    "primary": "#2F5D34",
+    "secondary": "#C9B892",
+    "accent": "#E7C24B"
+  },
+  "mood": "Beautiful, green, and utterly indifferent to you. The land is a paradise; the machines still tending it will kill you on sight.",
+  "biome": "jungle-choked stone ruins under a high canopy",
+  "droppedNoun": "",
+  "negatedNoun": "",
+  "enemyBatches": [
+    {
+      "name": "FODDER",
+      "description": "cost 1-2, swarms and rebuilds itself",
+      "enemies": [
+        {
+          "name": "Mason Drone",
+          "role": "cheap swarm melee that dies fast but comes in numbers",
+          "description": "A cat-sized stone drone that scuttles on four clawed legs."
+        },
+        {
+          "name": "Chisel Drone",
+          "role": "fast melee that closes distance and shreds armor",
+          "description": "A darting drone with a single chisel-tipped foreleg."
+        },
+        {
+          "name": "Rivet Drone",
+          "role": "support that repairs damaged constructs each turn",
+          "description": "A hovering drone with a rivet-gun arm for patching allies."
+        },
+        {
+          "name": "Grout Drone",
+          "role": "builder that raises stone cover to block lanes",
+          "description": "A squat drone that oozes fresh stone from a nozzle."
+        }
+      ]
+    },
+    {
+      "name": "STANDARD",
+      "description": "cost 3-4, the patrol workforce",
+      "enemies": [
+        {
+          "name": "Mason Golem",
+          "role": "durable frontline melee bruiser",
+          "description": "A blocky worker golem of stacked, mortared stone."
+        },
+        {
+          "name": "Stone Sentinel",
+          "role": "high-HP tank that soaks hits and holds the line",
+          "description": "A tall guard golem carved with faded patrol-markings."
+        },
+        {
+          "name": "Sling Golem",
+          "role": "ranged attacker that hurls masonry from a distance",
+          "description": "A hunched golem that pries loose chunks of wall to throw."
+        },
+        {
+          "name": "Shield Golem",
+          "role": "blocker that guards adjacent constructs from harm",
+          "description": "A wide golem with a stone slab bolted to one arm."
+        }
+      ]
+    },
+    {
+      "name": "ELITE",
+      "description": "cost 6-8, rare and dangerous",
+      "enemies": [
+        {
+          "name": "Lift Golem",
+          "role": "control unit that flings and repositions the party with gravity",
+          "description": "A heavy golem with a glowing gravity-well set in its chest."
+        },
+        {
+          "name": "Siege Golem",
+          "role": "slow, huge-HP heavy hitter",
+          "description": "A half-buried automaton of rusted plates and clinging moss."
+        },
+        {
+          "name": "Mortar Golem",
+          "role": "long-range artillery dealing splash damage",
+          "description": "A squat golem with a stone barrel jutting from its back."
+        },
+        {
+          "name": "Foreman Golem",
+          "role": "commander that buffs constructs and summons more drones",
+          "description": "A lean golem whose horn-blares still command the drones."
+        }
+      ]
+    },
+    {
+      "name": "BOSS",
+      "description": "cost 12+, one per fight",
+      "enemies": [
+        {
+          "name": "Stone Colossus",
+          "role": "boss bruiser with massive HP and crushing melee",
+          "description": "A weathered giant of fitted stone, taller than the canopy."
+        },
+        {
+          "name": "Lift Colossus",
+          "role": "boss that hurls the whole party around with gravity",
+          "description": "A towering golem cored with a blazing gravity-well."
+        },
+        {
+          "name": "Siege Colossus",
+          "role": "boss that charges in melee and bombards from range",
+          "description": "A fully unearthed siege automaton draped in torn vines."
+        },
+        {
+          "name": "Foreman Colossus",
+          "role": "boss that endlessly revives and rallies drones",
+          "description": "A giant overseer that blares orders across the ruins."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Chisel Blade",
+      "type": "sword",
+      "rarity": "common",
+      "description": "A mason's chisel ground down to a sword's edge."
+    },
+    {
+      "name": "Machete",
+      "type": "sword",
+      "rarity": "common",
+      "description": "A broad jungle blade for hacking through vine and foe."
+    },
+    {
+      "name": "Sentinel Blade",
+      "type": "sword",
+      "rarity": "uncommon",
+      "description": "A long blade pried from a fallen stone sentinel."
+    },
+    {
+      "name": "Rail Saber",
+      "type": "sword",
+      "rarity": "rare",
+      "description": "A saber forged from a length of humming stone rail."
+    },
+    {
+      "name": "Rail Spike",
+      "type": "spear",
+      "rarity": "common",
+      "description": "A stone rail-spike lashed to a wooden haft."
+    },
+    {
+      "name": "Mason's Pick",
+      "type": "spear",
+      "rarity": "uncommon",
+      "description": "A heavy stonework pick that punches through armor."
+    },
+    {
+      "name": "Siege Pike",
+      "type": "spear",
+      "rarity": "rare",
+      "description": "A long pike torn from the arm of a siege golem."
+    },
+    {
+      "name": "Ironwood Bow",
+      "type": "bow",
+      "rarity": "common",
+      "description": "A sturdy bow cut from dense jungle ironwood."
+    },
+    {
+      "name": "Recurve Bow",
+      "type": "bow",
+      "rarity": "uncommon",
+      "description": "A curved bow that drives arrows with extra force."
+    },
+    {
+      "name": "Longbow",
+      "type": "bow",
+      "rarity": "rare",
+      "description": "A tall bow with long reach and a heavy draw."
+    },
+    {
+      "name": "Stone Staff",
+      "type": "staff",
+      "rarity": "common",
+      "description": "A carved stone rod that channels simple sorcery."
+    },
+    {
+      "name": "Gravity Staff",
+      "type": "staff",
+      "rarity": "uncommon",
+      "description": "A rod that taps the old lift-wells to fling foes."
+    },
+    {
+      "name": "Sorcerer's Staff",
+      "type": "staff",
+      "rarity": "rare",
+      "description": "A Grovemason focus humming with stored sorcery."
+    },
+    {
+      "name": "Stone Maul",
+      "type": "two-handed",
+      "rarity": "common",
+      "description": "A heavy mason's maul for breaking rock and bone."
+    },
+    {
+      "name": "Sledgehammer",
+      "type": "two-handed",
+      "rarity": "uncommon",
+      "description": "A two-handed hammer that flattens what it hits."
+    },
+    {
+      "name": "Siege Hammer",
+      "type": "two-handed",
+      "rarity": "rare",
+      "description": "A maul-head salvaged from a wrecked siege automaton."
+    }
+  ]
+}

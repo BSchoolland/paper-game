@@ -1,0 +1,26 @@
+Dimension: Verdant Colossus
+Biome: jungle-choked stone ruins under a high canopy
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color quality, and isolated-on-page item presentation. Ignore the reference's parchment background and any grid or separator lines it shows; put the items on plain white.
+
+Arrange the items in a 4×4 layout, one item per cell position, evenly spaced with clear empty white space between them. Do NOT draw any grid lines, cell borders, boxes, or separators. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Chisel Blade (sword, common) — A mason's chisel ground down to a sword's edge.
+  Machete (sword, common) — A broad jungle blade for hacking through vine and foe.
+  Sentinel Blade (sword, uncommon) — A long blade pried from a fallen stone sentinel.
+  Rail Saber (sword, rare) — A saber forged from a length of humming stone rail.
+  Rail Spike (spear, common) — A stone rail-spike lashed to a wooden haft.
+  Mason's Pick (spear, uncommon) — A heavy stonework pick that punches through armor.
+  Siege Pike (spear, rare) — A long pike torn from the arm of a siege golem.
+  Ironwood Bow (bow, common) — A sturdy bow cut from dense jungle ironwood.
+  Recurve Bow (bow, uncommon) — A curved bow that drives arrows with extra force.
+  Longbow (bow, rare) — A tall bow with long reach and a heavy draw.
+  Stone Staff (staff, common) — A carved stone rod that channels simple sorcery.
+  Gravity Staff (staff, uncommon) — A rod that taps the old lift-wells to fling foes.
+  Sorcerer's Staff (staff, rare) — A Grovemason focus humming with stored sorcery.
+  Stone Maul (two-handed, common) — A heavy mason's maul for breaking rock and bone.
+  Sledgehammer (two-handed, uncommon) — A two-handed hammer that flattens what it hits.
+  Siege Hammer (two-handed, rare) — A maul-head salvaged from a wrecked siege automaton.

@@ -1,0 +1,24 @@
+Dimension: Verdant Colossus
+Biome: jungle-choked stone ruins under a high canopy
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color quality, character proportions, and animation poses. Ignore the reference's parchment background and any grid or separator lines it shows; put the subjects on plain white.
+
+Arrange the subjects in a 4×4 layout, evenly spaced with clear empty white space between them. Do NOT draw any grid lines, cell borders, boxes, or separators between the cells:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "ELITE" tier: cost 6-8, rare and dangerous
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Lift Golem — control unit that flings and repositions the party with gravity. A heavy golem with a glowing gravity-well set in its chest.
+
+  Siege Golem — slow, huge-HP heavy hitter. A half-buried automaton of rusted plates and clinging moss.
+
+  Mortar Golem — long-range artillery dealing splash damage. A squat golem with a stone barrel jutting from its back.
+
+  Foreman Golem — commander that buffs constructs and summons more drones. A lean golem whose horn-blares still command the drones.

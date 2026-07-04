@@ -247,9 +247,11 @@ phase("Generate");
 const artPrompt = [
   "You are a deterministic shim around the art generator. It generates one sprite sheet per diffusion bundle via gpt-image-2 and runs the python sprite-extraction scripts.",
   "",
+  `IMPORTANT: the generator's .env (OPENAI_API_KEY for gpt-image-2) is loaded from ${GEN}, so the command below cd's there first. Running from anywhere else fails with "Missing credentials".`,
+  "",
   "Run this command in the FOREGROUND (it takes a few minutes; set the Bash tool's timeout to 600000 ms so it isn't cut off). Do NOT background it.",
   "",
-  `  ${ENV} bun ${AUTO}/art-agent.ts ${slug}`,
+  `  cd ${GEN} && ${ENV} bun ${AUTO}/art-agent.ts ${slug}`,
   "",
   `On success the sprites are extracted to server/sprites/enemies/dimension-${dimId}/, public/sprites/items/dimension-${dimId}/, public/sprites/map-objects/dimension-${dimId}/, and public/sprites/map-decorations/dimension-${dimId}/.`,
   "",
@@ -460,7 +462,7 @@ phase("QA");
 
 const playable = await agent(
   [
-    "You are a deterministic shim. Assert the dimension is actually playable (every enemy template has sprite files on disk, every item sprite exists). Run exactly this command and return its JSON stdout verbatim:",
+    "You are a deterministic shim. Assert the dimension is actually playable — every enemy template has sprite files on disk and every item sprite exists. Run exactly this command and return its JSON stdout verbatim:",
     "",
     `  cd ${ROOT}/server && ${ENV} bun ${AUTO}/assert-dimension-playable.ts ${dimId}`,
     "",

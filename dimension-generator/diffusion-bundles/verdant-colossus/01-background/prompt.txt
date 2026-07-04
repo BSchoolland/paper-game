@@ -1,0 +1,12 @@
+Dimension: Verdant Colossus
+Biome: jungle-choked stone ruins under a high canopy
+Mood: Beautiful, green, and utterly indifferent to you. The land is a paradise; the machines still tending it will kill you on sight.
+Palette: primary #2F5D34, secondary #C9B892, accent #E7C24B
+
+Description: A jungle world swallowing the ruins of a stone-and-sorcery empire. Mile-high ziggurats and canopy rail-lines rot under vine and moss while only the tallest spires still catch the sun. The construction golems that toppled the empire still walk their old patrol routes, purging anything with a pulse.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

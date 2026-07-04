@@ -1,0 +1,14 @@
+Dimension: Verdant Colossus
+Biome: jungle-choked stone ruins under a high canopy
+Mood: Beautiful, green, and utterly indifferent to you. The land is a paradise; the machines still tending it will kill you on sight.
+Palette: primary #2F5D34, secondary #C9B892, accent #E7C24B
+
+Description: A jungle world swallowing the ruins of a stone-and-sorcery empire. Mile-high ziggurats and canopy rail-lines rot under vine and moss while only the tallest spires still catch the sun. The construction golems that toppled the empire still walk their old patrol routes, purging anything with a pulse.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a decoration sprite sheet for this new dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color saturation, isometric three-quarter perspective, and drop shadows. Ignore the reference's parchment background.
+
+Each decoration should be a single distinct object with clear space around it, suitable for cutting out individually. A mix of organic decorations (plants/natural objects) and structural decorations (walls/ruins/built objects) — choose what fits this dimension's biome and mood.
+
+Important: Use a variety of colors across the decorations — not everything should be the same color as the dimension palette. Natural environments have diverse coloring, so include variety (e.g. different plant greens, browns, grays for rocks, varied flower colors).
