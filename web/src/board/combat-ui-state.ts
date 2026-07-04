@@ -1,5 +1,5 @@
 import type { AbilityDefinition, AttackAbility, Entity, GameState, PlayerAction, Vec2 } from "shared";
-import { canAffordAbility } from "shared";
+import { canAffordAbility, entitiesInShape, entityHasAffordableAction, powerToMultiplier, scaleAttack, sub } from "shared";
 import type { SeatContext } from "./seat-context.js";
 
 /**
@@ -73,4 +73,31 @@ export function canUseAbility(
 export function getAbility(state: GameState | null, entityId: string | null, abilityId: string | null): AbilityDefinition | null {
   if (!state || !entityId || !abilityId) return null;
   return state.entities.get(entityId)?.abilities.find((a) => a.id === abilityId) ?? null;
+}
+
+/**
+ * True when ending the turn is the only sensible play for my hero: nothing is affordable at
+ * all, or there's no move left and no affordable attack can reach any living enemy even at
+ * perfect (crit) power. Drives the END TURN button highlight.
+ */
+export function shouldSuggestEndTurn(state: GameState | null, seat: SeatContext): boolean {
+  if (!canMyHeroAct(state, seat)) return false;
+  const hero = myHeroEntity(state, seat)!;
+  if (!entityHasAffordableAction(hero)) return true;
+
+  const move = hero.abilities.find((a) => a.kind === "move");
+  if (move && canAffordAbility(hero, move)) return false;
+
+  const critMult = powerToMultiplier(1);
+  const enemies = [...state!.entities.values()].filter((e) => e.teamId !== hero.teamId && !e.dead);
+  for (const ability of hero.abilities) {
+    if (ability.kind !== "attack" || !canAffordAbility(hero, ability)) continue;
+    const crit = scaleAttack(ability, critMult);
+    for (const enemy of enemies) {
+      const aim = sub(enemy.position, hero.position);
+      const hits = entitiesInShape(hero.position, aim, crit.shape, state!.entities, state!.grid, hero.id, crit.ignoreCoverRange);
+      if (hits.some((h) => h.id === enemy.id)) return false;
+    }
+  }
+  return true;
 }

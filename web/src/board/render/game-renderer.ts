@@ -13,16 +13,8 @@ import { drawTargetingPreview, drawEffectPreview, drawIncomingAttackPreview } fr
 import { drawZones } from "./zone-renderer.js";
 import { drawMovePreview } from "./move-preview-renderer.js";
 import { ScreenFlash, type FlashOptions } from "./screen-flash.js";
+import { CombatCamera } from "./combat-camera.js";
 import type { FrameDriver } from "./frame-driver.js";
-
-const PADDING = 75;
-const DIM_ALPHA = 0.4;
-const DIM_COLOR = 0x1a140e;
-const BORDER_COLOR = 0x4a3728;
-const BORDER_WIDTH = 2;
-const SHADOW_COLOR = 0x1a140e;
-const SHADOW_BLUR = 18;
-const SHADOW_ALPHA = 0.35;
 
 // Per-frame exponential ease for the move preview target. Fixed factor (the selection token pins the
 // frame rate to ~45fps while aiming), snapping the last fraction of a pixel so it settles cleanly.
@@ -37,8 +29,6 @@ function easeToward(cur: Vec2 | null, target: Vec2): Vec2 {
 
 export class GameRenderer {
   private outerContainer = new Container();
-  private dimGfx = new Graphics();
-  private frameGfx = new Graphics();
   private worldContainer = new Container();
   private backgroundLayer = new Container();
   private sortableLayer = new Container();
@@ -50,9 +40,7 @@ export class GameRenderer {
    *  line/marker glide instead of jumping. May sit briefly between cells while easing. */
   private movePreviewTarget: Vec2 | null = null;
   private costLabel = new Text({ text: "", style: { fontSize: 11, fontFamily: "monospace", fontWeight: "bold", fill: 0x4a3728 } });
-  private scale = 1;
-  private offsetX = 0;
-  private offsetY = 0;
+  private camera: CombatCamera;
   private entities: EntityManager | null = null;
   private mapObjectSprites: Sprite[] = [];
   private debugLayer = new Container();
@@ -61,8 +49,6 @@ export class GameRenderer {
   private shakeIntensity = 0;
   private shakeTimer = 0;
   private playbackSpeed = 1;
-  private baseOffsetX = 0;
-  private baseOffsetY = 0;
   private lastMouseWorld: Vec2 = { x: 0, y: 0 };
   private screenFlash: ScreenFlash;
 
@@ -71,12 +57,19 @@ export class GameRenderer {
     private clientState: ClientState,
     private driver: FrameDriver
   ) {
-    this.outerContainer.addChild(this.dimGfx);
-    this.outerContainer.addChild(this.frameGfx);
     this.outerContainer.addChild(this.worldContainer);
     this.screenFlash = new ScreenFlash(this.outerContainer);
     this.app.stage.addChild(this.outerContainer);
     this.outerContainer.visible = false;
+    this.camera = new CombatCamera(
+      this.app.canvas,
+      () => ({ width: this.app.screen.width, height: this.app.screen.height }),
+      () => {
+        this.worldContainer.scale.set(this.camera.scale);
+        this.worldContainer.position.set(this.camera.offsetX, this.camera.offsetY);
+        this.driver.invalidate();
+      },
+    );
   }
 
   flash(opts?: FlashOptions) {
@@ -126,8 +119,15 @@ export class GameRenderer {
       this.screenFlash.trigger({ intensity: 0.65, duration: 0.22, color: 0xfff4d0 });
     };
     this.layout();
+    this.camera.setEnabled(true);
     const enterState = this.clientState.getState();
     if (enterState) {
+      // Open the fight looking at my hero — the camera clamp keeps the map covering the screen.
+      const mySeatId = this.clientState.seat.mySeatId;
+      const myHero = mySeatId
+        ? [...enterState.entities.values()].find((en) => en.controllerId === mySeatId)
+        : null;
+      if (myHero) this.camera.centerOn(myHero.position);
       this.entities.sync(enterState, this.clientState.selectedEntityId);
       this.zonesGfx.clear();
       drawZones(this.zonesGfx, enterState.zones);
@@ -149,6 +149,7 @@ export class GameRenderer {
 
   exit() {
     this.outerContainer.visible = false;
+    this.camera.setEnabled(false);
     if (this.entities) {
       this.entities.destroy();
       this.entities = null;
@@ -172,9 +173,9 @@ export class GameRenderer {
       const magnitude = this.shakeIntensity * progress * 6;
       const shakeX = (Math.random() - 0.5) * 2 * magnitude;
       const shakeY = (Math.random() - 0.5) * 2 * magnitude;
-      this.worldContainer.position.set(this.baseOffsetX + shakeX, this.baseOffsetY + shakeY);
+      this.worldContainer.position.set(this.camera.offsetX + shakeX, this.camera.offsetY + shakeY);
       if (this.shakeTimer <= 0) {
-        this.worldContainer.position.set(this.baseOffsetX, this.baseOffsetY);
+        this.worldContainer.position.set(this.camera.offsetX, this.camera.offsetY);
       }
     }
 
@@ -219,30 +220,17 @@ export class GameRenderer {
     );
   }
 
-  getCombatRect(): { x: number; y: number; w: number; h: number } {
-    const state = this.clientState.getState();
-    if (!state) return { x: 0, y: 0, w: 0, h: 0 };
-    const grid = state.grid;
-    return {
-      x: this.offsetX,
-      y: this.offsetY,
-      w: grid.width * grid.cellSize * this.scale,
-      h: grid.height * grid.cellSize * this.scale,
-    };
-  }
-
   screenToWorld(screenPos: Vec2): Vec2 {
-    return {
-      x: (screenPos.x - this.offsetX) / this.scale,
-      y: (screenPos.y - this.offsetY) / this.scale,
-    };
+    return this.camera.screenToWorld(screenPos);
   }
 
   worldToScreen(worldPos: Vec2): Vec2 {
-    return {
-      x: worldPos.x * this.scale + this.offsetX,
-      y: worldPos.y * this.scale + this.offsetY,
-    };
+    return this.camera.worldToScreen(worldPos);
+  }
+
+  /** A camera drag that just ended suppresses the click it would otherwise fire. */
+  consumeSuppressedClick(): boolean {
+    return this.camera.consumeSuppressedClick();
   }
 
   pushEvents(events: readonly GameEvent[]) {
@@ -387,35 +375,8 @@ export class GameRenderer {
     const layoutState = this.clientState.getState();
     if (!layoutState) return;
     const grid = layoutState.grid;
-    const worldW = grid.width * grid.cellSize;
-    const worldH = grid.height * grid.cellSize;
-    const screenW = this.app.screen.width;
-    const screenH = this.app.screen.height;
-
-    this.scale = Math.min(
-      (screenW - PADDING * 2) / worldW,
-      (screenH - PADDING * 2) / worldH
-    );
-    this.offsetX = (screenW - worldW * this.scale) / 2;
-    this.offsetY = (screenH - worldH * this.scale) / 2;
-
-    this.worldContainer.scale.set(this.scale);
-    this.baseOffsetX = this.offsetX;
-    this.baseOffsetY = this.offsetY;
-    this.worldContainer.position.set(this.offsetX, this.offsetY);
-
-    this.dimGfx.clear();
-    this.dimGfx.rect(0, 0, screenW, screenH);
-    this.dimGfx.fill({ color: DIM_COLOR, alpha: DIM_ALPHA });
-
-    this.screenFlash.resize(screenW, screenH);
-
-    const combatX = this.offsetX;
-    const combatY = this.offsetY;
-    const combatW = worldW * this.scale;
-    const combatH = worldH * this.scale;
-
-    this.frameGfx.clear();
+    this.camera.setWorld(grid.width * grid.cellSize, grid.height * grid.cellSize);
+    this.screenFlash.resize(this.app.screen.width, this.app.screen.height);
   }
 
   private rebuildGrid() {

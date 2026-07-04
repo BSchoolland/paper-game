@@ -19,7 +19,6 @@
   import { loadSpriteAssets, loadDimensionSprites } from "./render/sprite-assets.js";
   import { ClientState } from "./client-state.svelte.js";
   import { InputManager } from "./input-manager.js";
-  import { AbilityBar } from "./ability-bar.js";
   import { DefendPrompt } from "./defend-prompt.js";
 
   /**
@@ -38,7 +37,6 @@
   let hexRenderer: HexMapRenderer;
   let gameRenderer: GameRenderer;
   let input: InputManager;
-  let abilityBar: AbilityBar;
   let defendPrompt: DefendPrompt;
 
   // Which scene the board currently shows (lags room.phase while combat animations drain).
@@ -52,7 +50,6 @@
     void init();
     return () => {
       disposed = true;
-      abilityBar?.hide();
       if (onResize) window.removeEventListener("resize", onResize);
       driver?.destroy();
       app?.destroy(true, { children: true });
@@ -100,8 +97,6 @@
       if (!combat.display) return;
       gameRenderer.renderOverlay(input.mouseWorld);
     });
-    abilityBar = new AbilityBar(clientState);
-    abilityBar.hide();
     defendPrompt = new DefendPrompt(clientState, gameRenderer);
 
     setAnimatingCheck(() => gameRenderer.isAnimating());
@@ -109,7 +104,6 @@
     clientState.subscribe(() => {
       if (combat.display && scene === "combat") gameRenderer.render();
     });
-    input.addMouseMoveListener((mouseWorld) => abilityBar.updateMouse(mouseWorld));
 
     ready = true;
   }
@@ -159,13 +153,11 @@
       clientState.autoSelectMyHero();
       gameRenderer.enter();
       input.setEnabled(true);
-      abilityBar.show();
     });
   }
 
   function exitCombat(): void {
     input.setEnabled(false);
-    abilityBar.hide();
     gameRenderer.exit();
     resetCombatDisplay();
     scene = "none";

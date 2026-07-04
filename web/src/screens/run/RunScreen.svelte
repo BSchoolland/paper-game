@@ -6,6 +6,7 @@
   import BoardHost from "../../board/BoardHost.svelte";
   import VotePanel from "./VotePanel.svelte";
   import PartyHud from "./PartyHud.svelte";
+  import CombatDock from "./CombatDock.svelte";
   import ContractHud from "./ContractHud.svelte";
   import LootPanel from "./LootPanel.svelte";
   import PackOverlay from "./PackOverlay.svelte";
@@ -22,7 +23,7 @@
 
   function onKey(e: KeyboardEvent): void {
     if ((e.target as HTMLElement)?.tagName === "INPUT") return;
-    if ((e.key === "i" || e.key === "I") && !e.ctrlKey && !e.metaKey && phase !== "combat") {
+    if ((e.key === "i" || e.key === "I") && !e.ctrlKey && !e.metaKey) {
       packOpen = !packOpen;
     }
   }
@@ -50,7 +51,8 @@
 <VotePanel />
 
 {#if phase === "combat"}
-  <PartyHud {clientState} />
+  <PartyHud />
+  <CombatDock {clientState} onOpenPack={() => (packOpen = true)} />
 {/if}
 
 {#if phase === "overworld"}

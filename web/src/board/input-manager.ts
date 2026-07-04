@@ -9,7 +9,6 @@ export class InputManager {
   mouseWorld: Vec2 = { x: 0, y: 0 };
   private onMouseMove: () => void;
   private enabled = false;
-  private mouseMoveListeners: ((mouseWorld: Vec2) => void)[] = [];
   private timingBar: TimingBar;
 
   constructor(
@@ -28,13 +27,6 @@ export class InputManager {
     this.enabled = val;
   }
 
-  addMouseMoveListener(listener: (mouseWorld: Vec2) => void): () => void {
-    this.mouseMoveListeners.push(listener);
-    return () => {
-      this.mouseMoveListeners = this.mouseMoveListeners.filter(l => l !== listener);
-    };
-  }
-
   private screenToWorld(e: MouseEvent): Vec2 {
     const rect = this.canvas.getBoundingClientRect();
     return this.renderer.screenToWorld({
@@ -48,11 +40,11 @@ export class InputManager {
       if (!this.enabled) return;
       this.mouseWorld = this.screenToWorld(e);
       this.onMouseMove();
-      for (const listener of this.mouseMoveListeners) listener(this.mouseWorld);
     });
 
     this.canvas.addEventListener("click", (e) => {
       if (!this.enabled) return;
+      if (this.renderer.consumeSuppressedClick()) return;
       const pos = this.screenToWorld(e);
       const state = this.clientState.getState();
       if (!state || state.winner || !this.clientState.canAcceptPlayerInput()) return;
@@ -89,13 +81,6 @@ export class InputManager {
       e.preventDefault();
     });
 
-    this.canvas.addEventListener("wheel", (e) => {
-      if (!this.enabled) return;
-      e.preventDefault();
-      const dir = e.deltaY > 0 ? 1 : -1;
-      this.cycleAbility(dir);
-    }, { passive: false });
-
     document.addEventListener("keydown", (e) => {
       if (!this.enabled) return;
       // Reset aborts the whole encounter for the party — host-only, and only when it's my turn to
@@ -127,24 +112,14 @@ export class InputManager {
 
   private selectAbilityByIndex(index: number) {
     const abilities = this.getPlayerAbilities();
-    if (index < abilities.length) {
-      const ability = abilities[index]!;
-      this.clientState.selectAbility(ability.id);
+    if (index >= abilities.length) return;
+    const ability = abilities[index]!;
+    // Pressing the selected ability's number again deselects it (mirrors clicking its dock slot).
+    if (this.clientState.selectedAbilityId === ability.id && ability.kind !== "barrier") {
+      this.clientState.selectAbility(null);
+      return;
     }
-  }
-
-  private cycleAbility(dir: number) {
-    const abilities = this.getPlayerAbilities();
-    if (abilities.length === 0) return;
-
-    const currentId = this.clientState.selectedAbilityId;
-    let currentIndex = abilities.findIndex(a => a.id === currentId);
-    if (currentIndex === -1) {
-      currentIndex = dir > 0 ? 0 : abilities.length - 1;
-    } else {
-      currentIndex = (currentIndex + dir + abilities.length) % abilities.length;
-    }
-    this.clientState.selectAbility(abilities[currentIndex]!.id);
+    this.clientState.selectAbility(ability.id);
   }
 
   /** Fire the selected aim-at-a-point ability (attack or zone placement) toward `mousePos`. */

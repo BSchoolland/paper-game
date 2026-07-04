@@ -1,62 +1,59 @@
 <script lang="ts">
   import { combat } from "../../state/combat.svelte.js";
   import { room } from "../../state/room.svelte.js";
-  import type { ClientState } from "../../board/client-state.svelte.js";
-
-  let { clientState }: { clientState: ClientState } = $props();
 
   const coop = $derived(combat.coop);
   const mySeatId = $derived(room.state?.yourSeatId ?? null);
-  const mine = $derived(coop?.seats.find((s) => s.seatId === mySeatId) ?? null);
   const defendingSeats = $derived(new Set(coop?.pendingDefends.filter((d) => !d.answered).map((d) => d.seatId) ?? []));
 
-  const banner = $derived.by(() => {
-    if (!coop) return null;
-    if (defendingSeats.size > 0) {
-      const names = coop.seats.filter((s) => defendingSeats.has(s.seatId)).map((s) => s.displayName);
-      return `Defending: ${names.join(", ")}`;
-    }
-    if (coop.phase === "enemy") return "Enemy phase";
-    const waiting = coop.seats.filter((s) => s.connected && !s.ready && !s.exhausted && s.controller === "human");
-    if (waiting.length > 0 && waiting.every((s) => s.seatId !== mySeatId)) {
-      return `Waiting on ${waiting.map((s) => s.displayName).join(", ")}`;
-    }
-    return null;
-  });
-
-  function seatStatus(s: NonNullable<typeof coop>["seats"][number], dead: boolean, defending: boolean): { mark: string; cls: string } {
-    if (dead) return { mark: "✕", cls: "dead" };
-    if (defending) return { mark: "defending", cls: "defending" };
-    if (s.ready || s.exhausted) return { mark: "done", cls: "done" };
-    return { mark: "…", cls: "waiting" };
+  function seatStatus(
+    s: NonNullable<typeof coop>["seats"][number],
+    dead: boolean,
+    defending: boolean,
+  ): { text: string; cls: string } {
+    if (dead) return { text: "✕ fallen", cls: "dead" };
+    if (defending) return { text: "defending", cls: "defending" };
+    if (coop?.phase !== "player") return { text: "waiting", cls: "waiting" };
+    if (s.ready || s.exhausted) return { text: "done", cls: "done" };
+    return { text: "playing…", cls: "playing" };
   }
 </script>
 
 {#if coop}
   <div class="partyhud">
-    {#if banner}
-      <div class="plate hudbanner">{banner}</div>
+    {#if coop.phase === "enemy"}
+      <span class="stamp terra phasechip">ENEMY PHASE</span>
     {/if}
-    <div class="rows">
-      {#each coop.seats as s (s.seatId)}
-        {@const hero = combat.display?.entities.get(s.heroEntityId) ?? null}
-        {@const dead = hero?.dead ?? false}
-        {@const status = seatStatus(s, dead, defendingSeats.has(s.seatId))}
-        {@const tag = !s.connected && s.controller === "human" ? " (dropped)" : s.controller === "ai" ? " (bot)" : ""}
-        <div class="plate seat" class:me={s.seatId === mySeatId} class:dead>
+    {#each coop.seats as s (s.seatId)}
+      {@const hero = combat.display?.entities.get(s.heroEntityId) ?? null}
+      {@const dead = hero?.dead ?? false}
+      {@const status = seatStatus(s, dead, defendingSeats.has(s.seatId))}
+      {@const tag = !s.connected && s.controller === "human" ? " (dropped)" : s.controller === "ai" ? " (bot)" : ""}
+      <div class="plate card" class:me={s.seatId === mySeatId} class:dead>
+        <div class="toprow">
           <span class="sname hand">{s.displayName}{tag}</span>
           {#if hero}
-            <span class="hp">{Math.max(0, Math.ceil(hero.hp))}/{hero.maxHp}{hero.barrier > 0 ? ` +${hero.barrier}` : ""}</span>
+            <div class="hpbar">
+              <div class="hpfill" style:width="{Math.min(100, (Math.max(0, hero.hp) / hero.maxHp) * 100)}%"></div>
+              <span class="hpnum">{Math.max(0, Math.ceil(hero.hp))}/{hero.maxHp}{hero.barrier > 0 ? ` +${hero.barrier}` : ""}</span>
+            </div>
           {/if}
-          <span class="mark {status.cls}">{status.mark}</span>
         </div>
-      {/each}
-    </div>
-    {#if coop.phase === "player" && mine && !mine.exhausted}
-      <button class="btn passbtn" class:on={mine.ready} onclick={() => clientState.setReady(!mine.ready)}>
-        {mine.ready ? "UN-READY" : "PASS / READY"}
-      </button>
-    {/if}
+        <div class="botrow">
+          {#if hero}
+            <span class="pips">
+              {#each { length: hero.energy.maxRed } as _, i}
+                <span class="epip red" class:lit={i < hero.energy.red}></span>
+              {/each}
+              {#each { length: hero.energy.maxBlue } as _, i}
+                <span class="epip blue" class:lit={i < hero.energy.blue}></span>
+              {/each}
+            </span>
+          {/if}
+          <span class="status sc {status.cls}">{status.text}</span>
+        </div>
+      </div>
+    {/each}
   </div>
 {/if}
 
@@ -68,79 +65,117 @@
     z-index: 100;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 9px;
     align-items: flex-start;
   }
-  .hudbanner {
-    font-size: 14px;
-    padding: 6px 12px 5px;
-    color: var(--ink);
+  .phasechip {
+    font-size: 11.5px;
   }
-  .rows {
+  .card {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 4px;
+    padding: 7px 13px 7px;
+    min-width: 230px;
   }
-  .seat {
+  .card.me {
+    box-shadow: 0 0 0 2px rgba(164, 133, 76, 0.5), inset 0 1px 0 rgba(255, 252, 240, 0.5);
+  }
+  .card.dead {
+    opacity: 0.55;
+  }
+  .toprow {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 5px 11px 4px;
-    min-width: 190px;
-    font-size: 13px;
-  }
-  .seat.me {
-    box-shadow: 0 0 0 2px rgba(164, 133, 76, 0.5), inset 0 1px 0 rgba(255, 252, 240, 0.5);
-  }
-  .seat.dead {
-    opacity: 0.55;
   }
   .sname {
-    flex: 1;
-    font-size: 19px;
+    font-size: 20px;
     font-weight: 600;
     line-height: 1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    max-width: 130px;
   }
-  .hp {
-    color: #8c3a1e;
+  .hpbar {
+    position: relative;
+    flex: 1;
+    height: 16px;
+    min-width: 96px;
+    border: 1px solid var(--ink-55);
+    border-radius: 3px;
+    background: rgba(255, 250, 235, 0.55);
+    overflow: hidden;
+  }
+  .hpfill {
+    height: 100%;
+    background: linear-gradient(180deg, #d0664f, #b03a28);
+    transition: width 0.25s ease;
+  }
+  .hpnum {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11.5px;
     font-variant-numeric: tabular-nums;
+    color: var(--ink);
+    text-shadow: 0 0 3px rgba(248, 239, 211, 0.9);
+    line-height: 1;
   }
-  .mark {
-    min-width: 58px;
-    text-align: right;
-    font-family: var(--sc);
+  .botrow {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+  .pips {
+    display: inline-flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .epip {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    border: 1.4px solid;
+    background: transparent;
+  }
+  .epip.red {
+    border-color: #a33b2b;
+  }
+  .epip.red.lit {
+    background: radial-gradient(circle at 38% 32%, #e98a6d, #c0392b 70%);
+  }
+  .epip.blue {
+    border-color: #2e6f96;
+    margin-left: 0;
+  }
+  .epip.red + .epip.blue {
+    margin-left: 6px;
+  }
+  .epip.blue.lit {
+    background: radial-gradient(circle at 38% 32%, #7db8e0, #2980b9 70%);
+  }
+  .status {
     font-size: 11px;
     letter-spacing: 0.1em;
   }
-  .mark.done {
+  .status.playing {
+    color: var(--terra);
+  }
+  .status.done {
     color: var(--moss);
   }
-  .mark.defending {
+  .status.defending {
     color: var(--slate);
   }
-  .mark.dead {
+  .status.dead {
     color: #8c3a1e;
   }
-  .mark.waiting {
+  .status.waiting {
     color: var(--ink-55);
-  }
-  .passbtn {
-    margin-top: 2px;
-    border: 2px dashed var(--ink-40);
-    background: transparent;
-    box-shadow: none;
-    color: var(--ink-70);
-    font-size: 12.5px;
-    padding: 8px 16px 7px;
-  }
-  .passbtn.on {
-    border-style: solid;
-    border-color: #5f1a12;
-    background: radial-gradient(circle at 35% 28%, var(--wax-hi), var(--wax) 62%, #7e241b);
-    color: #f6e2cd;
-    text-shadow: 0 1px 2px rgba(60, 10, 0, 0.5);
   }
 </style>
