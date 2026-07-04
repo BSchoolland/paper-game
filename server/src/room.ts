@@ -168,6 +168,12 @@ export interface Room {
 
   reapTimer: Timer | null;
   lastActivityMs: number;
+  /** Synchronous re-entrancy depth of the combat scheduler (driveCombat). The defend-round cascade
+   *  (driveCombat -> openDefendRound -> maybeResolveDefendRound -> continueAfterDefend -> driveCombat)
+   *  re-enters driveCombat synchronously; driveCombat's own `safety` counter resets on each fresh
+   *  call, so it can't see the cross-call recursion. This bounds that nesting to avoid a stack
+   *  overflow when combat lands in a no-human-target ping-pong. Undefined === 0 (off-combat). */
+  combatDriveDepth?: number;
   /** Set once the room is reaped/disposed so an in-flight async encounter build discards itself
    *  instead of assigning a session to a zombie room no longer in the registry (ruling R7/R19). */
   disposed?: boolean;
