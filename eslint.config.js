@@ -2,8 +2,15 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config({
   files: ["**/*.ts"],
-  ignores: ["**/node_modules/**", "**/dist/**"],
+  // .claude/worktrees holds full repo copies whose tsconfigs make the parser's tsconfigRootDir
+  // inference ambiguous (and we never want to lint them anyway).
+  ignores: ["**/node_modules/**", "**/dist/**", ".claude/**"],
   extends: [tseslint.configs.base],
+  languageOptions: {
+    parserOptions: {
+      tsconfigRootDir: import.meta.dirname,
+    },
+  },
   rules: {
     "no-restricted-syntax": [
       "error",
