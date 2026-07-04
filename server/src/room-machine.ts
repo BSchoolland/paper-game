@@ -498,6 +498,12 @@ export function driveCombat(room: Room, io: RoomIO): void {
           `generation ${room.generation}, phase ${room.combat?.step.kind}, ` +
           `resume ${room.combat?.resumeAfterDefend})`,
       );
+      // Last-resort backstop: like the `safety break` below, this stops the runaway and returns,
+      // leaving combat in its current (busy) step with no scheduled continuation — the room is
+      // effectively stuck, but that is strictly better than the alternative here (a stack overflow
+      // thrown up into the ws handler, which also leaves the room broken). This does NOT recover the
+      // pathological game state; the real fix is to trampoline the defend cascade so it never recurses
+      // synchronously. Kept out of this change deliberately to avoid restructuring the scheduler.
       return;
     }
 
@@ -505,7 +511,10 @@ export function driveCombat(room: Room, io: RoomIO): void {
     let safety = 0;
     while (true) {
       if (++safety > 500) {
-        console.error("[room] driveCombat safety break");
+        console.error(
+          `[room] driveCombat safety break at ${safety} steps (room ${room.code}, runId ${room.runId}, ` +
+            `generation ${room.generation}, phase ${room.combat?.step.kind})`,
+        );
         return;
       }
       if (room.generation !== gen) return; // superseded by reset/rebuild (R17)
