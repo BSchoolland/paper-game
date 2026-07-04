@@ -494,7 +494,8 @@ export function driveCombat(room: Room, io: RoomIO): void {
     if (depth > MAX_COMBAT_DRIVE_DEPTH) {
       console.error(
         `[room] driveCombat re-entrancy depth ${depth} exceeded ${MAX_COMBAT_DRIVE_DEPTH} — aborting ` +
-          `combat step to avoid stack overflow (room ${room.code}, phase ${room.combat?.step.kind}, ` +
+          `combat step to avoid stack overflow (room ${room.code}, runId ${room.runId}, ` +
+          `generation ${room.generation}, phase ${room.combat?.step.kind}, ` +
           `resume ${room.combat?.resumeAfterDefend})`,
       );
       return;
