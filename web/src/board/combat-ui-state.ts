@@ -3,7 +3,9 @@ import { canAffordAbility, entitiesInShape, entityHasAffordableAction, powerToMu
 import type { SeatContext } from "./seat-context.js";
 
 /**
- * The local interaction state machine. `submitting` locks re-entry of MY hero only (other
+ * The local interaction state machine — only what the player DID (selections, aiming, timing,
+ * the submit lock). Whether input is open at all is derived from coopStatus + the snapshot
+ * (`canMyHeroAct`), never stored here. `submitting` locks re-entry of MY hero only (other
  * players' heroes still animate in from snapshots); the renderer is never gated on it.
  * `defending` carries the server `promptId` so a stale defend round is matched and dropped.
  */
@@ -13,8 +15,7 @@ export type InteractionState =
   | { tag: "aiming"; entityId: string; abilityId: string }
   | { tag: "attackTiming"; entityId: string; abilityId: string; aim: Vec2; power: number }
   | { tag: "defending"; promptId: string; phase: "windup" | "window"; progress: number; incoming: IncomingAttackData }
-  | { tag: "submitting"; action: PlayerAction }
-  | { tag: "watching" };
+  | { tag: "submitting"; action: PlayerAction };
 
 export interface IncomingAttackData {
   attackerId: string;

@@ -21,12 +21,16 @@ interface CombatStore {
 
 export const combat = $state<CombatStore>({ truth: null, display: null, coop: null, inventory: null, defend: null });
 
-interface QueuedUpdate {
+interface QueuedBatch {
   state: GameState;
   events: readonly GameEvent[];
 }
 
-let queue: QueuedUpdate[] = [];
+/** Snapshots AND coop flips share one queue so phase changes land in display-time, in wire
+ *  order relative to the animations around them (no "YOUR TURN" before the enemies finish). */
+type QueueItem = { kind: "batch"; batch: QueuedBatch } | { kind: "coop"; coop: CoopStatusPayload };
+
+let queue: QueueItem[] = [];
 let draining = false;
 let animatingCheck: (() => boolean) | null = null;
 let eventListeners: ((events: readonly GameEvent[]) => void)[] = [];
@@ -59,12 +63,21 @@ export function applyCombatSnapshot(serialized: Parameters<typeof deserializeGam
   }
 
   if (events.length === 0) {
+    // Re-sync snap: a queued coop flip must not be lost with the wiped batches — commit the
+    // newest one so `combat.coop` still catches up to wire order.
+    for (let i = queue.length - 1; i >= 0; i--) {
+      const item = queue[i]!;
+      if (item.kind === "coop") {
+        commitCoop(item.coop);
+        break;
+      }
+    }
     queue = [];
     combat.display = next;
     return;
   }
 
-  queue.push({ state: next, events });
+  queue.push({ kind: "batch", batch: { state: next, events } });
   drain();
 }
 
@@ -80,16 +93,21 @@ function processNext(): void {
     draining = false;
     return;
   }
+  if (next.kind === "coop") {
+    commitCoop(next.coop);
+    processNext();
+    return;
+  }
   const wait = holdUntil - performance.now();
   if (wait > 0) {
     // Still inside a slate hold — keep `draining` true so new batches queue behind us.
-    setTimeout(() => applyBatch(next), wait);
+    setTimeout(() => applyBatch(next.batch), wait);
     return;
   }
-  applyBatch(next);
+  applyBatch(next.batch);
 }
 
-function applyBatch(next: QueuedUpdate): void {
+function applyBatch(next: QueuedBatch): void {
   const gated = batchGate?.(next.state, next.events);
   if (gated) {
     void gated.then(() => {
@@ -115,10 +133,19 @@ export function setBatchGate(gate: ((state: GameState, events: readonly GameEven
 }
 
 /**
- * Apply a coopStatus payload, notifying phase listeners on player/enemy flips. Dispatch calls
- * this instead of assigning `combat.coop` directly.
+ * Apply a coopStatus payload in display-time: while batches are draining it queues behind
+ * them (wire order preserved), otherwise it commits immediately. Dispatch calls this instead
+ * of assigning `combat.coop` directly.
  */
 export function applyCoopStatus(coop: CoopStatusPayload): void {
+  if (draining || queue.length > 0) {
+    queue.push({ kind: "coop", coop });
+    return;
+  }
+  commitCoop(coop);
+}
+
+function commitCoop(coop: CoopStatusPayload): void {
   const prev = combat.coop?.phase ?? null;
   combat.coop = coop;
   if (coop.phase !== prev) {

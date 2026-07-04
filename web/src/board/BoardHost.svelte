@@ -291,11 +291,13 @@
     })();
   });
 
-  // Reconcile interaction state + re-render on every new display snapshot. The work is
+  // Reconcile interaction state + re-render on every new display snapshot AND every coop
+  // flip — the input gate derives from both, so both must repaint the board. The work is
   // untracked: reconcile writes interaction runes and render reads them — tracking either
   // would make this effect its own trigger.
   $effect(() => {
     const display = combat.display;
+    const coop = combat.coop;
     if (!ready) return;
     untrack(() => {
       clientState.reconcileWithGameState();

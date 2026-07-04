@@ -23,7 +23,7 @@ export interface IncomingAttack extends IncomingAttackData {
 export class ClientState {
   private listeners: Listener[] = [];
 
-  ui = $state<InteractionState>({ tag: "watching" });
+  ui = $state<InteractionState>({ tag: "idle" });
   selectedEntityId = $state<string | null>(null);
   selectedAbilityId = $state<string | null>(null);
   showDebugWalls = $state(false);
@@ -67,10 +67,6 @@ export class ClientState {
     return this.canAcceptPlayerInput() && canUseAbility(this.getState(), this.selectedEntityId, abilityId, this.seat);
   }
 
-  canPassTurn(): boolean {
-    return this.canAcceptPlayerInput();
-  }
-
   selectEntity(entityId: string | null) {
     if (!isPlayerPhase(this.getState(), this.seat)) return;
     this.selectedEntityId = entityId;
@@ -82,7 +78,7 @@ export class ClientState {
   selectAbility(abilityId: string | null) {
     if (abilityId === null) {
       this.selectedAbilityId = null;
-      this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
+      this.ui = { tag: "idle" };
       this.notify();
       return;
     }
@@ -140,7 +136,7 @@ export class ClientState {
 
   clearDefensePrompt() {
     this.incomingAttack = null;
-    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
+    this.ui = { tag: "idle" };
     this.notify();
   }
 
@@ -151,7 +147,7 @@ export class ClientState {
   resetSelection() {
     this.selectedEntityId = null;
     this.selectedAbilityId = null;
-    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
+    this.ui = { tag: "idle" };
   }
 
   toggleDebugWalls() {
@@ -162,7 +158,7 @@ export class ClientState {
   /** Release the submit lock without snapping the board. */
   clearSubmitLock() {
     if (this.ui.tag !== "submitting") return;
-    this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
+    this.ui = { tag: "idle" };
     this.notify();
   }
 
@@ -170,12 +166,11 @@ export class ClientState {
   setReady(ready: boolean) {
     if (ready) {
       pass();
-      this.ui = { tag: "watching" };
       this.selectedAbilityId = null;
     } else {
       unpass();
-      this.ui = isPlayerPhase(this.getState(), this.seat) ? { tag: "idle" } : { tag: "watching" };
     }
+    this.ui = { tag: "idle" };
     this.notify();
   }
 
@@ -186,15 +181,14 @@ export class ClientState {
     this.selectedAbilityId = null;
     this.timingAim = null;
     this.incomingAttack = null;
-    this.ui = { tag: "watching" };
+    this.ui = { tag: "idle" };
   }
 
   autoSelectMyHero() {
-    const state = this.getState();
-    const hero = myHeroEntity(state, this.seat);
+    const hero = myHeroEntity(this.getState(), this.seat);
     if (hero) this.selectedEntityId = hero.id;
     this.selectedAbilityId = null;
-    this.ui = isPlayerPhase(state, this.seat) ? { tag: "idle" } : { tag: "watching" };
+    this.ui = { tag: "idle" };
     this.notify();
   }
 
@@ -211,11 +205,13 @@ export class ClientState {
 
   /** Set ui only when the tag actually changes — reconcile runs inside effects, so identical
    *  rewrites must not create fresh state objects (that's an effect-loop). */
-  private settleUi(tag: "idle" | "watching") {
-    if (this.ui.tag !== tag) this.ui = { tag };
+  private settleIdle() {
+    if (this.ui.tag !== "idle") this.ui = { tag: "idle" };
   }
 
-  /** Called whenever a new display snapshot lands (BoardHost effect): drop stale selections. */
+  /** Called on every new display snapshot or coopStatus (BoardHost effect): drop stale
+   *  selections. `submitting` is NOT cleared here: in co-op a peer's snapshot must not
+   *  release my lock. */
   reconcileWithGameState() {
     const state = this.getState();
     if (!state) return;
@@ -223,7 +219,7 @@ export class ClientState {
       this.selectedAbilityId = null;
       this.timingAim = null;
       this.incomingAttack = null;
-      this.settleUi("watching");
+      this.settleIdle();
       return;
     }
     if (this.incomingAttack) return;
@@ -231,7 +227,7 @@ export class ClientState {
       if (!canUseAbility(state, this.ui.entityId, this.ui.abilityId, this.seat)) {
         this.selectedAbilityId = null;
         this.timingAim = null;
-        this.settleUi(isPlayerPhase(state, this.seat) ? "idle" : "watching");
+        this.settleIdle();
       }
       return;
     }
@@ -241,14 +237,7 @@ export class ClientState {
     }
     if (this.selectedAbilityId && !canUseAbility(state, this.selectedEntityId, this.selectedAbilityId, this.seat)) {
       this.selectedAbilityId = null;
-      if (this.ui.tag === "aiming" || this.ui.tag === "abilitySelected") this.settleUi("idle");
-    }
-    if (!isPlayerPhase(state, this.seat)) {
-      this.selectedAbilityId = null;
-      this.settleUi("watching");
-    } else if (this.ui.tag === "watching") {
-      // `submitting` is NOT cleared here: in co-op a peer's snapshot must not release my lock.
-      this.settleUi("idle");
+      if (this.ui.tag === "aiming" || this.ui.tag === "abilitySelected") this.settleIdle();
     }
   }
 }
