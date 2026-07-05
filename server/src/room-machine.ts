@@ -115,6 +115,14 @@ export const DISCONNECT_GRACE_MS = Number(process.env.GAME_DISCONNECT_GRACE_MS) 
 // Env-overridable so integration tests can drive the empty-reap -> HOME path without a real 5-min wait.
 export const REAP_TIMEOUT_MS = Number(process.env.GAME_REAP_TIMEOUT_MS) || 5 * 60_000;
 
+// Max synchronous re-entrancy depth of the combat scheduler (driveCombat). The defend cascade
+// re-enters driveCombat synchronously (see room.combatDriveDepth); a no-human-target ping-pong can
+// nest this without bound and overflow the JS stack. A legit encounter never chains more than a
+// handful of synchronous phase-flips / auto-resolved defend rounds, so this ceiling is far above any
+// real combat yet well under the ~thousands-deep stack limit that overflows. It mirrors driveCombat's
+// own per-call `safety` break (which resets on each re-entry and so can't see the cross-call recursion).
+export const MAX_COMBAT_DRIVE_DEPTH = 200;
+
 // Exported (alongside DISCOVERY_RADIUS) so run-recorders.ts can price XP by hexDistance from it.
 export const ORIGIN: HexCoord = { q: 0, r: 0 };
 
@@ -474,46 +482,77 @@ export function startEnemyPhase(room: Room, io: RoomIO): void {
 export function driveCombat(room: Room, io: RoomIO): void {
   const session = room.session;
   if (!session) return;
-  const gen = room.generation;
-  let safety = 0;
-  while (true) {
-    if (++safety > 500) {
-      console.error("[room] driveCombat safety break");
-      return;
-    }
-    if (room.generation !== gen) return; // superseded by reset/rebuild (R17)
 
-    const step: AiStepResult = session.stepAi();
+  // Cross-call re-entrancy guard. The defend cascade (openDefendRound -> maybeResolveDefendRound ->
+  // continueAfterDefend -> driveCombat) re-enters this function synchronously without unwinding, so a
+  // no-human-target ping-pong grows the stack one cycle at a time until it overflows inside emit()
+  // (wire-transport.ts). driveCombat's own `safety` counter below can't catch it — it resets to 0 on
+  // every fresh call. `combatDriveDepth` persists across those nested calls; the finally unwinds it.
+  const depth = (room.combatDriveDepth ?? 0) + 1;
+  room.combatDriveDepth = depth;
+  try {
+    if (depth > MAX_COMBAT_DRIVE_DEPTH) {
+      console.error(
+        `[room] driveCombat re-entrancy depth ${depth} exceeded ${MAX_COMBAT_DRIVE_DEPTH} — aborting ` +
+          `combat step to avoid stack overflow (room ${room.code}, runId ${room.runId}, ` +
+          `generation ${room.generation}, phase ${room.combat?.step.kind}, ` +
+          `resume ${room.combat?.resumeAfterDefend})`,
+      );
+      // Last-resort backstop: like the `safety break` below, this stops the runaway and returns,
+      // leaving combat in its current (busy) step with no scheduled continuation — the room is
+      // effectively stuck, but that is strictly better than the alternative here (a stack overflow
+      // thrown up into the ws handler, which also leaves the room broken). This does NOT recover the
+      // pathological game state; the real fix is to trampoline the defend cascade so it never recurses
+      // synchronously. Kept out of this change deliberately to avoid restructuring the scheduler.
+      return;
+    }
 
-    if (step.type === "defendPrompt") {
-      // Record where to resume AFTER the round (at enterDefend time, so a reclaim mid-round can't move it).
-      const resume = room.combat?.step.kind === "enemy" ? "enemy" : "playerBots";
-      room.combat = enterDefend(resume);
-      openDefendRound(room, io, step);
-      return;
+    const gen = room.generation;
+    let safety = 0;
+    while (true) {
+      if (++safety > 500) {
+        console.error(
+          `[room] driveCombat safety break at ${safety} steps (room ${room.code}, runId ${room.runId}, ` +
+            `generation ${room.generation}, phase ${room.combat?.step.kind})`,
+        );
+        return;
+      }
+      if (room.generation !== gen) return; // superseded by reset/rebuild (R17)
+
+      const step: AiStepResult = session.stepAi();
+
+      if (step.type === "defendPrompt") {
+        // Record where to resume AFTER the round (at enterDefend time, so a reclaim mid-round can't move it).
+        const resume = room.combat?.step.kind === "enemy" ? "enemy" : "playerBots";
+        room.combat = enterDefend(resume);
+        openDefendRound(room, io, step);
+        return;
+      }
+      if (step.type === "endedTurn") {
+        startPlayerPhase(room, io); // explicit enemy->player flip; re-opens the player phase
+        return;
+      }
+      if (step.type === "done") {
+        onPlayerBurstDone(room, io); // only the player-bot burst reaches `done`
+        return;
+      }
+      // events
+      io.broadcast(room, {
+        type: "state",
+        state: step.serializedState as SerializedGameState,
+        events: step.events,
+      });
+      // Track per-seat actedThisPhase for player-bot driven heroes.
+      if (coopPhaseOf(room.combat) === "player") {
+        for (const ev of step.events) markActedFromEvent(room, ev);
+      }
+      if (step.won) {
+        endCombat(room, io);
+        return;
+      }
     }
-    if (step.type === "endedTurn") {
-      startPlayerPhase(room, io); // explicit enemy->player flip; re-opens the player phase
-      return;
-    }
-    if (step.type === "done") {
-      onPlayerBurstDone(room, io); // only the player-bot burst reaches `done`
-      return;
-    }
-    // events
-    io.broadcast(room, {
-      type: "state",
-      state: step.serializedState as SerializedGameState,
-      events: step.events,
-    });
-    // Track per-seat actedThisPhase for player-bot driven heroes.
-    if (coopPhaseOf(room.combat) === "player") {
-      for (const ev of step.events) markActedFromEvent(room, ev);
-    }
-    if (step.won) {
-      endCombat(room, io);
-      return;
-    }
+  } finally {
+    room.combatDriveDepth = depth - 1;
   }
 }
 
