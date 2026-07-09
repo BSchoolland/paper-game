@@ -1,5 +1,7 @@
 <script lang="ts">
+  import type { WireLogRecord } from "shared";
   import { room } from "../state/room.svelte.js";
+  import { clientWireLog } from "../net/wire-log.js";
   import ReplayViewer from "./ReplayViewer.svelte";
   import type { ReplayListEntry, ReplayLog } from "./replay-format.js";
 
@@ -12,13 +14,33 @@
   let replays = $state<ReplayListEntry[]>([]);
   let error = $state<string | null>(null);
   let active = $state<{ name: string; replay: ReplayLog } | null>(null);
+  let wire = $state<WireLogRecord[]>([]);
 
   // The replay viewer drives the shared combat store, so it can't coexist with a live room.
   const inRoom = $derived(room.state !== null);
 
   function toggle(): void {
     open = !open;
-    if (open) void refresh();
+    if (open) {
+      void refresh();
+      refreshWire();
+    }
+  }
+
+  function refreshWire(): void {
+    wire = clientWireLog.recent(60);
+  }
+
+  function wireLine(r: WireLogRecord): string {
+    const events = r.events?.map((e) => `${e.kind}${e.actor ? `:${e.actor}` : ""}${e.target ? `>${e.target}` : ""}${e.amount !== undefined ? `#${e.amount}` : ""}`).join(",");
+    return [
+      `#${r.seq}`,
+      r.type,
+      r.actionCount !== undefined ? `ac=${r.actionCount}` : "",
+      r.queueDepth !== undefined ? `qd=${r.queueDepth}` : "",
+      events ? `[${events}]` : "",
+      r.note ? `· ${r.note}` : "",
+    ].filter(Boolean).join(" ");
   }
 
   async function refresh(): Promise<void> {
@@ -102,6 +124,22 @@
               </li>
             {/each}
           </ul>
+        {/if}
+      </section>
+
+      <section>
+        <div class="section-head">
+          <h3>Wire log</h3>
+          <button onclick={refreshWire}>refresh</button>
+        </div>
+        {#if wire.length === 0}
+          <p class="hint">No wire records yet.</p>
+        {:else}
+          <ol class="wire">
+            {#each wire as r, i (i)}
+              <li class:anomaly={!!r.note && r.note.startsWith("seq-")}>{wireLine(r)}</li>
+            {/each}
+          </ol>
         {/if}
       </section>
     </div>
@@ -202,5 +240,23 @@
   .hint.error {
     color: var(--terra, #a03436);
     opacity: 1;
+  }
+  .wire {
+    list-style: none;
+    margin: 0.3rem 0 0;
+    padding: 0.4rem 0.5rem;
+    max-height: 14rem;
+    overflow-y: auto;
+    background: var(--paper, #f3ecdc);
+    border-radius: 5px;
+    font-family: monospace;
+    font-size: 0.72rem;
+    line-height: 1.5;
+  }
+  .wire li {
+    overflow-wrap: anywhere;
+  }
+  .wire li.anomaly {
+    color: var(--terra, #a03436);
   }
 </style>
