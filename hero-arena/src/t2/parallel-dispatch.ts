@@ -61,6 +61,9 @@ export async function runJobsParallel(
         const line = buffer.slice(0, nl);
         buffer = buffer.slice(nl + 1);
         if (!line.trim()) continue;
+        // Server-boot imports inside the worker log to stdout ([equip-defaults] etc.) — pass
+        // anything that isn't a protocol line through to stderr instead of dying on it.
+        if (!line.startsWith("{")) { process.stderr.write(`[worker ${idx}] ${line}\n`); continue; }
         const { gameIndex, result } = JSON.parse(line) as { gameIndex: number; result: GameResult };
         results.set(gameIndex, result);
         if (onResult) onResult(gameIndex, result);

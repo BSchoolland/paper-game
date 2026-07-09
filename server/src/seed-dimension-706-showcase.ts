@@ -58,20 +58,20 @@ const ITEMS: Record<string, ItemDefinition> = {
     abilities: [
       {
         id: "d706-pike-thrust", name: "Long Thrust", kind: "attack", cost: { red: 2 },
-        shape: { kind: ShapeKind.Rectangle, length: 135, width: 14 },
-        damage: 30, knockback: 0,
+        shape: { kind: ShapeKind.Rectangle, length: 140, width: 16 },
+        damage: 46, knockback: 0,
         visual: { color: STONE, trailEffect: "thrust", screenShake: 0.3 },
       } satisfies AttackAbility,
       {
         id: "d706-pike-hook", name: "Hooked Haul", kind: "attack", cost: { red: 1 },
         shape: { kind: ShapeKind.Point, range: 140 },
-        damage: 8, knockback: 0, onHit: [{ type: "pull", distance: 60 }],
+        damage: 18, knockback: 0, onHit: [{ type: "pull", distance: 60 }],
         visual: { color: STONE, trailEffect: "projectile" },
       } satisfies AttackAbility,
       {
         id: "d706-pike-fend", name: "Fend Off", kind: "attack", cost: { red: 1 },
         shape: { kind: ShapeKind.Sector, radius: 70, halfAngle: Math.PI / 2.5 },
-        damage: 12, knockback: 55, recoil: 30,
+        damage: 22, knockback: 55, recoil: 30,
         visual: { color: STONE, trailEffect: "slash", screenShake: 0.25 },
       } satisfies AttackAbility,
     ],
@@ -92,14 +92,14 @@ const ITEMS: Record<string, ItemDefinition> = {
       {
         id: "d706-riposte-guardbreak", name: "Guardbreak", kind: "attack", cost: { red: 2 },
         shape: { kind: ShapeKind.Sector, radius: 85, halfAngle: Math.PI / 3 },
-        damage: 24, knockback: 0,
+        damage: 30, knockback: 0,
         onHit: [{ type: "applyStatus", status: "slowed", duration: 2, value: 0.4 }],
         visual: { color: 0xb0c4de, trailEffect: "slash", screenShake: 0.3 },
       } satisfies AttackAbility,
       {
         id: "d706-riposte-punish", name: "Punish", kind: "attack", cost: { red: 1 },
         shape: { kind: ShapeKind.Point, range: 95 },
-        damage: 16, knockback: 0,
+        damage: 20, knockback: 0,
         riders: [{ when: "target-has-status", status: "slowed", amount: 16, label: "PUNISHED" }],
         visual: { color: 0xb0c4de, trailEffect: "thrust", screenShake: 0.35 },
       } satisfies AttackAbility,
@@ -127,15 +127,15 @@ const ITEMS: Record<string, ItemDefinition> = {
       {
         id: "d706-rootbinder-snare", name: "Root Arrow", kind: "attack", cost: { red: 2 },
         shape: { kind: ShapeKind.Point, range: 230 },
-        damage: 14, knockback: 0,
-        onHit: [{ type: "applyStatus", status: "rooted", duration: 1, value: 1 }],
+        damage: 28, knockback: 0,
+        onHit: [{ type: "applyStatus", status: "rooted", duration: 2, value: 1 }],
         visual: { color: GREEN, trailEffect: "projectile", screenShake: 0.2 },
       } satisfies AttackAbility,
       {
         id: "d706-rootbinder-cull", name: "Cull the Bound", kind: "attack", cost: { red: 2 },
         shape: { kind: ShapeKind.Rectangle, length: 210, width: 16 },
-        damage: 20, knockback: 0,
-        riders: [{ when: "target-has-status", status: "rooted", amount: 18, label: "CULLED" }],
+        damage: 34, knockback: 0,
+        riders: [{ when: "target-has-status", status: "rooted", amount: 20, label: "CULLED" }],
         visual: { color: GREEN, trailEffect: "projectile", screenShake: 0.3 },
       } satisfies AttackAbility,
     ],
@@ -155,9 +155,9 @@ const ITEMS: Record<string, ItemDefinition> = {
     abilities: [
       {
         id: "d706-storm-bolt", name: "Stormbolt", kind: "attack", cost: { red: 2 },
-        shape: { kind: ShapeKind.Point, range: 220 },
-        damage: 26, knockback: 0,
-        visual: { color: STORM, trailEffect: "projectile", screenShake: 0.3 },
+        shape: { kind: ShapeKind.Rectangle, length: 220, width: 16 },
+        damage: 32, knockback: 0,
+        visual: { color: STORM, trailEffect: "projectile", screenShake: 0.35 },
       } satisfies AttackAbility,
       {
         id: "d706-storm-step", name: "Thunderstep", kind: "move", cost: { blue: 2 },
@@ -166,7 +166,7 @@ const ITEMS: Record<string, ItemDefinition> = {
       {
         id: "d706-storm-transposition", name: "Transposition", kind: "attack", cost: { red: 1 },
         shape: { kind: ShapeKind.Point, range: 160 },
-        damage: 6, knockback: 0, onHit: [{ type: "swap" }],
+        damage: 12, knockback: 0, onHit: [{ type: "swap" }],
         visual: { color: STORM, trailEffect: "projectile", screenShake: 0.25 },
       } satisfies AttackAbility,
     ],
@@ -188,14 +188,14 @@ const ITEMS: Record<string, ItemDefinition> = {
       {
         id: "d706-colossus-smash", name: "Demolishing Blow", kind: "attack", cost: { red: 3 },
         shape: { kind: ShapeKind.Sector, radius: 95, halfAngle: Math.PI / 3 },
-        damage: 42, knockback: 70, wallSlamDamage: 22, onKill: { red: 2 },
+        damage: 50, knockback: 70, wallSlamDamage: 25, onKill: { red: 2 },
         riders: [{ when: "target-near-wall", within: 45, amount: 12, label: "CRUSHED" }],
         visual: { color: STONE, trailEffect: "explosion", screenShake: 0.6 },
       } satisfies AttackAbility,
       {
         id: "d706-colossus-toll", name: "Seismic Toll", kind: "attack", cost: { red: 2 },
         shape: { kind: ShapeKind.Circle, radius: 110, range: 20 },
-        damage: 18, knockback: 40,
+        damage: 24, knockback: 40,
         visual: { color: STONE, trailEffect: "splash", screenShake: 0.5 },
       } satisfies AttackAbility,
       {
