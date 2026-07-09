@@ -43,17 +43,26 @@ export function mkWeapon(id: string, dimensionId: number, rarity: ItemRarity = "
   };
 }
 
-export interface SentRecord { seatId: SeatId; msg: ServerMessage }
+export interface SentRecord { seatId: SeatId; msg: ServerMessage; note?: string }
+/** One outbound message in emit order — sends and broadcasts merged, wire-log note included. */
+export interface OutRecord { kind: "send" | "broadcast"; seatId?: SeatId; msg: ServerMessage; note?: string }
 
-/** A RoomIO that records every send/broadcast for assertions. */
+/** A RoomIO that records every send/broadcast for assertions. `all` preserves the emit order. */
 export function recordingIO() {
   const sends: SentRecord[] = [];
   const broadcasts: ServerMessage[] = [];
+  const all: OutRecord[] = [];
   const io: RoomIO = {
-    send(seat, msg) { sends.push({ seatId: seat.seatId, msg }); },
-    broadcast(_room, msg) { broadcasts.push(msg); },
+    send(seat, msg, note) {
+      sends.push({ seatId: seat.seatId, msg, note });
+      all.push({ kind: "send", seatId: seat.seatId, msg, note });
+    },
+    broadcast(_room, msg, note) {
+      broadcasts.push(msg);
+      all.push({ kind: "broadcast", msg, note });
+    },
   };
-  return { io, sends, broadcasts };
+  return { io, sends, broadcasts, all };
 }
 
 export function noopIO(): RoomIO {
