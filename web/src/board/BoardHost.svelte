@@ -17,9 +17,10 @@
   import { proposeMove, defendResult } from "../state/actions.js";
   import { FrameDriver } from "./render/frame-driver.js";
   import { GameRenderer } from "./render/game-renderer.js";
-  import { HexMapRenderer, loadMapIconAssets } from "./render/hex-map-renderer.js";
-  import { loadMapAssets } from "./render/grid-renderer.js";
-  import { loadSpriteAssets, loadDimensionSprites } from "./render/sprite-assets.js";
+  import { HexMapRenderer } from "./render/hex-map-renderer.js";
+  import { baseAssetsReady, dimensionAssetsReady, encounterAssetsReady } from "./render/asset-manifest.js";
+  import { trackLoading } from "../state/loading.svelte.js";
+  import { pushToast } from "../state/chrome.svelte.js";
   import { ClientState } from "./client-state.svelte.js";
   import { InputManager } from "./input-manager.js";
   import { DefendPrompt } from "./defend-prompt.js";
@@ -44,7 +45,6 @@
 
   // Which scene the board currently shows (lags room.phase while combat animations drain).
   let scene = $state<"none" | "map" | "combat">("none");
-  let dimensionReady: Promise<unknown> = Promise.resolve();
   let loadedDimension = -1;
   let activeDefendPromptId: string | null = null;
   let disposed = false;
@@ -70,7 +70,10 @@
   }
 
   onMount(() => {
-    void init();
+    void init().catch((err: unknown) => {
+      console.error("[board] init failed", err);
+      pushToast({ kind: "error", message: "Failed to load game assets — refresh to retry." });
+    });
     return () => {
       disposed = true;
       setBatchGate(null);
@@ -102,7 +105,7 @@
       installGpuProfiler(app);
     }
 
-    await Promise.all([loadSpriteAssets(), loadMapAssets(), loadMapIconAssets()]);
+    await trackLoading("PREPARING THE EXPEDITION", baseAssetsReady());
     if (disposed) return;
 
     hexRenderer = new HexMapRenderer(app, driver);
@@ -154,12 +157,20 @@
     ready = true;
   }
 
-  // Keep the room's dimension sprites loaded (combat entry awaits this).
+  // Start the room's dimension sprites loading as soon as the dimension is known (combat entry
+  // re-requests the same cached promise from the manifest).
   $effect(() => {
     const dim = room.state?.dimensionId;
     if (dim === undefined || dim === loadedDimension) return;
     loadedDimension = dim;
-    dimensionReady = loadDimensionSprites(dim);
+    void dimensionAssetsReady(dim).then(() => {
+      // The hex chart may have painted before the dimension's decorations arrived — repaint.
+      if (scene === "map" && overworld.hexMap && !hexRenderer.isMoving()) {
+        hexRenderer.render(overworld.hexMap);
+      }
+    }).catch((err: unknown) => {
+      console.error("[board] dimension sprite load failed", err);
+    });
   });
 
   // --- Scene routing: follow room.phase, but let combat animations drain before leaving. ---
@@ -194,7 +205,15 @@
     if (scene === "combat") return;
     exitMap();
     scene = "combat";
-    void dimensionReady.then(() => {
+    const assetsReady = encounterAssetsReady(
+      room.state!.dimensionId,
+      combat.display?.mapDefinition.mapImage,
+    ).catch((err: unknown) => {
+      // Enter anyway — a fight with missing art beats a screen stuck on the load gate.
+      console.error("[board] combat asset load failed", err);
+      pushToast({ kind: "error", message: "Some combat art failed to load." });
+    });
+    void trackLoading("ENTERING COMBAT", assetsReady).then(() => {
       if (room.state?.phase !== "combat" || scene !== "combat") return;
       clientState.autoSelectMyHero();
       gameRenderer.enter();

@@ -13,7 +13,6 @@ const PLAYER_ANIM_SETS: AnimSet[] = [
 
 const enemyTextures = new Map<string, Texture>();
 const playerTextures = new Map<string, Texture>();
-const loadedDimensions = new Set<number>();
 
 function playerKey(animSet: AnimSet, state: AnimState): string {
   return `${animSet}-${state}`;
@@ -52,13 +51,12 @@ export interface DimensionManifest {
   hexDecorationsPath: string | null;
 }
 
+/** Load once per dimension via asset-manifest's dimensionAssetsReady, which caches the promise. */
 export async function loadDimensionSprites(dimensionId: number): Promise<DimensionManifest> {
   const res = await fetch(apiUrl(`/api/dimensions/${dimensionId}`));
   const manifest: DimensionManifest = await res.json();
   // Same payload the dim-meta store fetches — seed it so item-sprite ext resolution never guesses.
   dimMeta.byId[dimensionId] ??= manifest;
-
-  if (loadedDimensions.has(dimensionId)) return manifest;
 
   const entries: { alias: string; src: string }[] = [];
   for (const path of manifest.spritePaths) {
@@ -80,7 +78,6 @@ export async function loadDimensionSprites(dimensionId: number): Promise<Dimensi
 
   await loadHexDecorations(manifest.hexDecorationsPath ?? "sprites/map-decorations");
 
-  loadedDimensions.add(dimensionId);
   return manifest;
 }
 

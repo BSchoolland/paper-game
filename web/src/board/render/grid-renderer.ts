@@ -52,25 +52,22 @@ export async function loadMapAssets(): Promise<void> {
   await Assets.load(entries);
 }
 
+/**
+ * Build the ground sprite from already-loaded textures. The encounter's map image (bgUrl) must be
+ * in the Assets cache — scene hosts gate on asset-manifest's encounterAssetsReady before entering.
+ * Without a bgUrl the dimension-wide "map-background" applies, and a dimension may simply not
+ * have one (object-composited maps draw on bare ground).
+ */
 export function createBackground(grid: GridState, bgUrl?: string): Sprite {
-  const worldW = grid.width * grid.cellSize;
-  const worldH = grid.height * grid.cellSize;
   const loaded: Texture | undefined = bgUrl ? Assets.get(bgUrl) : Assets.get("map-background");
-  const bg = new Sprite(loaded ?? Texture.EMPTY);
-  bg.width = worldW;
-  bg.height = worldH;
-  // Fallback when not preloaded (e.g. replay): load async and swap in if the
-  // sprite is still alive (the scene may have rebuilt while loading).
   if (bgUrl && !loaded) {
-    Assets.load(bgUrl)
-      .then((tex: Texture) => {
-        if (bg.destroyed) return;
-        bg.texture = tex;
-        bg.width = worldW;
-        bg.height = worldH;
-      })
-      .catch(() => {});
+    // Reachable only when the load gate itself failed (dead CDN) and the host chose to enter
+    // anyway — render bare ground rather than kill the fight.
+    console.error("[grid] map image missing from Assets cache", bgUrl);
   }
+  const bg = new Sprite(loaded ?? Texture.EMPTY);
+  bg.width = grid.width * grid.cellSize;
+  bg.height = grid.height * grid.cellSize;
   return bg;
 }
 

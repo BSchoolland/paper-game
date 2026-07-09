@@ -1,6 +1,7 @@
 <script lang="ts">
   import { room, reconnectingSeated } from "../../state/room.svelte.js";
   import { combat } from "../../state/combat.svelte.js";
+  import { loadingActive } from "../../state/loading.svelte.js";
   import { overworld } from "../../state/overworld.svelte.js";
   import { leaveRoom, playAgain } from "../../state/actions.js";
   import { ClientState } from "../../board/client-state.svelte.js";
@@ -58,7 +59,10 @@
 {#if combatOnScreen}
   <PartyHud />
   <CombatDock {clientState} onOpenPack={() => (packOpen = true)} />
-  <PhaseSlate />
+  <!-- Mount the turn banner only once the load cover lifts, so it plays on a visible board. -->
+  {#if !loadingActive()}
+    <PhaseSlate />
+  {/if}
 {/if}
 
 {#if phase === "overworld" && !combatOnScreen}

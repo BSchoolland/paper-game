@@ -12,8 +12,7 @@
   } from "../state/combat.svelte.js";
   import { FrameDriver } from "../board/render/frame-driver.js";
   import { GameRenderer } from "../board/render/game-renderer.js";
-  import { loadMapAssets } from "../board/render/grid-renderer.js";
-  import { loadDimensionSprites, loadSpriteAssets } from "../board/render/sprite-assets.js";
+  import { baseAssetsReady, dimensionAssetsReady, mapImageReady } from "../board/render/asset-manifest.js";
   import { ClientState } from "../board/client-state.svelte.js";
   import { InputManager } from "../board/input-manager.js";
   import { SeatContext } from "../board/seat-context.js";
@@ -80,10 +79,14 @@
     cleanups.push(() => window.removeEventListener("resize", onResize!));
 
     try {
+      // Frames arrive whole, so every encounter map image the replay visits is known upfront.
+      const mapImages = new Set(
+        frames.flatMap((f) => f.serializedState.mapDefinition.mapImage ?? []),
+      );
       await Promise.all([
-        loadSpriteAssets(),
-        loadMapAssets(),
-        ...replay.dimensions.map((d) => loadDimensionSprites(d)),
+        baseAssetsReady(),
+        ...replay.dimensions.map((d) => dimensionAssetsReady(d)),
+        ...[...mapImages].map((m) => mapImageReady(m)),
       ]);
     } catch (e) {
       error = `Asset load failed (is the game server on :3001 running?): ${e}`;

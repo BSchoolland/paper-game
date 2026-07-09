@@ -2,6 +2,7 @@
   import { session } from "./state/session.svelte.js";
   import { room } from "./state/room.svelte.js";
   import Toasts from "./kit/Toasts.svelte";
+  import LoadingOverlay from "./kit/LoadingOverlay.svelte";
   import ConnectScreen from "./screens/ConnectScreen.svelte";
   import HomeScreen from "./screens/home/HomeScreen.svelte";
   import RoomScreen from "./screens/room/RoomScreen.svelte";
@@ -37,4 +38,5 @@
   {/await}
 {/if}
 
+<LoadingOverlay />
 <Toasts />
