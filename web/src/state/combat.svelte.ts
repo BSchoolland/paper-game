@@ -1,6 +1,7 @@
 import type { CoopStatusPayload, EntityId, GameEvent, GameState, InventoryState, ServerMessage } from "shared";
 import { deserializeGameState } from "shared";
 import { room } from "./room.svelte.js";
+import { clientWireLog } from "../net/wire-log.js";
 
 type DefendPromptMsg = Extract<ServerMessage, { type: "defendPrompt" }>;
 
@@ -45,9 +46,15 @@ let batchGate: ((state: GameState, events: readonly GameEvent[]) => Promise<void
 export function applyCombatSnapshot(serialized: Parameters<typeof deserializeGameState>[0], events: readonly GameEvent[]): void {
   const next = deserializeGameState(serialized);
 
-  // Out-of-order / duplicate guard: never move display backwards.
+  // actionCount monotonicity assertion: with per-connection seq verified at the socket, a
+  // regression here means the server emitted out of order — a protocol violation, not a state
+  // to quietly absorb. Record + warn always; throw in dev; drop (never move display backwards).
   if (combat.display && next.actionCount < combat.display.actionCount) {
+    clientWireLog.note("dropped-stale", { actionCount: next.actionCount, queueDepth: queue.length });
     console.warn("[combat] dropped stale state", { incoming: next.actionCount, display: combat.display.actionCount });
+    if (import.meta.env.DEV) {
+      throw new Error(`Stale combat state: actionCount ${next.actionCount} < displayed ${combat.display.actionCount}`);
+    }
     return;
   }
 
@@ -63,6 +70,7 @@ export function applyCombatSnapshot(serialized: Parameters<typeof deserializeGam
   }
 
   if (events.length === 0) {
+    if (queue.length > 0) clientWireLog.note("queue-wipe", { actionCount: next.actionCount, queueDepth: queue.length });
     // Re-sync snap: a queued coop flip must not be lost with the wiped batches — commit the
     // newest one so `combat.coop` still catches up to wire order.
     for (let i = queue.length - 1; i >= 0; i--) {
@@ -98,6 +106,7 @@ function processNext(): void {
     processNext();
     return;
   }
+  clientWireLog.note("drain", { actionCount: next.batch.state.actionCount, queueDepth: queue.length });
   const wait = holdUntil - performance.now();
   if (wait > 0) {
     // Still inside a slate hold — keep `draining` true so new batches queue behind us.
