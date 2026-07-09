@@ -109,38 +109,39 @@ function withStatus(entity: Entity, status: StatusEffect): Entity {
   return { ...entity, statusEffects: [...kept, status] };
 }
 
-function applyZoneEffectToEntity(
-  zone: Zone,
+function applyAreaEffectToEntity(
+  effect: ZoneEffectKind,
+  magnitude: number,
   entity: Entity
 ): { entity: Entity; event: Omit<Extract<GameEvent, { type: "zoneTick" }>, "type" | "zoneId"> | null } {
-  switch (zone.effect) {
+  switch (effect) {
     case "damage": {
-      const absorbed = Math.min(entity.barrier, zone.magnitude);
-      const hp = entity.hp - (zone.magnitude - absorbed);
+      const absorbed = Math.min(entity.barrier, magnitude);
+      const hp = entity.hp - (magnitude - absorbed);
       const killed = hp <= 0;
       const next: Entity = killed
         ? { ...entity, hp: 0, barrier: 0, dead: true }
         : { ...entity, hp, barrier: entity.barrier - absorbed };
-      return { entity: next, event: { entityId: entity.id, effect: "damage", magnitude: zone.magnitude } };
+      return { entity: next, event: { entityId: entity.id, effect: "damage", magnitude } };
     }
     case "heal": {
       if (entity.hp >= entity.maxHp) return { entity, event: null };
       return {
-        entity: { ...entity, hp: Math.min(entity.maxHp, entity.hp + zone.magnitude) },
-        event: { entityId: entity.id, effect: "heal", magnitude: zone.magnitude },
+        entity: { ...entity, hp: Math.min(entity.maxHp, entity.hp + magnitude) },
+        event: { entityId: entity.id, effect: "heal", magnitude },
       };
     }
     case "addBarrier":
       return {
-        entity: { ...entity, barrier: entity.barrier + zone.magnitude },
-        event: { entityId: entity.id, effect: "addBarrier", magnitude: zone.magnitude },
+        entity: { ...entity, barrier: entity.barrier + magnitude },
+        event: { entityId: entity.id, effect: "addBarrier", magnitude },
       };
     case "drainRed":
     case "drainBlue": {
-      const type = DRAIN_STATUS[zone.effect]!;
+      const type = DRAIN_STATUS[effect]!;
       return {
-        entity: withStatus(entity, { type, duration: DRAIN_DURATION, value: zone.magnitude }),
-        event: { entityId: entity.id, effect: zone.effect, magnitude: zone.magnitude },
+        entity: withStatus(entity, { type, duration: DRAIN_DURATION, value: magnitude }),
+        event: { entityId: entity.id, effect, magnitude },
       };
     }
     case "cover":
@@ -164,7 +165,7 @@ export function tickZones(state: GameState): { state: GameState; events: GameEve
     if (isGridZone(zone.effect)) continue;
     for (const entity of entities.values()) {
       if (entity.dead || !entityInZone(zone, entity)) continue;
-      const { entity: next, event } = applyZoneEffectToEntity(zone, entity);
+      const { entity: next, event } = applyAreaEffectToEntity(zone.effect, zone.magnitude, entity);
       if (event) {
         entities.set(entity.id, next);
         if (next.dead) {
@@ -190,4 +191,43 @@ export function tickZones(state: GameState): { state: GameState; events: GameEve
   }
 
   return { state: { ...state, entities, grid, zones: survivors }, events };
+}
+
+/**
+ * The aura pass: each living entity's aura passives act as a zone centred on it — allies-auras
+ * (owner included) or enemies-auras by team, same beat as `tickZones`. Auras live on the entity,
+ * so they need no duration bookkeeping and vanish with their owner.
+ */
+export function tickAuras(state: GameState): { state: GameState; events: GameEvent[] } {
+  const owners: Entity[] = [];
+  for (const e of state.entities.values()) {
+    if (!e.dead && e.passives?.some((p) => p.type === "aura")) owners.push(e);
+  }
+  if (owners.length === 0) return { state, events: [] };
+
+  const events: GameEvent[] = [];
+  const entities = new Map(state.entities);
+  for (const owner of owners) {
+    for (const passive of owner.passives!) {
+      if (passive.type !== "aura") continue;
+      const aura = passive.aura;
+      for (const entity of entities.values()) {
+        if (entity.dead) continue;
+        const isAlly = entity.teamId === owner.teamId;
+        if (aura.affects === "allies" ? !isAlly : isAlly) continue;
+        // Radius is measured from the owner's live position this turn.
+        const anchor = entities.get(owner.id)!;
+        if (distance(anchor.position, entity.position) > aura.radius + entity.collisionRadius) continue;
+        const { entity: next, event } = applyAreaEffectToEntity(aura.effect, aura.magnitude, entity);
+        if (!event) continue;
+        entities.set(entity.id, next);
+        if (next.dead) {
+          events.push({ type: "collision", entityId: entity.id, at: entity.position, damage: aura.magnitude, killed: true });
+        } else {
+          events.push({ type: "auraTick", ownerId: owner.id, entityId: entity.id, effect: aura.effect, magnitude: aura.magnitude });
+        }
+      }
+    }
+  }
+  return { state: { ...state, entities }, events };
 }

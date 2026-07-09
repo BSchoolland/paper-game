@@ -1,4 +1,4 @@
-import type { Entity, TeamId, UnitTemplate } from "../core/types.js";
+import type { Entity, PassiveEffect, TeamId, UnitTemplate } from "../core/types.js";
 import type { ItemDefinition } from "../core/items.js";
 import type { AttachmentData } from "../core/inventory.js";
 
@@ -11,8 +11,18 @@ export function makeEntity(
   template: UnitTemplate,
   equipped?: readonly ItemDefinition[],
   attachments?: Record<string, AttachmentData>,
+  passives?: readonly PassiveEffect[],
 ): Entity {
+  // Charge counters start full for every ability that declares `uses`.
+  let abilityUses: Record<string, number> | undefined;
+  for (const ability of template.abilities) {
+    if (ability.uses === undefined) continue;
+    abilityUses ??= {};
+    abilityUses[ability.id] = ability.uses;
+  }
   return {
+    abilityUses,
+    passives: passives && passives.length > 0 ? passives : undefined,
     id,
     name,
     position: { x, y },

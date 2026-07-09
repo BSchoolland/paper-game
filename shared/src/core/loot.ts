@@ -40,15 +40,16 @@ export interface DropProfile {
 }
 
 /**
- * THE tunable table. epic/legendary weights are 0 until such content exists (live pools carry
- * common/uncommon/rare only); the fallback walk in rollDrops handles sparse pools either way.
+ * THE tunable table. Epic/legendary stay out of standard fights — they enter at treasure and
+ * only get real weight at grand/apex, so a legendary is an event. The fallback walk in
+ * rollDrops keeps sparse pools (dimensions without epics yet) working unchanged.
  */
 export const DROP_PROFILES: Readonly<Record<LootRichness, DropProfile>> = {
   standard: { dropChance: 0.6, count: 1, rarityWeights: { common: 70, uncommon: 25, rare: 5, epic: 0, legendary: 0 } },
   elite: { dropChance: 1.0, count: 1, rarityWeights: { common: 45, uncommon: 40, rare: 15, epic: 0, legendary: 0 } },
-  treasure: { dropChance: 1.0, count: 2, rarityWeights: { common: 40, uncommon: 40, rare: 20, epic: 0, legendary: 0 } },
-  grand: { dropChance: 1.0, count: 3, rarityWeights: { common: 15, uncommon: 45, rare: 40, epic: 0, legendary: 0 } },
-  apex: { dropChance: 1.0, count: 2, rarityWeights: { common: 10, uncommon: 40, rare: 50, epic: 0, legendary: 0 } },
+  treasure: { dropChance: 1.0, count: 2, rarityWeights: { common: 38, uncommon: 40, rare: 20, epic: 2, legendary: 0 } },
+  grand: { dropChance: 1.0, count: 3, rarityWeights: { common: 12, uncommon: 42, rare: 38, epic: 7, legendary: 1 } },
+  apex: { dropChance: 1.0, count: 2, rarityWeights: { common: 5, uncommon: 35, rare: 45, epic: 12, legendary: 3 } },
 };
 
 export const RARITY_ORDER: readonly ItemRarity[] = ["common", "uncommon", "rare", "epic", "legendary"];

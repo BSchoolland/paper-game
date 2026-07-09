@@ -160,6 +160,100 @@
       "actionCount": 1
     }
   },
+  "s11-riders-fullhp-then-execute": {
+    "hash": "b485b4de57b866523de13cbb759bee775d0935fab7f628c901c668a13af2012a",
+    "summary": {
+      "events": 4,
+      "eventTypes": {
+        "attack": 2,
+        "endTurn": 1,
+        "turnStart": 1
+      },
+      "winner": null,
+      "turnNumber": 2,
+      "entities": 2,
+      "actionCount": 2
+    }
+  },
+  "s12-riders-status-and-wall": {
+    "hash": "b97128b5292a5ea5e4433c822ef02a86bf5e43d57378629714c70f62b1960033",
+    "summary": {
+      "events": 8,
+      "eventTypes": {
+        "attack": 2,
+        "endTurn": 1,
+        "statusApplied": 4,
+        "turnStart": 1
+      },
+      "winner": null,
+      "turnNumber": 2,
+      "entities": 2,
+      "actionCount": 2
+    }
+  },
+  "s13-onkill-refund-and-passive": {
+    "hash": "f59fefb43167207edb0650fcfebd6286197b4bf85bc57661068f58b659e540fc",
+    "summary": {
+      "events": 4,
+      "eventTypes": {
+        "attack": 1,
+        "endTurn": 1,
+        "restore": 1,
+        "turnStart": 1
+      },
+      "winner": null,
+      "turnNumber": 2,
+      "entities": 3,
+      "actionCount": 1
+    }
+  },
+  "s14-blink-over-wall-and-swap": {
+    "hash": "591d5cc8b969110c2c988cc95400a3eabf4fc2e4ddeb6555e7cf6850252d4928",
+    "summary": {
+      "events": 6,
+      "eventTypes": {
+        "attack": 1,
+        "blink": 3,
+        "endTurn": 1,
+        "turnStart": 1
+      },
+      "winner": null,
+      "turnNumber": 2,
+      "entities": 2,
+      "actionCount": 2
+    }
+  },
+  "s15-summon-with-one-use": {
+    "hash": "3392c31c064888d7b9d3f51a71ed3cfd66a1465371677e87e352bed5f5984be5",
+    "summary": {
+      "events": 6,
+      "eventTypes": {
+        "endTurn": 2,
+        "spawn": 2,
+        "turnStart": 2
+      },
+      "winner": null,
+      "turnNumber": 3,
+      "entities": 4,
+      "actionCount": 1
+    }
+  },
+  "s16-convert-restore-aura": {
+    "hash": "fb7cbb616b8627487c1ad47fa454e9d017244178806470e9098834838ef042ed",
+    "summary": {
+      "events": 7,
+      "eventTypes": {
+        "auraTick": 2,
+        "endTurn": 2,
+        "restore": 1,
+        "turnStart": 2
+      },
+      "winner": null,
+      "turnNumber": 3,
+      "entities": 2,
+      "actionCount": 1
+    }
+  },
   "ai01-sovereign-vs-rush": {
     "hash": "74547c63ff7c5b042d4e92edf4ba3ad8dc03be828e56f75242a13fffe0e1e873",
     "summary": {

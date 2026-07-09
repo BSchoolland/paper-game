@@ -17,7 +17,7 @@ export type DefenseTier = "perfect" | "decent" | "none";
 export type BlockRequirement = "guard" | "parry";
 
 /** Everything a hit can do to you besides raw damage. */
-export type HitConsequence = "knockback" | "pull" | StatusEffectType;
+export type HitConsequence = "knockback" | "pull" | "swap" | StatusEffectType;
 
 export const DEFENSE_POLICY: {
   readonly damageMult: Record<DefenseTier, number>;
@@ -30,6 +30,7 @@ export const DEFENSE_POLICY: {
   stops: {
     knockback: "guard",
     pull: "guard",
+    swap: "guard",
     slowed: "parry",
     winded: "parry",
     suppressed: "parry",

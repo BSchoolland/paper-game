@@ -54,7 +54,7 @@ const attackReaction: ReactionHandler<"attack"> = (event, state, ctx) => {
     }
     if (ability.onHit) {
       for (const effect of ability.onHit) {
-        const applied = applyWeaponEffect(effect, hit.targetId, event.attackerPosition, current, defMult);
+        const applied = applyWeaponEffect(effect, hit.targetId, event.attackerId, event.attackerPosition, current, defMult);
         current = applied.state;
         events.push(...applied.events);
       }
@@ -77,8 +77,10 @@ const attackReaction: ReactionHandler<"attack"> = (event, state, ctx) => {
     events.push(...lunged.events);
   }
 
+  let kills = 0;
   for (const hit of event.hits) {
     if (!hit.killed) continue;
+    kills++;
     const dead = current.entities.get(hit.targetId);
     if (!dead?.effects) continue;
     const deathEffects = dead.effects.filter((e) => e.trigger === "onDeath");
@@ -86,6 +88,36 @@ const attackReaction: ReactionHandler<"attack"> = (event, state, ctx) => {
       const spawned = applyEntityEffect(effect, dead.position, dead.teamId, current);
       current = spawned.state;
       events.push(...spawned.events);
+    }
+  }
+
+  // Kill refunds: the ability's own onKill plus any onKillEnergy passives, per kill scored.
+  if (kills > 0) {
+    const attacker = current.entities.get(event.attackerId);
+    if (attacker && !attacker.dead) {
+      let red = ability.onKill?.red ?? 0;
+      let blue = ability.onKill?.blue ?? 0;
+      for (const passive of attacker.passives ?? []) {
+        if (passive.type !== "onKillEnergy") continue;
+        red += passive.red ?? 0;
+        blue += passive.blue ?? 0;
+      }
+      red *= kills;
+      blue *= kills;
+      if (red > 0 || blue > 0) {
+        const energy = attacker.energy;
+        const gainedRed = Math.min(energy.red + red, energy.maxRed) - energy.red;
+        const gainedBlue = Math.min(energy.blue + blue, energy.maxBlue) - energy.blue;
+        if (gainedRed > 0 || gainedBlue > 0) {
+          const entities = new Map(current.entities);
+          entities.set(attacker.id, {
+            ...attacker,
+            energy: { ...energy, red: energy.red + gainedRed, blue: energy.blue + gainedBlue },
+          });
+          current = { ...current, entities };
+          events.push({ type: "restore", entityId: attacker.id, hp: 0, red: gainedRed, blue: gainedBlue, reason: "onKill" });
+        }
+      }
     }
   }
 
@@ -97,6 +129,7 @@ export const coreReactionBus = createReactionBus([on("attack", attackReaction)])
 function applyWeaponEffect(
   effect: WeaponEffect,
   targetId: string,
+  attackerId: string,
   attackerPos: Vec2,
   state: ActionResult["state"],
   defenseMult: number = 1
@@ -108,7 +141,42 @@ function applyWeaponEffect(
     case "applyStatus":
       if (!consequenceApplies(effect.status, defenseMult)) return { state, events: [] };
       return applyStatusEffect(targetId, { type: effect.status, duration: effect.duration, value: effect.value }, state);
+    case "swap":
+      if (!consequenceApplies("swap", defenseMult)) return { state, events: [] };
+      return swapPositions(attackerId, targetId, state);
   }
+}
+
+/**
+ * Trade places with the target. Each must be able to stand where the other was — checked in a
+ * state with both lifted off the board, so they don't collide with each other's old spot.
+ */
+function swapPositions(
+  aId: string,
+  bId: string,
+  state: ActionResult["state"]
+): { state: ActionResult["state"]; events: GameEvent[] } {
+  const a = state.entities.get(aId);
+  const b = state.entities.get(bId);
+  if (!a || !b || a.dead || b.dead) return { state, events: [] };
+
+  const lifted = new Map(state.entities);
+  lifted.delete(aId);
+  lifted.delete(bId);
+  const liftedState = { ...state, entities: lifted };
+  if (!canEntityOccupy(liftedState, a, b.position)) return { state, events: [] };
+  if (!canEntityOccupy(liftedState, b, a.position)) return { state, events: [] };
+
+  const entities = new Map(state.entities);
+  entities.set(aId, { ...a, position: b.position });
+  entities.set(bId, { ...b, position: a.position });
+  return {
+    state: { ...state, entities },
+    events: [
+      { type: "blink", entityId: aId, from: a.position, to: b.position },
+      { type: "blink", entityId: bId, from: b.position, to: a.position },
+    ],
+  };
 }
 
 type SlideResult = { state: ActionResult["state"]; events: GameEvent[]; blocked: boolean };
@@ -210,6 +278,24 @@ function applyEntityEffect(
   }
 }
 
+/**
+ * The summon-ability entry point: spawn `count` units of `templateKey` on `teamId` around
+ * `center`. Unlike onDeath spawns (which tolerate a missing template as vestigial data), a
+ * summon ability naming an unregistered template is a content bug — fail loud.
+ */
+export function summonAtPoint(
+  templateKey: string,
+  count: number,
+  center: Vec2,
+  teamId: TeamId,
+  state: ActionResult["state"]
+): { state: ActionResult["state"]; events: GameEvent[] } {
+  if (!getTemplate(templateKey)) {
+    throw new Error(`summonAtPoint: template "${templateKey}" is not in the active registry`);
+  }
+  return spawnEntities(templateKey, count, center, teamId, state);
+}
+
 function spawnEntities(
   templateKey: string,
   count: number,
@@ -253,5 +339,7 @@ export function describeWeaponEffect(effect: WeaponEffect): string {
       const meta = STATUS_META[effect.status];
       return `${meta.label}: ${meta.describe(effect.value)} (${effect.duration}t)`;
     }
+    case "swap":
+      return "swap places with target";
   }
 }
