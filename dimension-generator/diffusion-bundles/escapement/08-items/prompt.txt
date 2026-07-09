@@ -1,0 +1,26 @@
+Dimension: Escapement
+Biome: brass gear plains cut by spring canyons and burning oil fens
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color quality, and isolated-on-page item presentation. Ignore the reference's parchment background and any grid or separator lines it shows; put the items on plain white.
+
+Arrange the items in a 4×4 layout, one item per cell position, evenly spaced with clear empty white space between them. Do NOT draw any grid lines, cell borders, boxes, or separators. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Tin Sword (sword, common) — A cheap tin blade, light and a little bendy.
+  Brass Saber (sword, common) — A curved saber cast from polished brass.
+  Sawblade (sword, uncommon) — A mill saw fitted with a leather grip; cuts ragged.
+  Clock Hand (sword, rare) — A tower clock's minute hand, ground to an edge.
+  Iron Pike (spear, common) — A long iron pike with superior reach.
+  Piston Spear (spear, uncommon) — A piston drives the head forward with extra force.
+  Drag Hook (spear, rare) — A hooked pole that yanks enemies closer.
+  Crossbow (bow, common) — A simple crossbow with a steady iron draw.
+  Ratchet Bow (bow, uncommon) — A gear ratchet holds a far heavier draw.
+  Coil Bow (bow, rare) — Limbs of mainspring steel; every shot hits hard.
+  Brass Staff (staff, common) — A plain brass staff that channels a simple blast.
+  Chime Staff (staff, uncommon) — Hung with chimes; its tone rattles enemies.
+  Winding Key (staff, rare) — A staff-sized brass key humming with stored tension.
+  Great Wrench (two-handed, common) — A machinist's wrench big enough to need both hands.
+  Gear Axe (two-handed, uncommon) — An axe head cut from a broken gear segment.
+  Pendulum Maul (two-handed, rare) — A clock pendulum swung on its rod like a maul.

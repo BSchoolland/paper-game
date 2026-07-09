@@ -1,0 +1,12 @@
+Dimension: The Escapement
+Biome: rusted gear plains split by mainspring canyons and burning oil fens
+Mood: Vast, patient, and mechanical. The grinding half-life of an engine that has outlived its purpose and keeps turning anyway.
+Palette: primary #B08D3C, secondary #3A342B, accent #D9531E
+
+Description: A planet-sized machine cracked open to the sky, its interior a world of interlocked gears the size of towns, snapped mainsprings, and burning oil fens. Most of the works have seized with rust, but a few still grind through their thousand-year rotations. Everything ticks, slow and out of rhythm, tended by things that no longer know what they were built for.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

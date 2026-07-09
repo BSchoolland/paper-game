@@ -1,0 +1,12 @@
+Dimension: Escapement
+Biome: brass gear plains cut by spring canyons and burning oil fens
+Mood: Patient, rusted, and faintly wrong — a whole world still working for no one. Every silence ends with a tick that lands half a beat late.
+Palette: primary #b3873c, secondary #7d4427, accent #3f8f7a
+
+Description: The exposed interior of a planet-sized machine whose builders are long gone. Continent-wide gear plains grind through thousand-year rotations, snapped mainsprings lie coiled across canyons, and oil fens burn wherever the friction runs hot. Everything still ticks, slow and out of rhythm, maintained by things that no longer know why.
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate an empty map background that things will be placed on top of — no structures, no plants, nothing. Just the ground texture, edges, and ambient feel of this dimension.
+
+Match the style of the starter dimension's background (attached as reference.jpeg) exactly: same dimensions, same paper-grain texture, same soft vignetting at the edges, same parchment-overlay quality. The only difference should be the colors and the edge motifs, which should reflect the new dimension's palette and biome.

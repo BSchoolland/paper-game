@@ -1,0 +1,24 @@
+Dimension: The Escapement
+Biome: rusted gear plains split by mainspring canyons and burning oil fens
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 enemy sprite sheet for this dimension. The attached reference.jpeg shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color quality, character proportions, and animation poses. Ignore the reference's parchment background and any grid or separator lines it shows; put the subjects on plain white.
+
+Arrange the subjects in a 4×4 layout, evenly spaced with clear empty white space between them. Do NOT draw any grid lines, cell borders, boxes, or separators between the cells:
+  - COLUMNS are 4 different enemies (column 1 = first enemy, column 2 = second, etc.)
+  - ROWS are 4 animation poses (row 1 = idle, row 2 = attacking, row 3 = hit/staggered, row 4 = moving)
+  - Each enemy is consistent across its column (same character drawn 4 different ways)
+  - All characters must face to the RIGHT
+
+This batch is the "Elite" tier: cost 5-6, threats
+
+The 4 enemies in this batch (one per column, in this order):
+
+  Winder Priest — support that heals and hastens cult allies. A tall cultist turning a great brass key set into its own back.
+
+  Piston Golem — slow heavy bruiser with crushing single hits. A hulking automaton with massive piston-driven arms.
+
+  Steam Lancer — fast charger that lances across the field. A sleek automaton balanced on one wheel, trailing steam and couching a lance.
+
+  Sweeper — melee that sweeps and damages several tiles at once. A wide, low engine dragging a spinning blade arm that throws sparks.

@@ -1,0 +1,218 @@
+{
+  "id": 708,
+  "name": "The Escapement",
+  "description": "A planet-sized machine cracked open to the sky, its interior a world of interlocked gears the size of towns, snapped mainsprings, and burning oil fens. Most of the works have seized with rust, but a few still grind through their thousand-year rotations. Everything ticks, slow and out of rhythm, tended by things that no longer know what they were built for.",
+  "palette": {
+    "primary": "#B08D3C",
+    "secondary": "#3A342B",
+    "accent": "#D9531E"
+  },
+  "mood": "Vast, patient, and mechanical. The grinding half-life of an engine that has outlived its purpose and keeps turning anyway.",
+  "biome": "rusted gear plains split by mainspring canyons and burning oil fens",
+  "droppedNoun": "",
+  "negatedNoun": "",
+  "enemyBatches": [
+    {
+      "name": "Fodder",
+      "description": "cost 1-2, swarms",
+      "enemies": [
+        {
+          "name": "Cog Crawler",
+          "role": "weak fast melee that swarms in numbers",
+          "description": "A dog-sized brass automaton skittering on gear-tooth legs."
+        },
+        {
+          "name": "Ratchet Hound",
+          "role": "fast melee pack that closes distance quickly",
+          "description": "A four-legged iron automaton with a ratcheting, clicking gait."
+        },
+        {
+          "name": "Winder Acolyte",
+          "role": "fragile ranged that lobs oil flasks",
+          "description": "A robed cultist with a satchel of sloshing oil flasks."
+        },
+        {
+          "name": "Chime Bat",
+          "role": "flying melee that dives on soft targets",
+          "description": "A small clockwork bat with thin brass wings that ring in flight."
+        }
+      ]
+    },
+    {
+      "name": "Standard",
+      "description": "cost 3-4, core line",
+      "enemies": [
+        {
+          "name": "Winder Zealot",
+          "role": "sturdy melee that swings a heavy spanner",
+          "description": "A cultist in oil-stained robes hefting an iron cranking-spanner."
+        },
+        {
+          "name": "Watchman",
+          "role": "durable frontline melee with a halberd",
+          "description": "A brass humanoid automaton standing guard with a long halberd."
+        },
+        {
+          "name": "Rivet Gunner",
+          "role": "ranged attacker that fires rivets in bursts",
+          "description": "A squat automaton with a clattering rivet-cannon for an arm."
+        },
+        {
+          "name": "Brass Guard",
+          "role": "armored blocker that shields nearby allies",
+          "description": "A broad iron automaton behind a riveted tower shield."
+        }
+      ]
+    },
+    {
+      "name": "Elite",
+      "description": "cost 5-6, threats",
+      "enemies": [
+        {
+          "name": "Winder Priest",
+          "role": "support that heals and hastens cult allies",
+          "description": "A tall cultist turning a great brass key set into its own back."
+        },
+        {
+          "name": "Piston Golem",
+          "role": "slow heavy bruiser with crushing single hits",
+          "description": "A hulking automaton with massive piston-driven arms."
+        },
+        {
+          "name": "Steam Lancer",
+          "role": "fast charger that lances across the field",
+          "description": "A sleek automaton balanced on one wheel, trailing steam and couching a lance."
+        },
+        {
+          "name": "Sweeper",
+          "role": "melee that sweeps and damages several tiles at once",
+          "description": "A wide, low engine dragging a spinning blade arm that throws sparks."
+        }
+      ]
+    },
+    {
+      "name": "Boss",
+      "description": "cost 7+, set-piece",
+      "enemies": [
+        {
+          "name": "Shepherd Engine",
+          "role": "huge high-HP boss that sweeps whole rows as debris",
+          "description": "A mountain-tall walking engine with plow-arms that clear everything before it."
+        },
+        {
+          "name": "Foreman",
+          "role": "boss that summons and repairs automatons",
+          "description": "A many-armed overseer automaton clutching stone work-order tablets."
+        },
+        {
+          "name": "Winder Prophet",
+          "role": "boss that sacrifices minions to heal itself and buffs the cult",
+          "description": "A gaunt cultist crowned in gears, feeding acolytes to a churning spring."
+        },
+        {
+          "name": "Coil Colossus",
+          "role": "long-range boss that lashes with spring-steel whips",
+          "description": "A giant assembled from snapped mainsprings, uncoiling steel lashes."
+        }
+      ]
+    }
+  ],
+  "items": [
+    {
+      "name": "Brass Sword",
+      "type": "sword",
+      "rarity": "common",
+      "description": "A short blade cast from salvaged brass."
+    },
+    {
+      "name": "Ratchet Saber",
+      "type": "sword",
+      "rarity": "uncommon",
+      "description": "A saw-toothed blade that grinds through armor."
+    },
+    {
+      "name": "Cinder Sword",
+      "type": "sword",
+      "rarity": "uncommon",
+      "description": "A blade kept burning in oil-fen flame."
+    },
+    {
+      "name": "Mainspring Blade",
+      "type": "sword",
+      "rarity": "rare",
+      "description": "A whip-thin blade of coiled spring-steel."
+    },
+    {
+      "name": "Iron Spear",
+      "type": "spear",
+      "rarity": "common",
+      "description": "A plain iron-tipped shaft."
+    },
+    {
+      "name": "Piston Lance",
+      "type": "spear",
+      "rarity": "uncommon",
+      "description": "A spring-driven head that punches forward on the thrust."
+    },
+    {
+      "name": "Hook Pike",
+      "type": "spear",
+      "rarity": "rare",
+      "description": "A barbed head on a winch that drags enemies in."
+    },
+    {
+      "name": "Rivet Bow",
+      "type": "bow",
+      "rarity": "common",
+      "description": "A crossbow that fires salvaged rivets."
+    },
+    {
+      "name": "Coil Crossbow",
+      "type": "bow",
+      "rarity": "uncommon",
+      "description": "A wound-spring bow with a brutal draw."
+    },
+    {
+      "name": "Spark Bow",
+      "type": "bow",
+      "rarity": "rare",
+      "description": "Looses arrows trailing oil-fire."
+    },
+    {
+      "name": "Coil Staff",
+      "type": "staff",
+      "rarity": "common",
+      "description": "Discharges stored spring-force in a shove."
+    },
+    {
+      "name": "Chime Rod",
+      "type": "staff",
+      "rarity": "uncommon",
+      "description": "Rings out a concussive wave."
+    },
+    {
+      "name": "Arc Rod",
+      "type": "staff",
+      "rarity": "rare",
+      "description": "Throws crackling sparks at range."
+    },
+    {
+      "name": "Gear Maul",
+      "type": "two-handed",
+      "rarity": "common",
+      "description": "A town-gear tooth mounted on a heavy haft."
+    },
+    {
+      "name": "Flywheel Axe",
+      "type": "two-handed",
+      "rarity": "uncommon",
+      "description": "A spinning weighted axe head that keeps its momentum."
+    },
+    {
+      "name": "Piston Hammer",
+      "type": "two-handed",
+      "rarity": "rare",
+      "description": "A steam-driven maul that slams for enormous force."
+    }
+  ]
+}

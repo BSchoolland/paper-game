@@ -1,0 +1,26 @@
+Dimension: The Escapement
+Biome: rusted gear plains split by mainspring canyons and burning oil fens
+
+Art style: simple, not too detailed, pencil and crayon drawing, but more pencil than crayon.
+
+Task: Generate a 4×4 item sprite sheet for this dimension. The attached reference.png shows the equivalent sheet from the starter dimension — match its hand-drawn linework, color quality, and isolated-on-page item presentation. Ignore the reference's parchment background and any grid or separator lines it shows; put the items on plain white.
+
+Arrange the items in a 4×4 layout, one item per cell position, evenly spaced with clear empty white space between them. Do NOT draw any grid lines, cell borders, boxes, or separators. Items should be drawn in a consistent orientation (most pointing diagonally up-right). No animations — each cell is a still item portrait.
+
+Items in reading order (left-to-right, top-to-bottom):
+  Brass Sword (sword, common) — A short blade cast from salvaged brass.
+  Ratchet Saber (sword, uncommon) — A saw-toothed blade that grinds through armor.
+  Cinder Sword (sword, uncommon) — A blade kept burning in oil-fen flame.
+  Mainspring Blade (sword, rare) — A whip-thin blade of coiled spring-steel.
+  Iron Spear (spear, common) — A plain iron-tipped shaft.
+  Piston Lance (spear, uncommon) — A spring-driven head that punches forward on the thrust.
+  Hook Pike (spear, rare) — A barbed head on a winch that drags enemies in.
+  Rivet Bow (bow, common) — A crossbow that fires salvaged rivets.
+  Coil Crossbow (bow, uncommon) — A wound-spring bow with a brutal draw.
+  Spark Bow (bow, rare) — Looses arrows trailing oil-fire.
+  Coil Staff (staff, common) — Discharges stored spring-force in a shove.
+  Chime Rod (staff, uncommon) — Rings out a concussive wave.
+  Arc Rod (staff, rare) — Throws crackling sparks at range.
+  Gear Maul (two-handed, common) — A town-gear tooth mounted on a heavy haft.
+  Flywheel Axe (two-handed, uncommon) — A spinning weighted axe head that keeps its momentum.
+  Piston Hammer (two-handed, rare) — A steam-driven maul that slams for enormous force.
