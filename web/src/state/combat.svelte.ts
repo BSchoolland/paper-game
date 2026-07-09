@@ -2,14 +2,16 @@ import type { CoopStatusPayload, EntityId, GameEvent, GameState, InventoryState,
 import { deserializeGameState } from "shared";
 import { room } from "./room.svelte.js";
 import { clientWireLog } from "../net/wire-log.js";
+import { DisplayQueue } from "./display-queue.js";
 
 type DefendPromptMsg = Extract<ServerMessage, { type: "defendPrompt" }>;
 
 /**
  * Combat truth vs presentation (the prototype's proven model, rune-reactive). `truth` is always
  * the latest wire snapshot; `display` is what the board renders, advanced through a per-batch
- * event queue that waits for the renderer's animations between drains. An empty-events snapshot
- * wipes the queue and snaps (the server re-syncing us, e.g. on reconnect).
+ * event queue (DisplayQueue) that waits for the renderer's animations between drains. Every
+ * snapshot — including empty-events re-syncs — rides the queue, so nothing is dropped or
+ * reordered relative to wire order.
  */
 interface CombatStore {
   truth: GameState | null;
@@ -22,26 +24,24 @@ interface CombatStore {
 
 export const combat = $state<CombatStore>({ truth: null, display: null, coop: null, inventory: null, defend: null });
 
-interface QueuedBatch {
-  state: GameState;
-  events: readonly GameEvent[];
-}
-
-/** Snapshots AND coop flips share one queue so phase changes land in display-time, in wire
- *  order relative to the animations around them (no "YOUR TURN" before the enemies finish). */
-type QueueItem = { kind: "batch"; batch: QueuedBatch } | { kind: "coop"; coop: CoopStatusPayload };
-
-let queue: QueueItem[] = [];
-let draining = false;
 let animatingCheck: (() => boolean) | null = null;
 let eventListeners: ((events: readonly GameEvent[]) => void)[] = [];
 let selfActedListeners: (() => void)[] = [];
 let rejectedListeners: (() => void)[] = [];
 let phaseListeners: ((phase: CoopStatusPayload["phase"], prev: CoopStatusPayload["phase"] | null) => void)[] = [];
-/** Display-queue pause: batches never drain before this timestamp (phase slates use it). */
-let holdUntil = 0;
-/** Async pre-batch hook (camera pans to the actor, per-enemy beats). One registrant (BoardHost). */
-let batchGate: ((state: GameState, events: readonly GameEvent[]) => Promise<void>) | null = null;
+
+const displayQueue = new DisplayQueue({
+  commitBatch(state, events) {
+    combat.display = state;
+    for (const l of eventListeners) l(events);
+  },
+  commitCoop,
+  waitForAnimations,
+  now: () => performance.now(),
+  schedule: (cb, ms) => {
+    setTimeout(cb, ms);
+  },
+});
 
 export function applyCombatSnapshot(serialized: Parameters<typeof deserializeGameState>[0], events: readonly GameEvent[]): void {
   const next = deserializeGameState(serialized);
@@ -50,7 +50,7 @@ export function applyCombatSnapshot(serialized: Parameters<typeof deserializeGam
   // regression here means the server emitted out of order — a protocol violation, not a state
   // to quietly absorb. Record + warn always; throw in dev; drop (never move display backwards).
   if (combat.display && next.actionCount < combat.display.actionCount) {
-    clientWireLog.note("dropped-stale", { actionCount: next.actionCount, queueDepth: queue.length });
+    clientWireLog.note("dropped-stale", { actionCount: next.actionCount, queueDepth: displayQueue.depth() });
     console.warn("[combat] dropped stale state", { incoming: next.actionCount, display: combat.display.actionCount });
     if (import.meta.env.DEV) {
       throw new Error(`Stale combat state: actionCount ${next.actionCount} < displayed ${combat.display.actionCount}`);
@@ -69,76 +69,23 @@ export function applyCombatSnapshot(serialized: Parameters<typeof deserializeGam
     return;
   }
 
-  if (events.length === 0) {
-    if (queue.length > 0) clientWireLog.note("queue-wipe", { actionCount: next.actionCount, queueDepth: queue.length });
-    // Re-sync snap: a queued coop flip must not be lost with the wiped batches — commit the
-    // newest one so `combat.coop` still catches up to wire order.
-    for (let i = queue.length - 1; i >= 0; i--) {
-      const item = queue[i]!;
-      if (item.kind === "coop") {
-        commitCoop(item.coop);
-        break;
-      }
-    }
-    queue = [];
-    combat.display = next;
-    return;
+  // An empty-events re-sync (reconnect snapshot / server-side snap) rides the same queue as
+  // everything else: with animations in flight it lands AFTER them instead of wiping them —
+  // queued batches and coop flips are never dropped. With an idle queue it commits immediately.
+  if (events.length === 0 && !displayQueue.isIdle()) {
+    clientWireLog.note("empty-snap-queued", { actionCount: next.actionCount, queueDepth: displayQueue.depth() });
   }
-
-  queue.push({ kind: "batch", batch: { state: next, events } });
-  drain();
-}
-
-function drain(): void {
-  if (draining) return;
-  draining = true;
-  processNext();
-}
-
-function processNext(): void {
-  const next = queue.shift();
-  if (!next) {
-    draining = false;
-    return;
-  }
-  if (next.kind === "coop") {
-    commitCoop(next.coop);
-    processNext();
-    return;
-  }
-  clientWireLog.note("drain", { actionCount: next.batch.state.actionCount, queueDepth: queue.length });
-  const wait = holdUntil - performance.now();
-  if (wait > 0) {
-    // Still inside a slate hold — keep `draining` true so new batches queue behind us.
-    setTimeout(() => applyBatch(next.batch), wait);
-    return;
-  }
-  applyBatch(next.batch);
-}
-
-function applyBatch(next: QueuedBatch): void {
-  const gated = batchGate?.(next.state, next.events);
-  if (gated) {
-    void gated.then(() => {
-      combat.display = next.state;
-      for (const l of eventListeners) l(next.events);
-      waitForAnimations(processNext);
-    });
-    return;
-  }
-  combat.display = next.state;
-  for (const l of eventListeners) l(next.events);
-  waitForAnimations(processNext);
+  displayQueue.enqueueBatch(next, events);
 }
 
 /** Pause the display drain (not the wire) until `ms` from now — lets a phase slate land first. */
 export function holdDisplayFor(ms: number): void {
-  holdUntil = Math.max(holdUntil, performance.now() + ms);
+  displayQueue.holdFor(ms);
 }
 
 /** Register the single pre-batch hook. Returns an unregister. */
 export function setBatchGate(gate: ((state: GameState, events: readonly GameEvent[]) => Promise<void>) | null): void {
-  batchGate = gate;
+  displayQueue.setBatchGate(gate);
 }
 
 /**
@@ -147,11 +94,7 @@ export function setBatchGate(gate: ((state: GameState, events: readonly GameEven
  * of assigning `combat.coop` directly.
  */
 export function applyCoopStatus(coop: CoopStatusPayload): void {
-  if (draining || queue.length > 0) {
-    queue.push({ kind: "coop", coop });
-    return;
-  }
-  commitCoop(coop);
+  displayQueue.enqueueCoop(coop);
 }
 
 function commitCoop(coop: CoopStatusPayload): void {
@@ -231,15 +174,14 @@ export function notifyActionRejected(): void {
 
 /** True once every received batch has finished animating: queue empty and not mid-drain. */
 export function combatIsIdle(): boolean {
-  return queue.length === 0 && !draining;
+  return displayQueue.isIdle();
 }
 
 /** Leaving the combat screen: next entry re-seeds display from the first snapshot. */
 export function resetCombatDisplay(): void {
   combat.display = null;
   combat.truth = null;
-  queue = [];
-  draining = false;
+  displayQueue.reset();
 }
 
 export function resetCombat(): void {

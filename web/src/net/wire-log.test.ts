@@ -1,3 +1,4 @@
+/// <reference types="bun" />
 import { describe, it, expect, beforeEach } from "bun:test";
 import type { ServerEnvelope } from "shared";
 import { clientWireLog, SeqTracker } from "./wire-log.js";
