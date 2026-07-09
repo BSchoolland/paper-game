@@ -69,11 +69,37 @@ export interface EnergyPool {
   readonly maxBlue: number;
 }
 
+/**
+ * Kit gating and selection metadata for an ability. Every field is optional; an ability without
+ * a `kit` is always usable, so an enemy whose abilities carry no kit rules behaves exactly as a
+ * single-attack enemy always has (a kit of one).
+ *
+ * `cooldown`/`hpBelow`/`hpAbove` are enforced by the resolver (server-authoritative — the
+ * ability simply cannot be cast while gated). `minTargets`/`priority` are hints for the
+ * scripted AI's ability selection only.
+ */
+export interface KitRule {
+  /** Turns the ability stays locked after a use, ticked down at this entity's own turn start.
+   *  1 = once per turn, 2 = every other turn, 3 = every third turn. */
+  readonly cooldown?: number;
+  /** Phase gate: usable only while hp/maxHp <= this (e.g. 0.5 = unlocks below half health). */
+  readonly hpBelow?: number;
+  /** Phase gate: usable only while hp/maxHp > this (pair with an `hpBelow` twin on another
+   *  ability to swap one attack out for an empowered version at a threshold). */
+  readonly hpAbove?: number;
+  /** Scripted-AI: only fire if the attack would hit at least this many opposing targets. */
+  readonly minTargets?: number;
+  /** Scripted-AI: among usable abilities, higher priority is tried first; ties keep authored
+   *  order. Default 0. */
+  readonly priority?: number;
+}
+
 interface AbilityBase {
   readonly id: string;
   readonly name: string;
   readonly cost: EnergyCost;
   readonly variableCost?: boolean;
+  readonly kit?: KitRule;
 }
 
 export interface AttackAbility extends AbilityBase {
@@ -194,6 +220,9 @@ export interface EntityCombat {
   readonly abilities: readonly AbilityDefinition[];
   readonly effects?: readonly EntityEffect[];
   readonly statusEffects?: readonly StatusEffect[];
+  /** Ability id -> turns until usable again (see {@link KitRule.cooldown}). Ticked down at this
+   *  entity's team's turn start; serialized with the entity like every other combat field. */
+  readonly cooldowns?: Readonly<Record<string, number>>;
   readonly dead?: boolean;
 }
 

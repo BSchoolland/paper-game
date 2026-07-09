@@ -9,6 +9,7 @@ import { coreReactionBus } from "../encounter/effects.js";
 import { getEffectiveDistance, getEffectiveRegen } from "./status-modifiers.js";
 import { createZone, canPlaceWallZone, tickZones } from "./zones.js";
 import { powerToMultiplier, scaleAttack } from "./power.js";
+import { abilityReady, withCooldownStamped, withCooldownsTicked } from "./kit.js";
 
 function checkWinner(state: GameState): TeamId | null {
   let hasRed = false;
@@ -188,6 +189,7 @@ function resolveAbility(
   const ability = findAbility(entity, abilityId);
   if (!ability) return NO_CHANGE(state);
   if (!canAffordAbility(entity, ability)) return NO_CHANGE(state);
+  if (!abilityReady(entity, ability)) return NO_CHANGE(state);
 
   const nextCount = state.actionCount + 1;
 
@@ -214,7 +216,16 @@ function resolveAbility(
   }
 
   if (result.state === state) return result;
-  return { ...result, state: { ...result.state, actionCount: nextCount } };
+
+  let nextState = result.state;
+  if (ability.kit?.cooldown) {
+    const after = nextState.entities.get(entityId);
+    if (!after) throw new Error(`entity ${entityId} vanished while resolving ${abilityId}`);
+    const entities = new Map(nextState.entities);
+    entities.set(entityId, withCooldownStamped(after, ability));
+    nextState = { ...nextState, entities };
+  }
+  return { ...result, state: { ...nextState, actionCount: nextCount } };
 }
 
 function tickStatusEffects(
@@ -270,7 +281,7 @@ export function startTurn(state: GameState, team: TeamId): ActionResult {
     if (entity.dead) {
       entities.set(id, entity);
     } else if (entity.teamId === team) {
-      entities.set(id, {
+      entities.set(id, withCooldownsTicked({
         ...entity,
         energy: {
           ...entity.energy,
@@ -278,7 +289,7 @@ export function startTurn(state: GameState, team: TeamId): ActionResult {
           blue: Math.min(entity.energy.blue + getEffectiveRegen(entity, "blue", entity.energy.regenBlue), entity.energy.maxBlue),
         },
         barrier: 0,
-      });
+      }));
     } else {
       entities.set(id, entity);
     }

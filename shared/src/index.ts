@@ -22,6 +22,7 @@ export * from "./combat/ability-cost.js";
 export * from "./combat/combat.js";
 export * from "./combat/status-modifiers.js";
 export * from "./combat/zones.js";
+export * from "./combat/kit.js";
 export * from "./combat/turn-resolver.js";
 export * from "./combat/power.js";
 export * from "./combat/movement.js";
