@@ -31,6 +31,7 @@ import type {
   AttackAbility, Entity, EntityId, GameState, MoveAbility, PlayerAction, TeamId, Vec2,
 } from "../core/types.js";
 import { canAffordAbility } from "../combat/ability-cost.js";
+import { abilityReady } from "../combat/kit.js";
 import { getEffectiveDistance } from "../combat/status-modifiers.js";
 import { ShapeKind } from "../core/types.js";
 import { strategyForEntity } from "./strategy.js";
@@ -458,11 +459,11 @@ function heroCandidates(state: GameState, hero: Entity, kiteRing: number): Playe
   const out: PlayerAction[] = [];
   const near = nearest(hero.position, enemies)!;
   const cluster = enemies.length > 1 ? centroid(enemies) : near.position;
-  const atks = attackAbilities(hero).filter(a => canAffordAbility(hero, a));
+  const atks = attackAbilities(hero).filter(a => canAffordAbility(hero, a) && abilityReady(hero, a));
 
   // non-aimed abilities (block / shield-wall / etc.) — just cast them
   for (const a of hero.abilities) {
-    if (a.kind === "barrier" && canAffordAbility(hero, a)) {
+    if (a.kind === "barrier" && canAffordAbility(hero, a) && abilityReady(hero, a)) {
       out.push({ type: "ability", entityId: hero.id, abilityId: a.id });
     }
   }
