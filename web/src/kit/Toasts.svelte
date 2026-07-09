@@ -1,9 +1,31 @@
 <script lang="ts">
-  import { titleById } from "shared";
+  import { titleById, RARITY_ORDER } from "shared";
+  import type { ItemDefinition, ItemRarity, PartyBagEntry } from "shared";
   import { chrome, dismissToast } from "../state/chrome.svelte.js";
   import { joinByCode } from "../state/actions.js";
   import { dimMeta } from "../state/dim-meta.svelte.js";
   import ItemChip from "./ItemChip.svelte";
+
+  // The loot moment scales with the best drop: rare+ gets a headline and an ability preview.
+  const rarityRank = (r: ItemRarity) => RARITY_ORDER.indexOf(r);
+  function bestDrop(drops: readonly PartyBagEntry[]): PartyBagEntry {
+    return drops.reduce((a, b) => (rarityRank(b.item.rarity) > rarityRank(a.item.rarity) ? b : a));
+  }
+  function lootHeadline(drops: readonly PartyBagEntry[]): { text: string; rarity: ItemRarity } | null {
+    const best = bestDrop(drops).item;
+    if (rarityRank(best.rarity) < rarityRank("rare")) return null;
+    return { text: best.rarity === "legendary" ? "LEGENDARY" : `${best.rarity.toUpperCase()} FIND`, rarity: best.rarity };
+  }
+  function abilityPreview(item: ItemDefinition): string[] {
+    const lines = (item.abilities ?? []).map((a) => a.name);
+    for (const p of item.passives ?? []) {
+      if (p.type === "aura") lines.push(`${p.aura.effect} aura`);
+      else if (p.type === "onKillEnergy") lines.push("on-kill energy");
+      else if (p.type === "maxHp") lines.push(`+${p.amount} max HP`);
+      else lines.push("bonus regen");
+    }
+    return lines;
+  }
 </script>
 
 <div class="toaststack">
@@ -21,11 +43,22 @@
           <div class="sub">{titleById(id).description}</div>
         {/each}
       {:else if toast.kind === "loot"}
-        <div class="t-title" style="color:var(--moss)">LOOT FOUND</div>
+        {@const headline = lootHeadline(toast.drops)}
+        {#if headline}
+          <div class="t-title bigfind r-{headline.rarity}">✦ {headline.text} ✦</div>
+        {:else}
+          <div class="t-title" style="color:var(--moss)">LOOT FOUND</div>
+        {/if}
         {#each toast.drops as drop (drop.bagId)}
-          <div class="lootrow">
+          {@const showcase = headline && drop.bagId === bestDrop(toast.drops).bagId}
+          <div class="lootrow" class:lootstar={showcase}>
             <ItemChip item={drop.item} small />
-            <span class="lname r-{drop.item.rarity}">{drop.item.name}</span>
+            <div>
+              <span class="lname r-{drop.item.rarity}">{drop.item.name}</span>
+              {#if showcase}
+                <div class="abilitypreview">{abilityPreview(drop.item).join(" · ")}</div>
+              {/if}
+            </div>
           </div>
         {/each}
         <div class="sub">added to the party bag</div>
@@ -134,5 +167,28 @@
   .errtext {
     color: #8c3a1e;
     font-size: 14px;
+  }
+  .bigfind {
+    font-size: 15px;
+    letter-spacing: 0.28em;
+    text-shadow: 0 0 9px rgba(201, 167, 99, 0.55);
+    animation: findpulse 1.1s ease-in-out 3;
+  }
+  @keyframes findpulse {
+    50% {
+      text-shadow: 0 0 16px rgba(201, 167, 99, 0.95);
+    }
+  }
+  .lootstar {
+    padding: 4px 6px;
+    margin-left: -6px;
+    border-radius: 4px;
+    background: rgba(201, 167, 99, 0.09);
+  }
+  .abilitypreview {
+    font-size: 11.5px;
+    color: var(--ink-55);
+    margin-top: 2px;
+    line-height: 1.35;
   }
 </style>

@@ -1,5 +1,5 @@
-import type { AttachmentData, InventoryState, ItemDefinition, PartyBagEntry, WeaponItem, ShieldItem, ConsumableItem, AccessoryItem, CharacterAnchors, AnchorSet } from "shared";
-import { ShapeKind, describeWeaponEffect, computeAttachment, transformAttachment } from "shared";
+import type { AbilityDefinition, AttachmentData, DamageRider, EnergyCost, InventoryState, ItemDefinition, PartyBagEntry, PassiveEffect, WeaponItem, ShieldItem, ConsumableItem, AccessoryItem, CharacterAnchors, AnchorSet } from "shared";
+import { ShapeKind, STATUS_META, describeWeaponEffect, computeAttachment, transformAttachment } from "shared";
 import {
   type ItemPosition,
   PANEL_W,
@@ -17,6 +17,70 @@ import { InventoryRenderer } from "./inventory-renderer.js";
 import { InventoryInput } from "./inventory-input.js";
 import { loadCharacterAnchors, getFrameAnchors } from "../render/anchor-loader.js";
 import { assetUrl } from "../../lib/urls.js";
+
+const TOOLTIP_MUTED = "#7a6a50";
+
+function costText(cost: EnergyCost): string {
+  const parts: string[] = [];
+  if (cost.red) parts.push(`${cost.red} red`);
+  if (cost.blue) parts.push(`${cost.blue} blue`);
+  return parts.length > 0 ? parts.join(" + ") : "free";
+}
+
+function describeRider(r: DamageRider): string {
+  switch (r.when) {
+    case "target-has-status": return `+${r.amount} vs ${STATUS_META[r.status].label.toLowerCase()}`;
+    case "target-below-hp": return `+${r.amount} below ${Math.round(r.pct * 100)}% hp`;
+    case "target-at-full-hp": return `+${r.amount} vs unhurt`;
+    case "target-near-wall": return `+${r.amount} near walls`;
+  }
+}
+
+function describePassive(p: PassiveEffect): string {
+  switch (p.type) {
+    case "aura": return `${p.aura.effect} aura · ${p.aura.magnitude}/turn · radius ${p.aura.radius} · ${p.aura.affects}`;
+    case "onKillEnergy": return `on kill: +${costText({ red: p.red, blue: p.blue })}`;
+    case "maxHp": return `+${p.amount} max HP`;
+    case "regen": return `+${costText({ red: p.red, blue: p.blue })} regen / turn`;
+  }
+}
+
+/** Tooltip lines for the ability kinds that aren't attacks or zones (those have bespoke blocks). */
+function describeUtilityAbility(a: AbilityDefinition): string | null {
+  const M = TOOLTIP_MUTED;
+  const charges = a.uses !== undefined ? ` · ${a.uses}/encounter` : "";
+  switch (a.kind) {
+    case "move":
+      return `<div style="margin-top:4px"><strong>${a.name}</strong> (${costText(a.cost)})</div>
+        <div><span style="color:${M}">${a.mode === "blink" ? "Blink" : "Dash"}:</span> ${a.distance}${charges}</div>`;
+    case "barrier":
+      return `<div style="margin-top:4px"><strong>${a.name}</strong> (${costText(a.cost)})</div>
+        <div><span style="color:${M}">Barrier:</span> +${a.barrierHp} HP${charges}</div>`;
+    case "summon":
+      return `<div style="margin-top:4px"><strong>${a.name}</strong> (${costText(a.cost)})</div>
+        <div><span style="color:${M}">Summon:</span> ${a.count}× ${a.templateKey.replace(/^item-/, "").replace(/-/g, " ")} · range ${a.range}${charges}</div>`;
+    case "convert":
+      return `<div style="margin-top:4px"><strong>${a.name}</strong> (${costText(a.cost)})</div>
+        <div><span style="color:${M}">Convert:</span> gain ${costText(a.gain)}${charges}</div>`;
+    case "restore": {
+      const parts: string[] = [];
+      if (a.hp) parts.push(`${a.hp} HP`);
+      if (a.red) parts.push(`${a.red} red`);
+      if (a.blue) parts.push(`${a.blue} blue`);
+      return `<div style="margin-top:4px"><strong>${a.name}</strong> (${costText(a.cost)})</div>
+        <div><span style="color:${M}">Restore:</span> ${parts.join(", ")}${charges}</div>`;
+    }
+    case "attack":
+    case "zone":
+      return null;
+  }
+}
+
+function passivesHtml(item: ItemDefinition): string {
+  if (!item.passives?.length) return "";
+  const M = TOOLTIP_MUTED;
+  return item.passives.map(p => `<div><span style="color:${M}">Passive:</span> ${describePassive(p)}</div>`).join("");
+}
 
 export interface PackEditorHooks {
   canEdit(): boolean;
@@ -315,7 +379,10 @@ export class PackEditor {
             ${a.wallSlamDamage ? `<div><span style="color:${MUTED}">Wall slam:</span> ${a.wallSlamDamage}</div>` : ""}
             ${a.recoil ? `<div><span style="color:${MUTED}">Recoil:</span> ${a.recoil}</div>` : ""}
             ${a.lungeThrough ? `<div><span style="color:${MUTED}">Lunge:</span> ${a.lungeThrough}</div>` : ""}
-            ${a.onHit?.length ? `<div><span style="color:${MUTED}">On Hit:</span> ${a.onHit.map((e) => describeWeaponEffect(e)).join(", ")}</div>` : ""}`;
+            ${a.onHit?.length ? `<div><span style="color:${MUTED}">On Hit:</span> ${a.onHit.map((e) => describeWeaponEffect(e)).join(", ")}</div>` : ""}
+            ${a.riders?.length ? `<div><span style="color:${MUTED}">Bonus:</span> ${a.riders.map(describeRider).join(", ")}</div>` : ""}
+            ${a.onKill ? `<div><span style="color:${MUTED}">On Kill:</span> +${costText(a.onKill)}</div>` : ""}
+            ${a.uses !== undefined ? `<div><span style="color:${MUTED}">Charges:</span> ${a.uses}/encounter</div>` : ""}`;
         });
         const zones = w.abilities.filter((a) => a.kind === "zone") as import("shared").ZoneAbility[];
         for (const z of zones) {
@@ -327,33 +394,53 @@ export class PackEditor {
             <div><span style="color:${MUTED}">Zone:</span> ${z.zone.effect} · radius ${z.zone.radius} · ${z.zone.duration} turns${z.zone.magnitude ? ` · ${z.zone.magnitude}` : ""}</div>
             <div><span style="color:${MUTED}">Place range:</span> ${z.range}</div>`);
         }
+        for (const a of w.abilities) {
+          const html = describeUtilityAbility(a);
+          if (html) lines.push(html);
+        }
+        lines.push(passivesHtml(w));
         statsHtml = `<div style="margin-top:8px">${lines.join("")}</div>`;
         break;
       }
       case "shield": {
         const s = item as ShieldItem;
         const lines = s.abilities
-          .filter((a) => a.kind === "barrier")
-          .map((a) => `<div><strong>${a.name}</strong> +${a.barrierHp} barrier HP</div>`);
-        statsHtml = lines.length > 0 ? `<div style="margin-top:8px">${lines.join("")}</div>` : "";
+          .map((a) => a.kind === "barrier"
+            ? `<div><strong>${a.name}</strong> +${a.barrierHp} barrier HP</div>`
+            : describeUtilityAbility(a))
+          .filter((l): l is string => !!l);
+        lines.push(passivesHtml(s));
+        statsHtml = `<div style="margin-top:8px">${lines.join("")}</div>`;
         break;
       }
       case "consumable": {
         const c = item as ConsumableItem;
-        if (c.effect.kind === "heal") {
-          statsHtml = `<div style="margin-top:8px"><div><span style="color:${MUTED}">Heals:</span> ${c.effect.amount} HP</div></div>`;
-        } else {
-          statsHtml = `<div style="margin-top:8px"><div><span style="color:${MUTED}">Damage:</span> ${c.effect.amount}</div><div><span style="color:${MUTED}">Radius:</span> ${c.effect.radius}</div></div>`;
+        const lines = (c.abilities ?? [])
+          .map((a) => describeUtilityAbility(a))
+          .filter((l): l is string => !!l);
+        // Legacy pre-charges shape from old run-db snapshots: display only.
+        if (lines.length === 0 && c.effect) {
+          lines.push(c.effect.kind === "heal"
+            ? `<div><span style="color:${MUTED}">Heals:</span> ${c.effect.amount} HP</div>`
+            : `<div><span style="color:${MUTED}">Damage:</span> ${c.effect.amount} · radius ${c.effect.radius}</div>`);
         }
+        statsHtml = lines.length > 0 ? `<div style="margin-top:8px">${lines.join("")}</div>` : "";
         break;
       }
       case "accessory": {
         const a = item as AccessoryItem;
-        const bonuses = Object.entries(a.statBonus)
+        const lines: string[] = [passivesHtml(a)];
+        for (const ab of a.abilities ?? []) {
+          const html = describeUtilityAbility(ab);
+          if (html) lines.push(html);
+        }
+        // Legacy dead statBonus from old run-db snapshots: display only.
+        const bonuses = Object.entries(a.statBonus ?? {})
           .filter(([, v]) => v !== 0)
           .map(([k, v]) => `<div><span style="color:${MUTED}">${k}:</span> +${v}</div>`)
           .join("");
-        statsHtml = bonuses ? `<div style="margin-top:8px">${bonuses}</div>` : "";
+        if (bonuses) lines.push(bonuses);
+        statsHtml = `<div style="margin-top:8px">${lines.join("")}</div>`;
         break;
       }
     }
