@@ -11,10 +11,19 @@ export const weaponEffect = z.union([
   z.object({ type: z.literal("applyStatus"), status: z.enum(["slowed", "winded", "suppressed", "rooted"]), duration: z.number(), value: z.number() }),
 ]);
 
+export const kitRule = z.object({
+  cooldown: z.number().optional().describe("Turns locked after use: 1=once per turn, 2=every other turn, 3=every third turn"),
+  hpBelow: z.number().optional().describe("Phase gate: usable only at or below this HP fraction (0.5 = unlocks below half health)"),
+  hpAbove: z.number().optional().describe("Phase gate: usable only above this HP fraction. Pair with an hpBelow twin on another ability to swap in an empowered version"),
+  minTargets: z.number().optional().describe("AI only fires this if it would hit at least N players — save big AoEs for clumps"),
+  priority: z.number().optional().describe("AI tries higher priority first; ties keep list order. Default 0"),
+}).describe("Attack-kit gating for bosses/elites: cooldowns + HP phases turn multiple abilities into a learnable rotation. Omit entirely for simple enemies (a kit of one)");
+
 export const attackAbility = z.object({
   id: z.string(),
   name: z.string(),
   kind: z.literal("attack"),
+  kit: kitRule.optional(),
   cost: z.object({ red: z.number().optional(), blue: z.number().optional() }),
   shape: combatShape,
   damage: z.number(),
@@ -42,6 +51,7 @@ const barrierAbility = z.object({
   id: z.string(),
   name: z.string(),
   kind: z.literal("barrier"),
+  kit: kitRule.optional(),
   cost: z.object({ red: z.number().optional(), blue: z.number().optional() }),
   barrierHp: z.number(),
 });
@@ -59,6 +69,7 @@ const zoneAbility = z.object({
   id: z.string(),
   name: z.string(),
   kind: z.literal("zone"),
+  kit: kitRule.optional().describe("Zones/barriers on kit enemies are only cast when they carry a kit rule"),
   cost: z.object({ red: z.number().optional(), blue: z.number().optional() }),
   range: z.number(),
   zone: zoneSpec,

@@ -177,7 +177,8 @@
     "abilities": [
       { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 120 },
       { "id": "frost-wyrm-breath", "name": "Frost Breath", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "sector", "radius": 95, "halfAngle": 0.6 }, "damage": 28, "knockback": 20, "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 40 }], "visual": { "color": 12576511, "trailEffect": "splash", "screenShake": 0.35 } },
-      { "id": "frost-wyrm-rime-line", "name": "Rime Lance", "kind": "attack", "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 165, "width": 30 }, "damage": 32, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1, "value": 1 }], "visual": { "color": 10476287, "trailEffect": "projectile", "screenShake": 0.4 } }
+      { "id": "frost-wyrm-rime-line", "name": "Rime Lance", "kind": "attack", "kit": { "priority": 3, "cooldown": 2 }, "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "rectangle", "length": 165, "width": 30 }, "damage": 32, "knockback": 0, "onHit": [{ "type": "applyStatus", "status": "rooted", "duration": 1, "value": 1 }], "visual": { "color": 10476287, "trailEffect": "projectile", "screenShake": 0.4 } },
+      { "id": "frost-wyrm-whiteout", "name": "Whiteout", "kind": "attack", "kit": { "hpBelow": 0.5, "priority": 5, "cooldown": 2 }, "cost": { "red": 1, "blue": 1 }, "shape": { "kind": "sector", "radius": 115, "halfAngle": 0.95 }, "damage": 36, "knockback": 30, "onHit": [{ "type": "applyStatus", "status": "slowed", "duration": 2, "value": 50 }], "visual": { "color": 16777215, "trailEffect": "splash", "screenShake": 0.5 } }
     ],
     "hp": 300,
     "energy": { "red": 3, "blue": 2 },
@@ -192,8 +193,9 @@
     "abilities": [
       { "id": "move", "name": "Move", "kind": "move", "cost": { "blue": 1 }, "distance": 95 },
       { "id": "avalanche-troll-smash", "name": "Boulder Smash", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "rectangle", "length": 120, "width": 40 }, "damage": 30, "knockback": 45, "visual": { "color": 4886233, "trailEffect": "explosion", "screenShake": 0.45 } },
-      { "id": "avalanche-troll-sweep", "name": "Avalanche Sweep", "kind": "attack", "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 80, "range": 0 }, "damage": 22, "knockback": 50, "visual": { "color": 16777215, "trailEffect": "explosion", "screenShake": 0.4 } },
-      { "id": "avalanche-troll-bury", "name": "Bury", "kind": "zone", "cost": { "blue": 1 }, "range": 110, "zone": { "effect": "wall", "radius": 55, "duration": 4, "magnitude": 1, "color": 14086399, "pattern": "solid" } }
+      { "id": "avalanche-troll-sweep", "name": "Avalanche Sweep", "kind": "attack", "kit": { "minTargets": 2, "priority": 4 }, "cost": { "red": 1 }, "shape": { "kind": "circle", "radius": 80, "range": 0 }, "damage": 22, "knockback": 50, "visual": { "color": 16777215, "trailEffect": "explosion", "screenShake": 0.4 } },
+      { "id": "avalanche-troll-bury", "name": "Bury", "kind": "zone", "kit": { "priority": 5, "cooldown": 3 }, "cost": { "blue": 1 }, "range": 110, "zone": { "effect": "wall", "radius": 55, "duration": 4, "magnitude": 1, "color": 14086399, "pattern": "solid" } },
+      { "id": "avalanche-troll-rockslide", "name": "Rockslide Fury", "kind": "attack", "kit": { "hpBelow": 0.5, "priority": 6, "cooldown": 2 }, "cost": { "red": 2 }, "shape": { "kind": "rectangle", "length": 140, "width": 60 }, "damage": 38, "knockback": 60, "wallSlamDamage": 25, "visual": { "color": 14084351, "trailEffect": "explosion", "screenShake": 0.7 } }
     ],
     "hp": 370,
     "energy": { "red": 3, "blue": 1 },
