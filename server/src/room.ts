@@ -27,6 +27,7 @@ import type { EncounterSession } from "./encounter-session.js";
 import type { HeroController } from "../../hero-arena/src/types.js";
 import { makeSovereign, FIGHTER_WEIGHTS, PRESETS } from "../../hero-arena/agents/agent-02/sovereign.js";
 import { getItemById, loadCodexEntry } from "./db.js";
+import { withDefaultAttachments } from "./equip-defaults.js";
 
 type Timer = ReturnType<typeof setTimeout>;
 
@@ -235,7 +236,7 @@ export function buildPresetInventory(presetId: string): InventoryState {
     if (equipped.some((e) => e.id === itemId)) attachments[itemId] = att;
   }
 
-  return { equipped, attachments };
+  return withDefaultAttachments({ equipped, attachments });
 }
 
 export function buildDefaultInventory(): InventoryState {

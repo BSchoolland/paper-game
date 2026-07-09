@@ -1,3 +1,10 @@
+import type { AttachmentData } from "./inventory.js";
+
+// Bone-relative item attachment math, shared by the web renderer/pack editor and the
+// server's default-placement precompute. Anchor coordinates live in per-frame pixel
+// space (anchors.json); AttachmentData stores offsets normalized to the reference
+// frame's height so placements transfer across animation frames.
+
 export type AnchorName =
   | "head"
   | "chest"
@@ -45,16 +52,6 @@ export const ANCHOR_NAMES: AnchorName[] = [
   "l_foot",
 ];
 
-export interface AttachmentData {
-  boneName: string;
-  attachEnd: "from" | "to";
-  localOffsetAlong: number; // normalized to reference frame height
-  localOffsetPerp: number;  // normalized to reference frame height
-  scale: number;
-  rotation: number;
-  referenceFrame: string;
-}
-
 export interface CharacterAnchors {
   version: number;
   character: string;
@@ -69,20 +66,24 @@ export interface CharacterAnchors {
   >;
 }
 
-function boneAngle(anchors: Partial<AnchorSet>, bone: BoneDef): number {
+/** The frame every attachment is authored against (the pack editor's paper doll). */
+export const ATTACHMENT_REFERENCE_FRAME = "inventory-idle";
+
+/** Item draw size at editor scale 1: sprite max-dimension maps to this many panel px. */
+export const ITEM_TARGET_SIZE = 64;
+
+export const TYPE_BASE_SCALE: Record<string, number> = {
+  weapon: 2.5,
+  shield: 2.5,
+  consumable: 0.7,
+  accessory: 0.8,
+};
+
+export function boneAngle(anchors: Partial<AnchorSet>, bone: BoneDef): number {
   const from = anchors[bone.from];
   const to = anchors[bone.to];
   if (!from || !to) return 0;
   return Math.atan2(to[1] - from[1], to[0] - from[0]);
-}
-
-function boneLength(anchors: Partial<AnchorSet>, bone: BoneDef): number {
-  const from = anchors[bone.from];
-  const to = anchors[bone.to];
-  if (!from || !to) return 1;
-  const dx = to[0] - from[0];
-  const dy = to[1] - from[1];
-  return Math.sqrt(dx * dx + dy * dy);
 }
 
 export function transformAttachment(
@@ -141,6 +142,7 @@ function distToSegment(
   return { dist, t };
 }
 
+/** Author an attachment from a drop point on the reference frame: snap to the nearest bone. */
 export function computeAttachment(
   dropX: number,
   dropY: number,
@@ -196,4 +198,75 @@ export function computeAttachment(
     rotation,
     referenceFrame,
   };
+}
+
+/** Where a bone-anchored sprite's grip should sit, and how it hangs there. */
+export interface EquipTarget {
+  boneName: string;
+  attachEnd: "from" | "to";
+  rotation: number;
+  grip: GripKind;
+  /** Slide the anchor point this fraction down the bone (0 = at the attach end). */
+  alongFraction?: number;
+}
+
+/** How to find the hold point inside an item sprite's pixels. */
+export type GripKind = "bow-center" | "handle-end" | "sprite-center";
+
+interface EquipTargetItem {
+  readonly id: string;
+  readonly type: string;
+  readonly slotCost: Partial<Record<string, number>>;
+  readonly animSet?: string;
+}
+
+export function gripKindFor(item: { type: string; animSet?: string }): GripKind {
+  if (item.type !== "weapon") return "sprite-center";
+  return item.animSet === "bow" ? "bow-center" : "handle-end";
+}
+
+/**
+ * Route each equipped item to a body location. Hand items go to the hands (weapons claim the
+ * screen-right hand first, offhand kit the left); hats to the head, utility to the belt,
+ * accessories to the chest. Bows are authored arc-up-left/string-down-right, so they flip 180°
+ * to read as held; everything else keeps its authored diagonal.
+ */
+export function equipTargets(equipped: readonly EquipTargetItem[]): Map<string, EquipTarget> {
+  const targets = new Map<string, EquipTarget>();
+  const takenHands = new Set<string>();
+
+  for (const item of equipped) {
+    if ((item.slotCost.hand ?? 0) <= 0) continue;
+    const preferred = item.type === "weapon" ? "r_arm" : "l_arm";
+    const other = preferred === "r_arm" ? "l_arm" : "r_arm";
+    const bone = !takenHands.has(preferred) ? preferred : !takenHands.has(other) ? other : preferred;
+    takenHands.add(bone);
+    const grip = gripKindFor(item);
+    targets.set(item.id, {
+      boneName: bone,
+      attachEnd: "to",
+      rotation: grip === "bow-center" ? 180 : 0,
+      grip,
+    });
+  }
+
+  for (const item of equipped) {
+    if (targets.has(item.id)) continue;
+    if ((item.slotCost.hat ?? 0) > 0) {
+      targets.set(item.id, { boneName: "spine", attachEnd: "from", rotation: 0, grip: "sprite-center" });
+    } else if ((item.slotCost.utility ?? 0) > 0) {
+      targets.set(item.id, { boneName: "torso", attachEnd: "to", rotation: 0, grip: "sprite-center" });
+    } else {
+      // Chest anchor sits at scarf height; slide accessories down to mid-torso.
+      targets.set(item.id, {
+        boneName: "torso",
+        attachEnd: "from",
+        rotation: 0,
+        grip: "sprite-center",
+        alongFraction: 0.45,
+      });
+    }
+  }
+
+  return targets;
 }

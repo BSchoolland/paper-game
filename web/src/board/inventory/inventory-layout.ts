@@ -1,5 +1,8 @@
-import type { SlotType } from "shared";
+import { ITEM_TARGET_SIZE, TYPE_BASE_SCALE, type SlotType } from "shared";
 import regionsData from "../../../public/sprites/ui/inventory-panel-regions.json";
+
+export { TYPE_BASE_SCALE };
+export const TARGET_SIZE = ITEM_TARGET_SIZE;
 
 export interface Region {
   name: string;
@@ -32,7 +35,6 @@ const REGIONS: Region[] = regionsData.regions;
 export const PANEL_W = 806;
 export const PANEL_H = 895;
 export const UI_SCALE = 1.25;
-export const TARGET_SIZE = 64;
 export const HANDLE_STEM = 28;
 export const HANDLE_RADIUS = 11;
 
@@ -50,12 +52,16 @@ export const RARITY_COLORS: Record<string, string> = {
   legendary: "#c47030",
 };
 
-export const TYPE_BASE_SCALE: Record<string, number> = {
-  weapon: 2.5,
-  shield: 2.5,
-  consumable: 0.7,
-  accessory: 0.8,
-};
+/** Where the paper doll actually draws inside CHAR_REGION (fit, centered). One source of
+ *  truth for panel px <-> character frame px, used by drawing AND attachment authoring. */
+export function charPanelTransform(charW: number, charH: number): { x: number; y: number; scale: number } {
+  const scale = Math.min(CHAR_REGION.w / charW, CHAR_REGION.h / charH);
+  return {
+    x: CHAR_REGION.x + (CHAR_REGION.w - charW * scale) / 2,
+    y: CHAR_REGION.y + (CHAR_REGION.h - charH * scale) / 2,
+    scale,
+  };
+}
 
 export const SLOT_LABELS: { type: SlotType; label: string }[] = [
   { type: "hand", label: "Hand" },

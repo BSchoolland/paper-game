@@ -1,10 +1,9 @@
 import { Container, Sprite } from "pixi.js";
-import type { ItemDefinition, AttachmentData, AnimSet } from "shared";
+import { transformAttachment, type ItemDefinition, type AttachmentData, type AnimSet, type CharacterAnchors, type AnchorSet } from "shared";
 import type { AnimState } from "./sprite-assets.js";
 import { getPlayerTexture } from "./sprite-assets.js";
 import { loadItemTexture } from "./item-sprites.js";
 import { loadCharacterAnchors } from "./anchor-loader.js";
-import { transformAttachment, type CharacterAnchors, type AnchorSet } from "./bone-transform.js";
 
 export class CharacterSprite {
   readonly container: Container;

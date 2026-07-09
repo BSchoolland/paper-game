@@ -2,9 +2,9 @@ import type { AttachmentData } from "./inventory.js";
 
 /**
  * A lobby starter preset: a small, auto-equipped kit a player picks before a run. `equippedIds` /
- * `bagIds` are item IDs (resolved server-side against the loaded item registry); `attachments` is the
- * baked render data per equipped item, authored with the loadout editor's "Export preset JSON" tool.
- * An equipped item with no attachment entry renders invisible — fill these in before shipping a preset.
+ * `bagIds` are item IDs (resolved server-side against the loaded item registry); `attachments` is
+ * optional hand-authored render data per equipped item (loadout editor "Export preset JSON" tool).
+ * Items without an entry get a server-computed default hold pose (equip-defaults.ts) at equip time.
  */
 export interface StarterPreset {
   readonly id: string;

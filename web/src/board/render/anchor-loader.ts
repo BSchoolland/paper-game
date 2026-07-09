@@ -1,4 +1,4 @@
-import type { CharacterAnchors, AnchorSet } from "./bone-transform.js";
+import type { CharacterAnchors, AnchorSet } from "shared";
 
 const cache = new Map<string, CharacterAnchors>();
 

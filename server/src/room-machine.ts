@@ -82,6 +82,7 @@ import {
 } from "./db.js";
 import type { PartyBagRow } from "./db.js";
 import { setSeatAccountIfNull } from "./db.js";
+import { withDefaultAttachments } from "./equip-defaults.js";
 import { loadGatewaysForDimension, ensureGatewayAttuned } from "./gateways.js";
 import { loadCardProfile } from "./accounts.js";
 import { emitRunEvent } from "./run-events.js";
@@ -1703,7 +1704,8 @@ export function reconstructRoomForRun(
     const i = row.seat_index;
     const seatId = seatIdForIndex(i);
     const isHuman = row.controller_kind === "human" && !!row.client_id;
-    const inventory = loadSeatInventory(runId, i); // durable rows rehydrate the bag (R13.3)
+    // Durable rows rehydrate the bag (R13.3); defaults cover items equipped before placement existed.
+    const inventory = withDefaultAttachments(loadSeatInventory(runId, i));
     const seat: Seat = {
       seatId,
       seatIndex: i,

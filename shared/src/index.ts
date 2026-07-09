@@ -2,6 +2,7 @@ export * from "./core/types.js";
 export * from "./core/status-meta.js";
 export * from "./core/items.js";
 export * from "./core/inventory.js";
+export * from "./core/attachments.js";
 export * from "./core/presets.js";
 export * from "./core/progression.js";
 export * from "./core/loot.js";

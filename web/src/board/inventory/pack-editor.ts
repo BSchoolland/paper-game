@@ -1,5 +1,5 @@
-import type { AttachmentData, InventoryState, ItemDefinition, PartyBagEntry, WeaponItem, ShieldItem, ConsumableItem, AccessoryItem } from "shared";
-import { ShapeKind, describeWeaponEffect } from "shared";
+import type { AttachmentData, InventoryState, ItemDefinition, PartyBagEntry, WeaponItem, ShieldItem, ConsumableItem, AccessoryItem, CharacterAnchors, AnchorSet } from "shared";
+import { ShapeKind, describeWeaponEffect, computeAttachment, transformAttachment } from "shared";
 import {
   type ItemPosition,
   PANEL_W,
@@ -11,11 +11,11 @@ import {
   TARGET_SIZE,
   TYPE_BASE_SCALE,
   BAG_PAGE_SIZE,
+  charPanelTransform,
 } from "./inventory-layout.js";
 import { InventoryRenderer } from "./inventory-renderer.js";
 import { InventoryInput } from "./inventory-input.js";
 import { loadCharacterAnchors, getFrameAnchors } from "../render/anchor-loader.js";
-import { computeAttachment, type CharacterAnchors, type AnchorSet } from "../render/bone-transform.js";
 import { assetUrl } from "../../lib/urls.js";
 
 export interface PackEditorHooks {
@@ -32,8 +32,8 @@ export interface PackEditorHooks {
  * canvas where dragging an item out of the bag equips it ONTO the character, free placement /
  * wheel-scale / handle-rotate author its AttachmentData, and dragging it off the character
  * stows it. The placement you draw here is exactly what the combat/overworld dolls wear.
- * Editor item positions are session-local (prototype parity) — the authored attachment itself
- * is durable on the server.
+ * Positions seed from each item's durable attachment (the server bakes a default hold pose at
+ * equip time); in-progress drags are session-local until dropped, which re-authors the attachment.
  */
 export class PackEditor {
   private inventory: InventoryState | null = null;
@@ -106,20 +106,63 @@ export class PackEditor {
   }
 
   private getPosition(item: ItemDefinition, index: number): ItemPosition {
-    let pos = this.positions.get(item.id);
-    if (!pos) {
-      const cx = CHAR_REGION.x + CHAR_REGION.w / 2;
-      const cy = CHAR_REGION.y + CHAR_REGION.h / 2;
-      const equipped = this.inventory!.equipped;
-      pos = {
-        x: cx + (index - equipped.length / 2) * 40,
-        y: cy,
-        scale: 1,
-        rotation: 0,
-      };
-      this.positions.set(item.id, pos);
+    const existing = this.positions.get(item.id);
+    if (existing) return existing;
+
+    const att = this.inventory?.attachments[item.id];
+    if (att) {
+      const seeded = this.positionFromAttachment(item, att);
+      if (seeded) {
+        this.positions.set(item.id, seeded);
+        return seeded;
+      }
+      // Sprite or anchors still loading — return an uncached stand-in so the
+      // real seed (from the durable attachment) lands on the next draw.
+      return this.rowPosition(index);
     }
+
+    const pos = this.rowPosition(index);
+    this.positions.set(item.id, pos);
     return pos;
+  }
+
+  private rowPosition(index: number): ItemPosition {
+    const cx = CHAR_REGION.x + CHAR_REGION.w / 2;
+    const cy = CHAR_REGION.y + CHAR_REGION.h / 2;
+    const equipped = this.inventory!.equipped;
+    return {
+      x: cx + (index - equipped.length / 2) * 40,
+      y: cy,
+      scale: 1,
+      rotation: 0,
+    };
+  }
+
+  /** Panel-space position matching what the combat/overworld doll renders for this attachment. */
+  private positionFromAttachment(item: ItemDefinition, att: AttachmentData): ItemPosition | null {
+    if (!this.characterAnchors || !this.charImage) return null;
+    const frame = this.characterAnchors.frames[att.referenceFrame];
+    if (!frame) return null;
+    const sprite = this.renderer.loadSprite(item.sprite, item.dimensionId);
+    if (!sprite) return null;
+
+    const res = transformAttachment(
+      att,
+      frame.anchors as Partial<AnchorSet>,
+      frame.anchors as Partial<AnchorSet>,
+      frame.height,
+    );
+    const t = charPanelTransform(this.charImage.naturalWidth, this.charImage.naturalHeight);
+    const baseScale = item.visualScale ?? TYPE_BASE_SCALE[item.type] ?? 1;
+    const maxDim = Math.max(sprite.naturalWidth, sprite.naturalHeight);
+    const itemPanelHAtScale1 = sprite.naturalHeight * (TARGET_SIZE / maxDim) * baseScale;
+    const charDrawH = this.charImage.naturalHeight * t.scale;
+    return {
+      x: t.x + res.x * t.scale,
+      y: t.y + res.y * t.scale,
+      scale: (att.scale * charDrawH) / itemPanelHAtScale1,
+      rotation: res.rotation,
+    };
   }
 
   private buildUI() {
@@ -193,16 +236,14 @@ export class PackEditor {
 
     const charW = this.charImage.width;
     const charH = this.charImage.height;
-    const scale = Math.min(CHAR_REGION.w / charW, CHAR_REGION.h / charH) * 0.85;
-    const charX = CHAR_REGION.x + (CHAR_REGION.w - charW * scale) / 2;
-    const charY = CHAR_REGION.y + (CHAR_REGION.h - charH * scale) / 2;
+    const t = charPanelTransform(charW, charH);
 
-    const spriteX = (panelPos.x - charX) / scale;
-    const spriteY = (panelPos.y - charY) / scale;
+    const spriteX = (panelPos.x - t.x) / t.scale;
+    const spriteY = (panelPos.y - t.y) / t.scale;
 
     const spriteImg = this.renderer.loadSprite(item.sprite, item.dimensionId);
     const baseScale = item.visualScale ?? TYPE_BASE_SCALE[item.type] ?? 1;
-    const charDrawH = charH * scale;
+    const charDrawH = charH * t.scale;
     let itemDrawH = TARGET_SIZE * baseScale * panelPos.scale;
     if (spriteImg && spriteImg.naturalWidth > 0) {
       const maxDim = Math.max(spriteImg.naturalWidth, spriteImg.naturalHeight);
@@ -329,6 +370,9 @@ export class PackEditor {
 
   private draw() {
     if (!this.ctx) return;
+    // Materialize a position for every equipped item (seeded from its durable attachment once
+    // the sprite loads), so the doll is dressed on open — not only after a mouse-over.
+    this.inventory?.equipped.forEach((item, i) => void this.getPosition(item, i));
     this.updateStatsPanel(this.input.getInfoTarget());
     this.renderer.draw(this.ctx, this.canvas, {
       inventory: this.inventory,

@@ -125,6 +125,7 @@ import {
 import { emitRunEvent } from "./run-events.js";
 import { assignContract } from "./contract-engine.js";
 import { handleGetCodex } from "./codex.js";
+import { precomputeHoldPoses, withDefaultAttachments } from "./equip-defaults.js";
 
 export function initSeeds(): void {
   seedDimension0();
@@ -151,6 +152,9 @@ if (process.env.GAME_SKIP_SEED !== "1") {
     );
   }
   initSeeds();
+  // Hold poses must exist before run recovery rehydrates seat inventories, so items equipped
+  // before this feature (no attachment rows) get real default placements, not centered ones.
+  await precomputeHoldPoses();
   recoverActiveRuns(reapEmptyRoom);
   // R33 retention housekeeping: periodically inactivate runs untouched past the retention window,
   // catching abandoned lobby/overworld runs that no run-end event ever closed. Gated off under
@@ -966,7 +970,7 @@ function handleEquip(room: Room, seat: Seat, ws: ServerWebSocket<SocketData>, ba
   if (!canEquip(seat.inventory.equipped, entry.item)) {
     return sendError(ws, "INVALID_INPUT", "No free equipment slot for that item");
   }
-  const nextInv = equipItem(seat.inventory, entry.item);
+  const nextInv = withDefaultAttachments(equipItem(seat.inventory, entry.item));
   if (!commitBagEquip(room.runId, bagId, seat.seatIndex, nextInv)) {
     return sendError(ws, "INVALID_INPUT", "That item is no longer in the party bag");
   }

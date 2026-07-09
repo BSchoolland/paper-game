@@ -20,6 +20,7 @@ import {
   SLOT_LABELS,
   hitRegion,
   getItemSize,
+  charPanelTransform,
 } from "./inventory-layout.js";
 
 export interface RenderState {
@@ -39,7 +40,6 @@ export interface RenderState {
 export class InventoryRenderer {
   private spriteImages = new Map<string, HTMLImageElement>();
   private onSpriteLoad: () => void;
-  private _lastLogTime = 0;
 
   constructor(onSpriteLoad: () => void) {
     this.onSpriteLoad = onSpriteLoad;
@@ -92,17 +92,9 @@ export class InventoryRenderer {
 
   private drawCharacter(ctx: CanvasRenderingContext2D, state: RenderState) {
     if (!state.charImage) return;
-    const r = CHAR_REGION;
-    const aspect = state.charImage.naturalWidth / state.charImage.naturalHeight;
-    let dw = r.w;
-    let dh = dw / aspect;
-    if (dh > r.h) {
-      dh = r.h;
-      dw = dh * aspect;
-    }
-    const dx = r.x + (r.w - dw) / 2;
-    const dy = r.y + (r.h - dh) / 2;
-    ctx.drawImage(state.charImage, dx, dy, dw, dh);
+    const { naturalWidth: w, naturalHeight: h } = state.charImage;
+    const t = charPanelTransform(w, h);
+    ctx.drawImage(state.charImage, t.x, t.y, w * t.scale, h * t.scale);
   }
 
   private drawPlacedItems(ctx: CanvasRenderingContext2D, state: RenderState) {
@@ -114,18 +106,6 @@ export class InventoryRenderer {
       if (!pos) continue;
       const sprite = this.loadSprite(item.sprite, item.dimensionId);
       const { w, h } = getItemSize(pos, item, sprite);
-      const now = performance.now();
-      if (now - this._lastLogTime > 2000) {
-        this._lastLogTime = now;
-        const charH = state.charImage?.naturalHeight ?? 0;
-        const charDrawH = state.charImage ? (() => {
-          const r = CHAR_REGION;
-          const aspect = state.charImage!.naturalWidth / state.charImage!.naturalHeight;
-          let dh = r.w / aspect;
-          if (dh > r.h) dh = r.h;
-          return dh;
-        })() : 0;
-      }
       const wouldUnequip =
         state.mode.type === "dragging" &&
         item.id === state.selectedItemId &&
