@@ -55,6 +55,16 @@ export class DefendPrompt {
       };
       this.clientState.setDefensePrompt(input.promptId, incoming, "windup", 0);
 
+      // Call the attack by name over the attacker during the windup, so kit enemies' distinct
+      // attacks are learnable ("Frost Breath" reads differently from "Rime Lance").
+      this.renderer.spawnFloatingText(
+        input.attackerPosition.x,
+        input.attackerPosition.y - 70,
+        input.ability.name,
+        input.ability.visual?.color ?? 0xf3ead9,
+        { fontSize: 14, lifetime: 1.2, strokeColor: 0x1a1410, strokeWidth: 1.4 },
+      );
+
       const startTime = performance.now();
       this.impactTime = startTime + WINDUP_MS;
       let impactFired = false;

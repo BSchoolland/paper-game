@@ -1,5 +1,5 @@
 import type { AbilityDefinition, AttackAbility, Entity, GameState, PlayerAction, Vec2 } from "shared";
-import { canAffordAbility } from "shared";
+import { abilityReady, canAffordAbility } from "shared";
 import type { SeatContext } from "./seat-context.js";
 
 /**
@@ -67,7 +67,7 @@ export function canUseAbility(
   const entity = state!.entities.get(entityId);
   if (!entity || entity.dead || !isMyEntity(entity, seat)) return false;
   const ability = entity.abilities.find((a) => a.id === abilityId);
-  return !!ability && canAffordAbility(entity, ability);
+  return !!ability && canAffordAbility(entity, ability) && abilityReady(entity, ability);
 }
 
 export function getAbility(state: GameState | null, entityId: string | null, abilityId: string | null): AbilityDefinition | null {
