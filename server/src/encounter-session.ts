@@ -7,6 +7,7 @@ import {
   generateEncounter,
   setTemplateRegistry,
   hexDistance,
+  ITEM_SUMMON_TEMPLATES,
 } from "shared";
 import { REST_BARRIER_HP } from "shared";
 import { loadDimension, loadEnemyTemplateRegistry } from "./db.js";
@@ -80,7 +81,9 @@ export class EncounterSession {
   }): Promise<EncounterSession> {
     const { seats, hexType, hexCoord, runId, dimensionId, dimensionTier, rested } = opts;
     const dimension = loadDimension(dimensionId)!;
-    setTemplateRegistry(loadEnemyTemplateRegistry(dimensionId));
+    // Item summons ride on top of the dimension's enemy registry (they are item content —
+    // never rostered by the encounter generator, but resolvable when a player casts them).
+    setTemplateRegistry({ ...loadEnemyTemplateRegistry(dimensionId), ...ITEM_SUMMON_TEMPLATES });
     const encounter = generateEncounter(hexType, dimension, hexCoord.q, hexCoord.r, runId, {
       dimensionTier,
       distanceFromOrigin: hexDistance(hexCoord, { q: 0, r: 0 }), // every dimension's origin is (0,0)

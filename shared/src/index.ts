@@ -39,6 +39,7 @@ export * from "./encounter/dimension.js";
 export * from "./encounter/map-manifest.js";
 export * from "./encounter/entity-factory.js";
 export * from "./encounter/effects.js";
+export * from "./encounter/summon-templates.js";
 export * from "./maps/scenarios.js";
 export * from "./ai/ai-runner.js";
 export * from "./ai/strategy.js";

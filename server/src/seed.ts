@@ -1,5 +1,5 @@
 import { ShapeKind } from "shared";
-import type { AttackAbility, MoveAbility, SpriteSet, UnitTemplate, ItemDefinition, ZoneAbility } from "shared";
+import type { AttackAbility, MoveAbility, RestoreAbility, SpriteSet, UnitTemplate, ItemDefinition, ZoneAbility } from "shared";
 import type { StructureEntry } from "shared";
 import { saveDimension, saveEnemyTemplates, saveItems, withStructureIndices } from "./db.js";
 
@@ -695,12 +695,12 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     type: "accessory",
     id: "quiver",
     name: "Quiver",
-    description: "A leather quiver that improves ranged accuracy.",
+    description: "A leather quiver. Every finishing shot puts spring back in your step.",
     rarity: "common",
     sprite: "quiver",
     dimensionId: 0,
     slotCost: { accessory: 1 },
-    statBonus: { damage: 5 },
+    passives: [{ type: "onKillEnergy", blue: 1 }],
   },
   "staff": {
     type: "weapon",
@@ -745,34 +745,51 @@ const DIMENSION_0_ITEMS: Record<string, ItemDefinition> = {
     type: "accessory",
     id: "spellbook",
     name: "Spellbook",
-    description: "An ancient tome that bolsters the wielder's power.",
+    description: "An ancient tome. Its bearer draws a little more from every rest.",
     rarity: "rare",
     sprite: "spellbook",
     dimensionId: 0,
     slotCost: { accessory: 1 },
-    statBonus: { damage: 10 },
+    passives: [{ type: "regen", red: 1 }],
   },
   "potion": {
     type: "consumable",
     id: "potion",
     name: "Health Potion",
-    description: "A red brew that restores health when consumed.",
+    description: "A red brew that restores health when consumed. One swig per fight.",
     rarity: "common",
     sprite: "potion",
     dimensionId: 0,
     slotCost: { utility: 1 },
-    effect: { kind: "heal", amount: 50 },
+    abilities: [{
+      id: "potion-drink",
+      name: "Drink Potion",
+      kind: "restore",
+      cost: {},
+      hp: 50,
+      uses: 1,
+    } satisfies RestoreAbility],
   },
   "bomb": {
     type: "consumable",
     id: "bomb",
     name: "Bomb",
-    description: "An explosive device that damages all nearby enemies.",
+    description: "An explosive device that damages all nearby enemies. You only carry one fuse.",
     rarity: "uncommon",
     sprite: "bomb",
     dimensionId: 0,
     slotCost: { utility: 1 },
-    effect: { kind: "damage", amount: 40, radius: 80 },
+    abilities: [{
+      id: "bomb-throw",
+      name: "Throw Bomb",
+      kind: "attack",
+      cost: { red: 1 },
+      shape: { kind: ShapeKind.Circle, radius: 80, range: 160 },
+      damage: 40,
+      knockback: 30,
+      uses: 1,
+      visual: { color: 0xc0392b, trailEffect: "explosion", screenShake: 0.5 },
+    } satisfies AttackAbility],
   },
 };
 
