@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import {
   buildScenarioMap, createGameState, makeEntity, findWalkablePosition, setTemplateRegistry,
+  ITEM_SUMMON_TEMPLATES,
 } from "../../../shared/src/index.js";
 import type { Entity, EntityId, GameState, TeamId, UnitTemplate } from "../../../shared/src/index.js";
 import type { ArenaConfig } from "./types.js";
@@ -43,6 +44,8 @@ export async function buildArena2(config: ArenaConfig): Promise<Arena2> {
     const reg = loadEnemyTemplateRegistry(dim);
     Object.assign(combined, reg);
   }
+  // Item summons must resolve in the sim exactly as in live encounters.
+  Object.assign(combined, ITEM_SUMMON_TEMPLATES);
   setTemplateRegistry(combined);
 
   const worldW = grid.width * grid.cellSize;

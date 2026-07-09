@@ -8,8 +8,8 @@
  */
 import { mkdirSync, writeFileSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { resolveAction } from "../../../shared/src/index.js";
-import type { AbilityDefinition, EntityId, GameEvent, ItemDefinition, PlayerAction, TeamId, UnitTemplate } from "../../../shared/src/index.js";
+import { resolveAction, deriveLoadout } from "../../../shared/src/index.js";
+import type { EntityId, GameEvent, ItemDefinition, PlayerAction, TeamId, UnitTemplate } from "../../../shared/src/index.js";
 import { PLAYER_INNATE_ABILITIES } from "../../../shared/src/core/items.js";
 import { rushStrategy, kiteStrategy, strategyForEntity } from "../../../shared/src/ai/strategy.js";
 import { buildArena2 } from "./arena2.js";
@@ -47,47 +47,46 @@ const baseSword = dim0Items["short-sword"]!;
 const baseShield = dim0Items["round-shield"]!;
 if (!baseSword || !baseShield) { console.error("Need short-sword and round-shield in dim 0"); process.exit(1); }
 
-const testableItems = Object.entries(items).filter(([, it]) => it.type === "weapon" || it.type === "shield");
+// Every item type is priced: weapons/shields swap into the base kit, accessories and
+// consumables ride on top of it (they cost no hand slots, so their value is pure upside
+// vs. baseline — rankings must still track rarity).
+const testableItems = Object.entries(items);
 console.log(`Dim ${dimId}: testing ${testableItems.length} items`);
 
 // --- Hero loadout assembly ---
-
-function isOneHanded(item: ItemDefinition): boolean {
-  return (item.slotCost.hand ?? 0) <= 1;
-}
 
 function isTwoHanded(item: ItemDefinition): boolean {
   return (item.slotCost.hand ?? 0) >= 2;
 }
 
-/** Build a hero template equipping the given item, with sword + shield as defaults. */
+/** Build a hero template equipping the given item, with sword + shield as defaults. Assembled
+ *  through the same deriveLoadout as the live encounter builder, so passives price in here. */
 function makeHeroTemplate(item: ItemDefinition | null): UnitTemplate {
-  const abilities: AbilityDefinition[] = [...PLAYER_INNATE_ABILITIES];
-
   let weaponItem = baseSword;
   let shieldItem: ItemDefinition | null = baseShield;
+  let extraItem: ItemDefinition | null = null;
 
   if (item) {
-    if (isTwoHanded(item)) {
-      // Two-handed: replaces both weapon and shield
+    if (item.type === "weapon") {
       weaponItem = item;
-      shieldItem = null;
-    } else if (item.type === "weapon") {
-      weaponItem = item;
+      if (isTwoHanded(item)) shieldItem = null;
     } else if (item.type === "shield") {
       shieldItem = item;
+    } else {
+      extraItem = item;
     }
   }
 
-  if (weaponItem.abilities) abilities.push(...weaponItem.abilities);
-  if (shieldItem && shieldItem.abilities) abilities.push(...shieldItem.abilities);
+  const equipped = [weaponItem, shieldItem, extraItem].filter((i): i is ItemDefinition => i !== null);
+  const loadout = deriveLoadout(equipped);
 
   return {
-    abilities,
-    hp: 120,
-    energy: { red: 2, blue: 2 },
+    abilities: [...PLAYER_INNATE_ABILITIES, ...loadout.abilities],
+    hp: 120 + loadout.hpBonus,
+    energy: { red: 2 + loadout.regenRedBonus, blue: 2 + loadout.regenBlueBonus },
     collisionRadius: 16,
     className: "Hero",
+    passives: loadout.passives,
   };
 }
 

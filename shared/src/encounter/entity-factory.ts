@@ -20,9 +20,10 @@ export function makeEntity(
     abilityUses ??= {};
     abilityUses[ability.id] = ability.uses;
   }
+  const effective = passives ?? template.passives;
   return {
     abilityUses,
-    passives: passives && passives.length > 0 ? passives : undefined,
+    passives: effective && effective.length > 0 ? effective : undefined,
     id,
     name,
     position: { x, y },

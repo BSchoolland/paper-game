@@ -401,6 +401,8 @@ export interface UnitTemplate {
   readonly heightMeters?: number;
   readonly strategy?: AiStrategyType;
   readonly effects?: readonly EntityEffect[];
+  /** Always-on rules baked into units built from this template (see Entity.passives). */
+  readonly passives?: readonly PassiveEffect[];
   readonly cost?: number;
   readonly tags?: readonly EnemyTag[];
   /** Multiplier on per-turn regen to compute the bank cap. Default 2 (= bank 2 turns' worth).
