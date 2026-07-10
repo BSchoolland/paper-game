@@ -189,3 +189,13 @@ export function unequip(equippedIndex: number): void {
 export function updateAttachment(itemId: string, attachment: AttachmentData): void {
   socket().send({ type: "updateAttachment", itemId, attachment });
 }
+
+/** Host-only: force the current combat to a party win (dev / loot testing). */
+export function debugWin(): void {
+  socket().send({ type: "debugWin" });
+}
+
+/** Host-only: force a party wipe (dev Game Over testing). */
+export function debugLose(): void {
+  socket().send({ type: "debugLose" });
+}

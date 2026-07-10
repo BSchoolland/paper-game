@@ -1,0 +1,11 @@
+{
+  "name": "mod-sandbox-spike",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@jitl/quickjs-singlefile-browser-release-sync": "^0.32.0",
+    "esbuild": "^0.28.1",
+    "playwright-core": "^1.61.1",
+    "quickjs-emscripten": "^0.32.0"
+  }
+}

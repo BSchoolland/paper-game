@@ -1,5 +1,5 @@
 import type { AbilityDefinition, GameState, PlayerAction, Vec2, WireAction } from "shared";
-import { canMyHeroAct, canUseAbility, getAbility, isMyEntity, isPlayerPhase, myHeroEntity } from "./combat-ui-state.js";
+import { canMyHeroAct, canUseAbility, getAbility, isMyEntity, isPlayerPhase, isSelfCastAbility, myHeroEntity } from "./combat-ui-state.js";
 import type { IncomingAttackData, InteractionState } from "./combat-ui-state.js";
 import { SeatContext, seatContext } from "./seat-context.js";
 import { combat, onActionRejected, onSelfActed } from "../state/combat.svelte.js";
@@ -87,14 +87,23 @@ export class ClientState {
     const ability = getAbility(this.getState(), this.selectedEntityId, abilityId);
     if (!ability) return;
 
-    if (this.selectedAbilityId === abilityId && ability.kind === "barrier") {
+    // Second press on a self-cast (barrier / restore / convert) commits it.
+    if (this.selectedAbilityId === abilityId && isSelfCastAbility(ability)) {
+      this.confirmAbility();
+      return;
+    }
+
+    // Free self-casts (e.g. Drink with no energy cost) commit on the first press —
+    // there's no cost preview to show and a two-step confirm just feels broken.
+    if (isSelfCastAbility(ability) && !(ability.cost.red || ability.cost.blue)) {
+      this.selectedAbilityId = abilityId;
       this.confirmAbility();
       return;
     }
 
     this.selectedAbilityId = abilityId;
     this.ui =
-      ability.kind === "attack" || ability.kind === "zone"
+      ability.kind === "attack" || ability.kind === "zone" || ability.kind === "summon"
         ? { tag: "aiming", entityId: this.selectedEntityId, abilityId }
         : { tag: "abilitySelected", entityId: this.selectedEntityId, abilityId };
     this.notify();
