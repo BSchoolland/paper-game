@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { room } from "../state/room.svelte.js";
+  import { room, isHost } from "../state/room.svelte.js";
+  import { debugWin, debugLose } from "../state/actions.js";
+  import { devOptions, setAutoWin } from "./dev-options.svelte.js";
   import ReplayViewer from "./ReplayViewer.svelte";
   import type { ReplayListEntry, ReplayLog } from "./replay-format.js";
 
@@ -15,6 +17,21 @@
 
   // The replay viewer drives the shared combat store, so it can't coexist with a live room.
   const inRoom = $derived(room.state !== null);
+  const inCombat = $derived(room.state?.phase === "combat");
+  const host = $derived(isHost());
+
+  /** One debugWin per combat entry — re-arms when we leave combat. */
+  let autoWinLatched = false;
+
+  $effect(() => {
+    if (room.state?.phase !== "combat") {
+      autoWinLatched = false;
+      return;
+    }
+    if (!devOptions.autoWin || !isHost() || autoWinLatched) return;
+    autoWinLatched = true;
+    debugWin();
+  });
 
   function toggle(): void {
     open = !open;
@@ -79,6 +96,31 @@
         <h2>Dev hub</h2>
         <button onclick={toggle}>close (`)</button>
       </header>
+
+      <section>
+        <div class="section-head">
+          <h3>Cheats</h3>
+        </div>
+        <label class="toggle">
+          <input
+            type="checkbox"
+            checked={devOptions.autoWin}
+            onchange={(e) => setAutoWin(e.currentTarget.checked)}
+          />
+          <span>Auto-win encounters</span>
+        </label>
+        <p class="hint">
+          Host-only. When on, every fight ends immediately as a win so loot/codex can be farmed.
+          Persists across reloads.
+        </p>
+        <div class="row">
+          <button disabled={!inCombat || !host} onclick={() => debugWin()}>Win now</button>
+          <button disabled={!inCombat || !host} onclick={() => debugLose()}>Lose now</button>
+        </div>
+        {#if inCombat && !host}
+          <p class="hint">Only the room host can force combat outcomes.</p>
+        {/if}
+      </section>
 
       <section>
         <div class="section-head">
@@ -202,5 +244,38 @@
   .hint.error {
     color: var(--terra, #a03436);
     opacity: 1;
+  }
+  .toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0.35rem 0 0.15rem;
+    cursor: pointer;
+    font-size: 0.95rem;
+  }
+  .toggle input {
+    accent-color: var(--ink, #3a2f26);
+  }
+  .row {
+    display: flex;
+    gap: 0.4rem;
+    margin: 0.45rem 0 0.2rem;
+  }
+  .row button {
+    flex: 1;
+    padding: 0.3rem 0.45rem;
+    border: 1px solid var(--ink, #3a2f26);
+    border-radius: 5px;
+    background: var(--paper, #f3ecdc);
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+  }
+  .row button:hover:not(:disabled) {
+    background: var(--paper-hi, #faf5e8);
+  }
+  .row button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 </style>

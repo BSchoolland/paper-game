@@ -126,6 +126,7 @@ import { emitRunEvent } from "./run-events.js";
 import { assignContract } from "./contract-engine.js";
 import { handleGetCodex } from "./codex.js";
 import { precomputeHoldPoses, withDefaultAttachments } from "./equip-defaults.js";
+import { seedDimension706Showcase } from "./seed-dimension-706-showcase.js";
 
 export function initSeeds(): void {
   seedDimension0();
@@ -133,6 +134,7 @@ export function initSeeds(): void {
   seedDimension2();
   seedDimension3();
   seedDimension501();
+  seedDimension706Showcase();
   // On a fresh DB the v8 tier backfill ran against an empty table — stamp the canonical dims'
   // fixed tiers (04-portals §0.2) after the seeds land. Idempotent on existing DBs.
   applyCanonicalDimensionTiers();

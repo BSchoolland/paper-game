@@ -31,8 +31,8 @@ import { dirname, join } from "node:path";
 
 import { ShapeKind } from "../core/types.js";
 import type {
-  AttackAbility, BarrierAbility, Entity, EntityEffect, GameEvent, GameState,
-  MoveAbility, PlayerAction, TeamId, UnitTemplate, Vec2, ZoneAbility,
+  AttackAbility, BarrierAbility, ConvertAbility, Entity, EntityEffect, GameEvent, GameState,
+  MoveAbility, PlayerAction, RestoreAbility, SummonAbility, TeamId, UnitTemplate, Vec2, ZoneAbility,
 } from "../core/types.js";
 import { resolveAction, createGameState } from "../combat/turn-resolver.js";
 import { serializeGameState } from "../core/serialization.js";
@@ -89,6 +89,39 @@ const RANGED_BOLT: AttackAbility = {
   damage: 18, knockback: 0,
 };
 const GUARD: BarrierAbility = { id: "guard", name: "Guard", kind: "barrier", cost: { blue: 2 }, barrierHp: 40 };
+
+const RIDER_STRIKE: AttackAbility = {
+  id: "rider-strike", name: "Opportunist", kind: "attack", cost: { red: 2 },
+  shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 3 },
+  damage: 20, knockback: 0,
+  riders: [
+    { when: "target-at-full-hp", amount: 15 },
+    { when: "target-below-hp", pct: 0.5, amount: 25 },
+    { when: "target-has-status", status: "slowed", amount: 10 },
+    { when: "target-near-wall", within: 40, amount: 10 },
+  ],
+};
+const REAPER_STRIKE: AttackAbility = {
+  id: "reaper-strike", name: "Reaper", kind: "attack", cost: { red: 2 },
+  shape: { kind: ShapeKind.Sector, radius: 90, halfAngle: Math.PI / 3 },
+  damage: 25, knockback: 0, onKill: { red: 2, blue: 1 },
+};
+const SWAP_STRIKE: AttackAbility = {
+  id: "swap-strike", name: "Trade", kind: "attack", cost: { red: 2 },
+  shape: { kind: ShapeKind.Point, range: 150 },
+  damage: 5, knockback: 0, onHit: [{ type: "swap" }],
+};
+const BLINK: MoveAbility = { id: "blink", name: "Blink", kind: "move", cost: { blue: 2 }, distance: 150, mode: "blink" };
+const SUMMON_MINIONS: SummonAbility = {
+  id: "summon-minions", name: "Call Minions", kind: "summon", cost: { red: 2 },
+  templateKey: "minion", count: 2, range: 120, uses: 1,
+};
+const CONVERT_BLUE_TO_RED: ConvertAbility = {
+  id: "conv-b2r", name: "Adrenaline", kind: "convert", cost: { blue: 2 }, gain: { red: 1 },
+};
+const SECOND_WIND: RestoreAbility = {
+  id: "second-wind", name: "Second Wind", kind: "restore", cost: { red: 1 }, hp: 30, uses: 1,
+};
 
 const ZONE_DMG: ZoneAbility = {
   id: "zone-dmg", name: "Firewall", kind: "zone", cost: { red: 2 }, range: 200,
@@ -336,6 +369,99 @@ const SCENARIOS: { name: string; run: Run }[] = [
     },
   },
 
+  {
+    name: "s11-riders-fullhp-then-execute",
+    run: () => {
+      const a = makeUnit("red-a", 100, 160, "red", { abilities: [MOVE, RIDER_STRIKE] });
+      const b = makeUnit("blue-b", 170, 160, "blue", { hp: 80, maxHp: 80 });
+      const s = makeGame([a, b]);
+      // First strike: FIRST BLOOD fires (full hp). Second: hp is now below 50% — EXECUTE fires.
+      return runScripted(s, [
+        atk("red-a", "rider-strike", aimAt(a.position, b.position)),
+        atk("red-a", "rider-strike", aimAt(a.position, b.position)),
+        END,
+      ]);
+    },
+  },
+  {
+    name: "s12-riders-status-and-wall",
+    run: () => {
+      const a = makeUnit("red-a", 100, 160, "red", { abilities: [MOVE, STATUS_STRIKE, RIDER_STRIKE] });
+      // Target parked right against a stamped wall so CORNERED fires; SLOWED fires after the hex.
+      const b = makeUnit("blue-b", 200, 160, "blue", { hp: 200, maxHp: 200 });
+      const s = makeGame([a, b], "red", (walls) => {
+        for (let cy = 14; cy <= 26; cy++) walls[cy * GRID_W + 28] = CELL_WALL;
+      });
+      return runScripted(s, [
+        atk("red-a", "status-strike", aimAt(a.position, b.position)),
+        atk("red-a", "rider-strike", aimAt(a.position, b.position)),
+        END,
+      ]);
+    },
+  },
+  {
+    name: "s13-onkill-refund-and-passive",
+    run: () => {
+      const a = makeUnit("red-a", 100, 160, "red", {
+        abilities: [MOVE, REAPER_STRIKE],
+        energy: { red: 4, blue: 0, regenRed: 4, regenBlue: 2, maxRed: 8, maxBlue: 4 },
+        passives: [{ type: "onKillEnergy", blue: 1 }],
+      });
+      const b = makeUnit("blue-b", 170, 160, "blue", { hp: 10, maxHp: 30 });
+      const c = makeUnit("blue-c", 60, 60, "blue");
+      const s = makeGame([a, b, c]);
+      return runScripted(s, [atk("red-a", "reaper-strike", aimAt(a.position, b.position)), END]);
+    },
+  },
+  {
+    name: "s14-blink-over-wall-and-swap",
+    run: () => {
+      const a = makeUnit("red-a", 100, 160, "red", { abilities: [BLINK, SWAP_STRIKE] });
+      const b = makeUnit("blue-b", 260, 160, "blue");
+      const s = makeGame([a, b], "red", (walls) => {
+        // Wall between them — a walk would be blocked, the blink crosses it.
+        for (let cy = 0; cy < GRID_H; cy++) walls[cy * GRID_W + 22] = CELL_WALL;
+      });
+      return runScripted(s, [
+        { type: "ability", entityId: "red-a", abilityId: "blink", destination: { x: 200, y: 160 } },
+        atk("red-a", "swap-strike", aimAt({ x: 200, y: 160 }, b.position)),
+        END,
+      ]);
+    },
+  },
+  {
+    name: "s15-summon-with-one-use",
+    run: () => {
+      const a = makeUnit("red-a", 100, 160, "red", { abilities: [MOVE, SUMMON_MINIONS], abilityUses: { "summon-minions": 1 } });
+      const b = makeUnit("blue-b", 260, 160, "blue");
+      const s = makeGame([a, b]);
+      // Second cast must be a silent no-op: the single charge is spent.
+      return runScripted(s, [
+        atk("red-a", "summon-minions", { x: 60, y: 0 }),
+        atk("red-a", "summon-minions", { x: 60, y: 0 }),
+        END, END,
+      ]);
+    },
+  },
+  {
+    name: "s16-convert-restore-aura",
+    run: () => {
+      const a = makeUnit("red-a", 120, 160, "red", {
+        abilities: [MOVE, CONVERT_BLUE_TO_RED, SECOND_WIND],
+        hp: 40, maxHp: 120,
+        abilityUses: { "second-wind": 1 },
+        passives: [{ type: "aura", aura: { effect: "damage", radius: 80, magnitude: 8, color: 0xaa2222, affects: "enemies" } }],
+      });
+      const b = makeUnit("blue-b", 170, 160, "blue");
+      const s = makeGame([a, b]);
+      return runScripted(s, [
+        { type: "ability", entityId: "red-a", abilityId: "conv-b2r" },
+        { type: "ability", entityId: "red-a", abilityId: "second-wind" },
+        END, END,
+      ]);
+    },
+  },
+
   // ---- AI arm: locks the deterministic sovereign (node budget + hashPick) ----
   {
     name: "ai01-sovereign-vs-rush",
@@ -455,6 +581,7 @@ const BASELINE_PATH = join(HERE, "golden-master.baseline.json");
 const ALL_EVENT_TYPES = [
   "move", "attack", "barrier", "endTurn", "turnStart", "spawn", "knockback",
   "pull", "statusApplied", "collision", "zoneCreated", "zoneExpired", "zoneTick",
+  "blink", "restore", "auraTick",
 ] as const satisfies readonly GameEvent["type"][];
 type _MissingEventType = Exclude<GameEvent["type"], (typeof ALL_EVENT_TYPES)[number]>;
 const _eventTypesExhaustive: [_MissingEventType] extends [never] ? true : ["ALL_EVENT_TYPES missing", _MissingEventType] = true;

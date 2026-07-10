@@ -1,5 +1,5 @@
 import { ShapeKind } from "./types.js";
-import type { AbilityDefinition, AttackAbility, MoveAbility, UnitTemplate } from "./types.js";
+import type { AbilityDefinition, AttackAbility, MoveAbility, PassiveEffect, UnitTemplate } from "./types.js";
 
 // --- Innate Abilities (always available) ---
 
@@ -47,6 +47,8 @@ interface ItemBase {
   readonly slotCost: SlotCost;
   readonly visualScale?: number;
   readonly abilities?: readonly AbilityDefinition[];
+  /** Always-on rules granted while equipped (any item type may carry these). */
+  readonly passives?: readonly PassiveEffect[];
 }
 
 export interface WeaponItem extends ItemBase {
@@ -60,14 +62,21 @@ export interface ShieldItem extends ItemBase {
   readonly abilities: readonly AbilityDefinition[];
 }
 
+/**
+ * Consumables grant per-encounter charges: their abilities declare `uses`, and remaining counts
+ * reset when the next encounter is built. `effect` is the legacy shape still present in old
+ * item_json snapshots inside run databases; it grants nothing at runtime.
+ */
 export interface ConsumableItem extends ItemBase {
   readonly type: "consumable";
-  readonly effect: ConsumableEffect;
+  readonly effect?: ConsumableEffect;
 }
 
+/** Accessories carry rules, not stat sticks: passives from ItemBase plus optional active
+ *  abilities. `statBonus` is the legacy dead field old db snapshots may still carry. */
 export interface AccessoryItem extends ItemBase {
   readonly type: "accessory";
-  readonly statBonus: Partial<StatBonus>;
+  readonly statBonus?: Partial<StatBonus>;
 }
 
 export type ConsumableEffect =

@@ -39,7 +39,19 @@ export interface StatusEffect {
 
 export type WeaponEffect =
   | { type: "pull"; distance: number }
-  | { type: "applyStatus"; status: StatusEffectType; duration: number; value: number };
+  | { type: "applyStatus"; status: StatusEffectType; duration: number; value: number }
+  /** Attacker and target trade places (both spots must be standable). Meant for point-shape single-target abilities. */
+  | { type: "swap" };
+
+/**
+ * Conditional bonus damage evaluated per target against the pre-damage state. `label` surfaces
+ * as floating text on hits where the rider fired, so the condition reads on screen.
+ */
+export type DamageRider =
+  | { readonly when: "target-has-status"; readonly status: StatusEffectType; readonly amount: number; readonly label?: string }
+  | { readonly when: "target-below-hp"; readonly pct: number; readonly amount: number; readonly label?: string }
+  | { readonly when: "target-at-full-hp"; readonly amount: number; readonly label?: string }
+  | { readonly when: "target-near-wall"; readonly within: number; readonly amount: number; readonly label?: string };
 
 // --- Attack Visuals (client-side rendering hints, fully JSON-serializable) ---
 
@@ -74,6 +86,8 @@ interface AbilityBase {
   readonly name: string;
   readonly cost: EnergyCost;
   readonly variableCost?: boolean;
+  /** Charges per encounter. Remaining counts live in `Entity.abilityUses`; omit for unlimited. */
+  readonly uses?: number;
 }
 
 export interface AttackAbility extends AbilityBase {
@@ -90,12 +104,18 @@ export interface AttackAbility extends AbilityBase {
   readonly wallSlamDamage?: number;
   readonly ignoreCoverRange?: number;
   readonly onHit?: readonly WeaponEffect[];
+  /** Conditional bonus damage, evaluated per target before the hit lands. */
+  readonly riders?: readonly DamageRider[];
+  /** Energy refunded to the attacker per kill this attack scores. */
+  readonly onKill?: EnergyCost;
   readonly visual?: AttackVisual;
 }
 
 export interface MoveAbility extends AbilityBase {
   readonly kind: "move";
   readonly distance: number;
+  /** "blink" teleports straight to the destination (must be standable), ignoring walls and bodies in between. */
+  readonly mode?: "walk" | "blink";
 }
 
 export interface BarrierAbility extends AbilityBase {
@@ -146,7 +166,63 @@ export interface ZoneAbility extends AbilityBase {
   readonly zone: ZoneSpec;
 }
 
-export type AbilityDefinition = AttackAbility | MoveAbility | BarrierAbility | ZoneAbility;
+/** Spawn `count` allied units of `templateKey` around a point within `range`. The template must
+ *  exist in the active template registry — resolution throws on a missing key (content bug). */
+export interface SummonAbility extends AbilityBase {
+  readonly kind: "summon";
+  readonly templateKey: string;
+  readonly count: number;
+  readonly range: number;
+}
+
+/** Pay `cost`, credit `gain` to the caster's pools (clamped to the bank caps). */
+export interface ConvertAbility extends AbilityBase {
+  readonly kind: "convert";
+  readonly gain: EnergyCost;
+}
+
+/** Instantly restore the caster's own hp and/or energy (clamped to caps). */
+export interface RestoreAbility extends AbilityBase {
+  readonly kind: "restore";
+  readonly hp?: number;
+  readonly red?: number;
+  readonly blue?: number;
+}
+
+export type AbilityDefinition =
+  | AttackAbility
+  | MoveAbility
+  | BarrierAbility
+  | ZoneAbility
+  | SummonAbility
+  | ConvertAbility
+  | RestoreAbility;
+
+/** Zone effects an aura may carry — everything except the grid-stamping kinds. */
+export type AuraEffectKind = Exclude<ZoneEffectKind, "cover" | "wall">;
+
+/**
+ * A zone glued to its owner: every turn-start it applies `effect` to living entities within
+ * `radius` of the owner. `affects: "allies"` includes the owner; `"enemies"` is the other team.
+ */
+export interface AuraSpec {
+  readonly effect: AuraEffectKind;
+  readonly radius: number;
+  readonly magnitude: number;
+  readonly color: number;
+  readonly pattern?: ZonePattern;
+  readonly affects: "allies" | "enemies";
+}
+
+/**
+ * Always-on rules an item grants its wearer. `maxHp`/`regen` are baked into the entity at
+ * encounter build; `aura`/`onKillEnergy` ride on the entity and act during resolution.
+ */
+export type PassiveEffect =
+  | { readonly type: "aura"; readonly aura: AuraSpec }
+  | { readonly type: "onKillEnergy"; readonly red?: number; readonly blue?: number }
+  | { readonly type: "maxHp"; readonly amount: number }
+  | { readonly type: "regen"; readonly red?: number; readonly blue?: number };
 
 export interface Zone {
   readonly id: string;
@@ -194,6 +270,10 @@ export interface EntityCombat {
   readonly abilities: readonly AbilityDefinition[];
   readonly effects?: readonly EntityEffect[];
   readonly statusEffects?: readonly StatusEffect[];
+  /** Remaining charges for abilities that declare `uses`, keyed by ability id. */
+  readonly abilityUses?: Readonly<Record<string, number>>;
+  /** Always-on rules from equipped items (auras, on-kill refunds). */
+  readonly passives?: readonly PassiveEffect[];
   readonly dead?: boolean;
 }
 
@@ -261,7 +341,13 @@ export type GameEvent =
   | { type: "zoneCreated"; zone: Zone }
   | { type: "zoneExpired"; zoneId: string }
   /** A zone applied its per-turn effect to an entity standing inside it. */
-  | { type: "zoneTick"; zoneId: string; entityId: EntityId; effect: ZoneEffectKind; magnitude: number };
+  | { type: "zoneTick"; zoneId: string; entityId: EntityId; effect: ZoneEffectKind; magnitude: number }
+  /** Instant relocation (blink move, swap) — renderers fade rather than walk. */
+  | { type: "blink"; entityId: EntityId; from: Vec2; to: Vec2 }
+  /** The entity recovered hp/energy (consumable, conversion, on-kill refund). */
+  | { type: "restore"; entityId: EntityId; hp: number; red: number; blue: number; reason: "consume" | "convert" | "onKill" }
+  /** An aura applied its per-turn effect to an entity within its owner's radius. */
+  | { type: "auraTick"; ownerId: EntityId; entityId: EntityId; effect: AuraEffectKind; magnitude: number };
 
 export interface AttackHit {
   readonly targetId: EntityId;
@@ -269,6 +355,8 @@ export interface AttackHit {
   readonly killed: boolean;
   /** When set, the target's timed-defense tier — "perfect" fully negates, "decent" reduces. */
   readonly defenseTier?: "perfect" | "decent";
+  /** Labels of damage riders that fired on this hit, for on-screen callouts. */
+  readonly riderLabels?: readonly string[];
 }
 
 export type EffectTrigger = "onDeath";
@@ -313,6 +401,8 @@ export interface UnitTemplate {
   readonly heightMeters?: number;
   readonly strategy?: AiStrategyType;
   readonly effects?: readonly EntityEffect[];
+  /** Always-on rules baked into units built from this template (see Entity.passives). */
+  readonly passives?: readonly PassiveEffect[];
   readonly cost?: number;
   readonly tags?: readonly EnemyTag[];
   /** Multiplier on per-turn regen to compute the bank cap. Default 2 (= bank 2 turns' worth).

@@ -1,6 +1,7 @@
 import type { AttackAbility, Vec2 } from "shared";
 import { distance, sub, planMove } from "shared";
 import type { ClientState } from "./client-state.svelte.js";
+import { isSelfCastAbility } from "./combat-ui-state.js";
 import type { GameRenderer } from "./render/game-renderer.js";
 import { TimingBar } from "./timing-bar.js";
 import { attackPowerLabel, PERFECT_ATTACK_THRESHOLD } from "./render/impact-labels.js";
@@ -50,11 +51,15 @@ export class InputManager {
       if (!state || state.winner || !this.clientState.canAcceptPlayerInput()) return;
 
       const selectedAbility = this.clientState.getSelectedAbility();
-      if (selectedAbility?.kind === "attack" || selectedAbility?.kind === "zone") {
+      if (
+        selectedAbility?.kind === "attack" ||
+        selectedAbility?.kind === "zone" ||
+        selectedAbility?.kind === "summon"
+      ) {
         this.doAimedAbility(pos);
         return;
       }
-      if (selectedAbility?.kind === "barrier") {
+      if (selectedAbility && isSelfCastAbility(selectedAbility)) {
         this.clientState.confirmAbility();
         return;
       }
@@ -113,15 +118,16 @@ export class InputManager {
     const abilities = this.getPlayerAbilities();
     if (index >= abilities.length) return;
     const ability = abilities[index]!;
-    // Pressing the selected ability's number again deselects it (mirrors clicking its dock slot).
-    if (this.clientState.selectedAbilityId === ability.id && ability.kind !== "barrier") {
+    // Second press on a self-cast commits it; second press on anything else deselects
+    // (mirrors the dock slot). selectAbility itself owns the self-cast confirm path.
+    if (this.clientState.selectedAbilityId === ability.id && !isSelfCastAbility(ability)) {
       this.clientState.selectAbility(null);
       return;
     }
     this.clientState.selectAbility(ability.id);
   }
 
-  /** Fire the selected aim-at-a-point ability (attack or zone placement) toward `mousePos`. */
+  /** Fire the selected aim-at-a-point ability (attack, zone, or summon) toward `mousePos`. */
   private doAimedAbility(mousePos: Vec2) {
     const entityId = this.clientState.selectedEntityId;
     if (!entityId) return;

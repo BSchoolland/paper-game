@@ -3,7 +3,7 @@
   import { combat } from "../../state/combat.svelte.js";
   import { room } from "../../state/room.svelte.js";
   import type { ClientState } from "../../board/client-state.svelte.js";
-  import { myHeroEntity, shouldSuggestEndTurn } from "../../board/combat-ui-state.js";
+  import { isSelfCastAbility, myHeroEntity, shouldSuggestEndTurn } from "../../board/combat-ui-state.js";
   import { itemSpriteUrl } from "../../board/render/item-sprites.js";
 
   let { clientState, onOpenPack }: { clientState: ClientState; onOpenPack: () => void } = $props();
@@ -70,7 +70,31 @@
     if (a.kind === "move") return `Move up to ${a.distance} units`;
     if (a.kind === "barrier") return `+${a.barrierHp} barrier HP`;
     if (a.kind === "zone") return `${a.zone.effect} zone · r${a.zone.radius} · ${a.zone.duration}t`;
+    if (a.kind === "restore") {
+      const bits: string[] = [];
+      if (a.hp) bits.push(`+${a.hp} HP`);
+      if (a.red) bits.push(`+${a.red} red`);
+      if (a.blue) bits.push(`+${a.blue} blue`);
+      const body = bits.join(" · ") || "Restore";
+      return a.uses !== undefined ? `${body} · ${a.uses}/enc` : body;
+    }
+    if (a.kind === "convert") {
+      const gain = [
+        a.gain.red ? `+${a.gain.red} red` : "",
+        a.gain.blue ? `+${a.gain.blue} blue` : "",
+      ].filter(Boolean).join(" · ");
+      return gain || "Convert energy";
+    }
+    if (a.kind === "summon") {
+      const body = `Summon ${a.count} · r${a.range}`;
+      return a.uses !== undefined ? `${body} · ${a.uses}/enc` : body;
+    }
     return "";
+  }
+
+  function remainingCharges(ability: AbilityDefinition, entity: Entity): number | null {
+    if (ability.uses === undefined) return null;
+    return entity.abilityUses?.[ability.id] ?? ability.uses;
   }
 
   function interactive(): boolean {
@@ -79,8 +103,10 @@
 
   function onSlotClick(slot: Slot): void {
     if (!interactive()) return;
+    // Second click on a self-cast commits it; second click on anything else cancels.
     if (clientState.selectedAbilityId === slot.ability.id) {
-      clientState.selectAbility(null);
+      if (isSelfCastAbility(slot.ability)) clientState.confirmAbility();
+      else clientState.selectAbility(null);
       return;
     }
     if (clientState.canSelectAbility(slot.ability.id)) clientState.selectAbility(slot.ability.id);
@@ -132,6 +158,7 @@
             {#each group.slots as slot (slot.ability.id)}
               {@const selected = clientState.selectedAbilityId === slot.ability.id}
               {@const usable = clientState.canSelectAbility(slot.ability.id)}
+              {@const charges = remainingCharges(slot.ability, hero)}
               <button
                 class="slot"
                 class:selected
@@ -139,6 +166,9 @@
                 onclick={() => onSlotClick(slot)}
               >
                 <span class="num sc">{slot.index + 1}</span>
+                {#if charges !== null}
+                  <span class="charges sc">{charges}</span>
+                {/if}
                 {#if slot.item}
                   <img src={itemSpriteUrl(slot.item)} alt={slot.ability.name} draggable="false" />
                 {:else if slot.ability.kind === "move"}
@@ -147,12 +177,18 @@
                   <svg viewBox="0 0 40 40" class="glyph"><path d="M20 4l12 4v10c0 8.5-5 15-12 18-7-3-12-9.5-12-18V8z" /></svg>
                 {:else if slot.ability.kind === "zone"}
                   <svg viewBox="0 0 40 40" class="glyph"><circle cx="20" cy="20" r="14" fill="none" stroke="currentColor" stroke-width="3" /><circle cx="20" cy="20" r="6" /></svg>
+                {:else if slot.ability.kind === "restore"}
+                  <svg viewBox="0 0 40 40" class="glyph"><path d="M20 6c6 0 10 4 10 10 0 8-10 18-10 18S10 24 10 16c0-6 4-10 10-10zm0 4c-3.5 0-6 2.5-6 6 0 4.5 4.5 10.5 6 12.5 1.5-2 6-8 6-12.5 0-3.5-2.5-6-6-6z" /></svg>
+                {:else if slot.ability.kind === "convert"}
+                  <svg viewBox="0 0 40 40" class="glyph"><path d="M12 14h12l-3-3 2-2 7 7-7 7-2-2 3-3H12v-4zm16 12H16l3 3-2 2-7-7 7-7 2 2-3 3h12v4z" /></svg>
+                {:else if slot.ability.kind === "summon"}
+                  <svg viewBox="0 0 40 40" class="glyph"><path d="M20 6l3 8h8l-6.5 5 2.5 8L20 22l-7 5 2.5-8L9 14h8z" /></svg>
                 {:else}
                   <svg viewBox="0 0 40 40" class="glyph"><path d="M8 32L28 8l4 1 1 4L13 33l-2 2-4 1 1-4zM27 32l5-5 4 4-5 5z" /></svg>
                 {/if}
                 <span class="tip plate">
                   <b class="sc">{slot.ability.name}</b>
-                  <span class="tcost {costColor(slot.ability)}">{costText(slot.ability)}</span>
+                  <span class="tcost {costColor(slot.ability)}">{costText(slot.ability) || (isSelfCastAbility(slot.ability) ? "free — click to use" : "")}</span>
                   <span class="tdesc">{describe(slot.ability)}</span>
                 </span>
               </button>
@@ -308,6 +344,14 @@
     right: 5px;
     font-size: 11px;
     color: var(--ink-55);
+    letter-spacing: 0;
+  }
+  .charges {
+    position: absolute;
+    bottom: 2px;
+    right: 5px;
+    font-size: 11px;
+    color: var(--ink-70);
     letter-spacing: 0;
   }
 

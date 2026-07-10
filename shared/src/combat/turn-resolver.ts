@@ -1,13 +1,13 @@
-import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, TeamId, Vec2, ZoneAbility } from "../core/types.js";
+import type { AbilityDefinition, ActionResult, AimDirection, AttackAbility, AttackHit, BarrierAbility, ConvertAbility, Entity, EnergyPool, GameEvent, GameState, MoveAbility, PlayerAction, RestoreAbility, SummonAbility, TeamId, Vec2, ZoneAbility } from "../core/types.js";
 import { distance, add, scale, normalize, length } from "../core/vec2.js";
 import { canAffordAbility, getAbilityCost } from "./ability-cost.js";
 import { canEntityOccupy, getMoveReach } from "./movement.js";
 import { plannedMoveCost } from "../map/move-rules.js";
-import { resolveWeaponAttack, applyDamage } from "./combat.js";
+import { resolveWeaponAttack, applyDamage, evaluateRiders, type RiderBonus } from "./combat.js";
 import { runReactions } from "./reaction-bus.js";
-import { coreReactionBus } from "../encounter/effects.js";
+import { coreReactionBus, summonAtPoint } from "../encounter/effects.js";
 import { getEffectiveRegen } from "./status-modifiers.js";
-import { createZone, canPlaceWallZone, tickZones } from "./zones.js";
+import { createZone, canPlaceWallZone, tickZones, tickAuras } from "./zones.js";
 import { powerToMultiplier, scaleAttack } from "./power.js";
 
 function checkWinner(state: GameState): TeamId | null {
@@ -47,6 +47,22 @@ function resolveMove(
 ): ActionResult {
   const entityId = entity.id;
   if (!canEntityOccupy(state, entity, destination)) return NO_CHANGE(state);
+
+  // Blink: straight-shot teleport — no route, no obstacle pricing, just reach + a standable
+  // destination. Flat cost (variableCost has no route to vary with).
+  if (ability.mode === "blink") {
+    const blinkDist = distance(entity.position, destination);
+    if (blinkDist > getMoveReach(entity, ability) + 0.01) return NO_CHANGE(state);
+    if ((ability.cost.red ?? 0) > entity.energy.red || (ability.cost.blue ?? 0) > entity.energy.blue)
+      return NO_CHANGE(state);
+    const from = entity.position;
+    const entities = new Map(state.entities);
+    entities.set(entityId, { ...entity, position: destination, energy: spendEnergy(entity.energy, ability.cost) });
+    return {
+      state: { ...state, entities },
+      events: [{ type: "blink", entityId, from, to: destination }],
+    };
+  }
 
   // `pathBased` (player moves): cost = the route around obstacles, read from the SAME flood the
   // client plans and prices with (move-rules.ts), so a client-approved move is accepted here at the
@@ -107,7 +123,16 @@ function resolveAttack(
 
   let hits: readonly AttackHit[] = [];
   if (targets.length > 0) {
-    const result = applyDamage(newState, targets, scaled.damage, defenseMap);
+    // Riders read each target's pre-damage state (full-hp, execute thresholds, statuses, walls).
+    let riderBonuses: Map<string, RiderBonus> | undefined;
+    if (scaled.riders && scaled.riders.length > 0) {
+      riderBonuses = new Map();
+      for (const target of targets) {
+        const bonus = evaluateRiders(scaled.riders, target, state.grid);
+        if (bonus.amount !== 0) riderBonuses.set(target.id, bonus);
+      }
+    }
+    const result = applyDamage(newState, targets, scaled.damage, defenseMap, riderBonuses);
     newState = result.state;
     hits = result.hits;
   }
@@ -172,6 +197,60 @@ function resolveZone(
   };
 }
 
+function resolveSummon(
+  state: GameState,
+  entity: Entity,
+  ability: SummonAbility,
+  aim: AimDirection
+): ActionResult {
+  const aimLen = length(aim);
+  if (aimLen < 0.01) return NO_CHANGE(state);
+  const dist = Math.min(aimLen, ability.range);
+  const center: Vec2 = add(entity.position, scale(normalize(aim), dist));
+
+  const summoned = summonAtPoint(ability.templateKey, ability.count, center, entity.teamId, state);
+  const entities = new Map(summoned.state.entities);
+  entities.set(entity.id, { ...entity, energy: spendEnergy(entity.energy, ability.cost) });
+  return { state: { ...summoned.state, entities }, events: summoned.events };
+}
+
+function clampGain(energy: EnergyPool, gain: { red?: number; blue?: number }): { energy: EnergyPool; red: number; blue: number } {
+  const red = Math.min(energy.red + (gain.red ?? 0), energy.maxRed) - energy.red;
+  const blue = Math.min(energy.blue + (gain.blue ?? 0), energy.maxBlue) - energy.blue;
+  return { energy: { ...energy, red: energy.red + red, blue: energy.blue + blue }, red, blue };
+}
+
+function resolveConvert(state: GameState, entity: Entity, ability: ConvertAbility): ActionResult {
+  const paid = spendEnergy(entity.energy, ability.cost);
+  const gained = clampGain(paid, ability.gain);
+  // Converting into a full pool is a no-op, not a payment for nothing.
+  if (gained.red === 0 && gained.blue === 0) return NO_CHANGE(state);
+  const entities = new Map(state.entities);
+  entities.set(entity.id, { ...entity, energy: gained.energy });
+  return {
+    state: { ...state, entities },
+    events: [{ type: "restore", entityId: entity.id, hp: 0, red: gained.red, blue: gained.blue, reason: "convert" }],
+  };
+}
+
+function resolveRestore(state: GameState, entity: Entity, ability: RestoreAbility): ActionResult {
+  const paid = spendEnergy(entity.energy, ability.cost);
+  const gained = clampGain(paid, { red: ability.red, blue: ability.blue });
+  const hp = Math.min(entity.maxHp, entity.hp + (ability.hp ?? 0)) - entity.hp;
+  if (hp === 0 && gained.red === 0 && gained.blue === 0) return NO_CHANGE(state);
+  const entities = new Map(state.entities);
+  entities.set(entity.id, { ...entity, hp: entity.hp + hp, energy: gained.energy });
+  return {
+    state: { ...state, entities },
+    events: [{ type: "restore", entityId: entity.id, hp, red: gained.red, blue: gained.blue, reason: "consume" }],
+  };
+}
+
+function remainingUses(entity: Entity, ability: AbilityDefinition): number | undefined {
+  if (ability.uses === undefined) return undefined;
+  return entity.abilityUses?.[ability.id] ?? ability.uses;
+}
+
 function resolveAbility(
   state: GameState,
   entityId: string,
@@ -188,6 +267,8 @@ function resolveAbility(
   const ability = findAbility(entity, abilityId);
   if (!ability) return NO_CHANGE(state);
   if (!canAffordAbility(entity, ability)) return NO_CHANGE(state);
+  const usesLeft = remainingUses(entity, ability);
+  if (usesLeft !== undefined && usesLeft <= 0) return NO_CHANGE(state);
 
   const nextCount = state.actionCount + 1;
 
@@ -211,9 +292,30 @@ function resolveAbility(
       result = resolveZone(state, entity, ability, aimDirection);
       break;
     }
+    case "summon": {
+      if (!aimDirection) return NO_CHANGE(state);
+      result = resolveSummon(state, entity, ability, aimDirection);
+      break;
+    }
+    case "convert":
+      result = resolveConvert(state, entity, ability);
+      break;
+    case "restore":
+      result = resolveRestore(state, entity, ability);
+      break;
   }
 
   if (result.state === state) return result;
+
+  if (usesLeft !== undefined) {
+    const used = result.state.entities.get(entityId);
+    if (used) {
+      const entities = new Map(result.state.entities);
+      entities.set(entityId, { ...used, abilityUses: { ...used.abilityUses, [ability.id]: usesLeft - 1 } });
+      result = { ...result, state: { ...result.state, entities } };
+    }
+  }
+
   return { ...result, state: { ...result.state, actionCount: nextCount } };
 }
 
@@ -289,10 +391,12 @@ export function startTurn(state: GameState, team: TeamId): ActionResult {
   // Persistent zones resolve after the active team's regen / barrier-clear / status-tick, so a
   // barrier zone can top players back up the same turn it would otherwise have been wiped.
   const zoned = tickZones({ ...state, entities: tick.entities });
+  // Auras are owner-glued zones and tick on the same beat.
+  const aura = tickAuras(zoned.state);
 
   return {
-    state: zoned.state,
-    events: [{ type: "turnStart", team }, ...tick.events, ...zoned.events],
+    state: aura.state,
+    events: [{ type: "turnStart", team }, ...tick.events, ...zoned.events, ...aura.events],
   };
 }
 

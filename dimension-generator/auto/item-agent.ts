@@ -117,7 +117,7 @@ export async function runItemAgent(dimId: number, spec: DimensionSpec): Promise<
       log(`Listing ${Object.keys(items).length} items`);
       return Object.entries(items).map(([id, w]) => ({
         id, name: w.name, rarity: w.rarity, animSet: w.animSet, slotCost: w.slotCost,
-        abilities: w.abilities.map(a => `${a.name}: dmg=${a.damage}, shape=${a.shape.kind}`),
+        abilities: w.abilities.map(a => a.kind === "attack" ? `${a.name}: dmg=${a.damage}, shape=${a.shape.kind}` : `${a.name}: ${a.kind}`),
       }));
     },
   });

@@ -76,6 +76,44 @@ export function getItemAbilities(equipped: readonly ItemDefinition[]): import(".
   return abilities;
 }
 
+/** What a loadout does to the hero: abilities to grant, runtime passives to carry, and the
+ *  build-time stat adjustments (maxHp / regen passives fold into the entity template). */
+export interface DerivedLoadout {
+  readonly abilities: readonly import("./types.js").AbilityDefinition[];
+  /** Passives that act during resolution (auras, on-kill refunds). */
+  readonly passives: readonly import("./types.js").PassiveEffect[];
+  readonly hpBonus: number;
+  readonly regenRedBonus: number;
+  readonly regenBlueBonus: number;
+}
+
+/** The single reading of "what does wearing these items mean" — the live encounter builder and
+ *  the balance sim both assemble heroes through this, so they cannot drift. */
+export function deriveLoadout(equipped: readonly ItemDefinition[]): DerivedLoadout {
+  const passives: import("./types.js").PassiveEffect[] = [];
+  let hpBonus = 0;
+  let regenRedBonus = 0;
+  let regenBlueBonus = 0;
+  for (const item of equipped) {
+    for (const passive of item.passives ?? []) {
+      switch (passive.type) {
+        case "maxHp":
+          hpBonus += passive.amount;
+          break;
+        case "regen":
+          regenRedBonus += passive.red ?? 0;
+          regenBlueBonus += passive.blue ?? 0;
+          break;
+        case "aura":
+        case "onKillEnergy":
+          passives.push(passive);
+          break;
+      }
+    }
+  }
+  return { abilities: getItemAbilities(equipped), passives, hpBonus, regenRedBonus, regenBlueBonus };
+}
+
 export function getAnimSet(equipped: readonly ItemDefinition[]): AnimSet {
   const handItems = equipped.filter(
     (item) => item.slotCost.hand && item.slotCost.hand > 0,

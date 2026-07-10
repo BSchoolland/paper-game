@@ -457,14 +457,18 @@ export function summarizeEvent(ev: GameEvent): EventSummary {
     case "barrier":
     case "knockback":
     case "pull":
+    case "blink":
     case "statusApplied":
     case "collision":
     case "zoneTick":
+    case "auraTick":
       return {
         kind: ev.type,
         actor: ev.entityId,
-        amount: ev.type === "collision" ? ev.damage : ev.type === "zoneTick" ? ev.magnitude : undefined,
+        amount: ev.type === "collision" ? ev.damage : ev.type === "zoneTick" || ev.type === "auraTick" ? ev.magnitude : undefined,
       };
+    case "restore":
+      return { kind: ev.type, actor: ev.entityId, amount: ev.hp + ev.red + ev.blue };
     case "spawn":
       return { kind: ev.type, actor: ev.entityId };
     case "endTurn":

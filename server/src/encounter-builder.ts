@@ -1,5 +1,5 @@
-import type { Entity, GridState, ItemDefinition, AttachmentData, Vec2 } from "shared";
-import { UNIT_TEMPLATES, PLAYER_INNATE_ABILITIES, makeEntity, findWalkablePosition, getItemAbilities } from "shared";
+import type { Entity, GridState, ItemDefinition, AttachmentData, PassiveEffect, Vec2 } from "shared";
+import { UNIT_TEMPLATES, PLAYER_INNATE_ABILITIES, makeEntity, findWalkablePosition, deriveLoadout } from "shared";
 import { createCombatGrid } from "shared";
 import type { GeneratedEncounter } from "shared";
 import type { MapDefinition } from "shared";
@@ -34,14 +34,20 @@ export function placeEncounterEntities(
 
   const formation = playerFormation(seats.length);
   seats.forEach((seat, i) => {
-    const itemAbilities = getItemAbilities(seat.equipped);
-    const hasItemAttack = itemAbilities.some((a) => a.kind === "attack");
+    const loadout = deriveLoadout(seat.equipped);
+    const hasItemAttack = loadout.abilities.some((a) => a.kind === "attack");
     const innate = hasItemAttack
       ? PLAYER_INNATE_ABILITIES.filter((a) => a.id !== "punch")
       : [...PLAYER_INNATE_ABILITIES];
-    const template = { ...UNIT_TEMPLATES.player, abilities: [...innate, ...itemAbilities] };
+    const base = UNIT_TEMPLATES.player;
+    const template = {
+      ...base,
+      abilities: [...innate, ...loadout.abilities],
+      hp: base.hp + loadout.hpBonus,
+      energy: { red: base.energy.red + loadout.regenRedBonus, blue: base.energy.blue + loadout.regenBlueBonus },
+    };
     const spawn = formation[i]!;
-    const hero = placeEntity(seat.heroEntityId, "Player", spawn.x, spawn.y, "red", template, grid, seat.equipped, seat.attachments);
+    const hero = placeEntity(seat.heroEntityId, "Player", spawn.x, spawn.y, "red", template, grid, seat.equipped, seat.attachments, loadout.passives);
     entities.set(seat.heroEntityId, { ...hero, playerAnimSet: seat.animSet, controllerId: seat.controllerId });
   });
 
@@ -75,7 +81,8 @@ function placeEntity(
   grid: GridState,
   equipped?: readonly ItemDefinition[],
   attachments?: Record<string, AttachmentData>,
+  passives?: readonly PassiveEffect[],
 ): Entity {
   const pos = findWalkablePosition(grid, { x, y }, template.collisionRadius);
-  return makeEntity(id, name, pos.x, pos.y, teamId, template, equipped, attachments);
+  return makeEntity(id, name, pos.x, pos.y, teamId, template, equipped, attachments, passives);
 }

@@ -288,6 +288,19 @@ export class EntityManager {
             hitAt.set(hit.targetId, impact);
             this.claimed.add(hit.targetId);
             this.scheduleHit(hit.targetId, hit.damage, hit.killed, hit.defenseTier, event.attackerPosition, impact, state);
+            if (hit.riderLabels?.length) {
+              const labels = hit.riderLabels;
+              const targetId = hit.targetId;
+              this.seq.schedule({
+                delay: impact + 0.18,
+                duration: 0,
+                onEnd: () => {
+                  const visual = this.visuals.get(targetId);
+                  if (!visual) return;
+                  this.floatingText.spawn(visual.displayPos.x, visual.displayPos.y - 62, labels.join(" · "), 0xd4a533);
+                },
+              });
+            }
             end = Math.max(end, impact + 0.05);
           }
           break;
@@ -355,7 +368,8 @@ export class EntityManager {
           break;
         }
 
-        case "zoneTick": {
+        case "zoneTick":
+        case "auraTick": {
           const ev = event;
           this.seq.schedule({
             delay: 0,
@@ -368,6 +382,56 @@ export class EntityManager {
               if (entity) visual.commitVitals(entity.hp, entity.maxHp, entity.barrier);
             },
           });
+          break;
+        }
+
+        case "blink": {
+          // No walk: dissolve at the origin, materialize at the destination.
+          const visual = this.visuals.get(event.entityId);
+          if (!visual) break;
+          this.claimed.add(event.entityId);
+          const off = hitAt.get(event.entityId) ?? 0;
+          const to = event.to;
+          const BLINK_DURATION = 0.3;
+          this.seq.schedule({
+            delay: off,
+            duration: BLINK_DURATION,
+            onUpdate: (t) => {
+              if (t < 0.5) {
+                visual.container.alpha = 1 - t * 2;
+              } else {
+                visual.moveDisplayTo(to.x, to.y);
+                visual.container.alpha = (t - 0.5) * 2;
+              }
+            },
+            onEnd: () => {
+              visual.container.alpha = 1;
+              this.spawnImpactBurst(to, 0x9b8bee);
+            },
+          });
+          end = Math.max(end, off + BLINK_DURATION);
+          break;
+        }
+
+        case "restore": {
+          const ev = event;
+          const off = hitAt.get(event.entityId) ?? 0;
+          this.seq.schedule({
+            delay: off + 0.1,
+            duration: 0,
+            onEnd: () => {
+              const visual = this.visuals.get(ev.entityId);
+              if (!visual) return;
+              const parts: string[] = [];
+              if (ev.hp > 0) parts.push(`+${ev.hp}`);
+              if (ev.red > 0) parts.push(`+${ev.red} red`);
+              if (ev.blue > 0) parts.push(`+${ev.blue} blue`);
+              this.floatingText.spawn(visual.displayPos.x, visual.displayPos.y - 45, parts.join(" "), ev.hp > 0 ? 0x2ecc71 : 0xd4a533);
+              const entity = this.lastState?.entities.get(ev.entityId);
+              if (entity) visual.commitVitals(entity.hp, entity.maxHp, entity.barrier);
+            },
+          });
+          end = Math.max(end, off + 0.2);
           break;
         }
 

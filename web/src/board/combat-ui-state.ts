@@ -58,6 +58,11 @@ export function canMyHeroAct(state: GameState | null, seat: SeatContext): boolea
   return true;
 }
 
+/** True for abilities that resolve on the caster alone — no aim, no destination. */
+export function isSelfCastAbility(ability: AbilityDefinition): boolean {
+  return ability.kind === "barrier" || ability.kind === "restore" || ability.kind === "convert";
+}
+
 export function canUseAbility(
   state: GameState | null,
   entityId: string | null,
@@ -68,7 +73,13 @@ export function canUseAbility(
   const entity = state!.entities.get(entityId);
   if (!entity || entity.dead || !isMyEntity(entity, seat)) return false;
   const ability = entity.abilities.find((a) => a.id === abilityId);
-  return !!ability && canAffordAbility(entity, ability);
+  if (!ability || !canAffordAbility(entity, ability)) return false;
+  // Spent per-encounter charges stay unusable even if energy would cover them.
+  if (ability.uses !== undefined) {
+    const left = entity.abilityUses?.[ability.id] ?? ability.uses;
+    if (left <= 0) return false;
+  }
+  return true;
 }
 
 export function getAbility(state: GameState | null, entityId: string | null, abilityId: string | null): AbilityDefinition | null {
